@@ -1,7 +1,7 @@
 # RUMBO API · UI-Topic · 2026-20
 
-Backend académico oficial de RUMBO en la organización `arquitecturas-software-emergentes-9061`.
-El informe académico se conserva separado en el repositorio `report`.
+Backend académico oficial **preparado localmente**, pendiente de publicarse en la organización
+`arquitecturas-software-emergentes-9061`. **No utilizar el repositorio `report` como API**.
 
 ## Stack y arquitectura
 - Java 21 / Spring Boot 3.5.6 / REST + OpenAPI.
@@ -40,20 +40,11 @@ curl -s -X POST http://localhost:8080/api/v1/navigations/route \
 Swagger UI (demo): `http://localhost:8080/swagger-ui/index.html`.
 Health check: `http://localhost:8080/actuator/health`.
 
-## Ramas y publicación
-Las ramas y los commits se incluyen en `rumbo-api-gitflow.bundle` para evitar reconstruir
-su historial local. Crear repositorio vacío `rumbo-api` dentro de la organización; luego:
-```sh
-git clone --branch main rumbo-api-gitflow.bundle rumbo-api
-cd rumbo-api
-git remote rename origin bundle
-git branch develop bundle/develop
-git branch feat/navigation-destination-routing bundle/feat/navigation-destination-routing
-git remote add origin https://github.com/arquitecturas-software-emergentes-9061/rumbo-api.git
-git push -u origin main develop feat/navigation-destination-routing
-```
-**No** fusionar la feature a `develop` hasta ejecutar `mvn verify` en un entorno con Maven,
-revisar CI y conseguir aprobación del equipo.
+## Flujo de contribución en el repositorio oficial
+Las ramas `main` y `develop` contienen el núcleo del API. Las nuevas funcionalidades se
+proponen desde `develop` mediante ramas `feat/<bounded-context>-<funcionalidad>`,
+acompañadas de tests y pull request. Solo se fusionan tras aprobar Maven/CI y revisión.
+El código de esta rama todavía no es una release ni está fusionado a `develop`.
 
 ## Decisiones aún no cerradas
 1. Persistencia (C4: PostgreSQL + Redis + RabbitMQ; 7.1.1: MongoDB/Atlas).

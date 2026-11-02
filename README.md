@@ -7,9 +7,11 @@ Backend académico oficial **preparado localmente**, pendiente de publicarse en 
 - Java 21 / Spring Boot 3.5.6 / REST + OpenAPI.
 - Domain-Driven Design; cada bounded context con capas `domain`, `application`,
   `interfaces` (plural: `interface` es una palabra reservada Java) e `infrastructure`.
-- Este repositorio evita fijar PostgreSQL o MongoDB hasta resolver la diferencia en el informe.
-- El contexto `navigation` lee modelos **PUBLISHED** del contexto `modeling` a través
-  de un puerto de solo lectura. El adapter inicial `demo` es una implementación temporal.
+- PostgreSQL es la persistencia principal elegida, todavía no implementada. Redis y
+  RabbitMQ se incorporarán cuando una tarea concreta los requiera; véase [ADR 001](docs/decisions/001-architecture-and-contract.md).
+- `planning` es dueño del modelo indoor y publicará versiones identificables. `navigation`
+  leerá solo modelos **PUBLISHED** mediante un puerto de solo lectura. El adaptador `demo`
+  actual es temporal.
 
 ## GitFlow obligatorio
 `main` (core initial commit) → `develop` → `feat/<bounded-context>-<funcionalidad>`.
@@ -22,6 +24,8 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
 - `PR-214`: directorio y búsqueda acento-insensible de destinos por nombre/especialidad/tipo.
 - Motor Dijkstra derivado de reglas existentes del prototipo FastAPI:
   rutas más cortas, filtro de accesibilidad y exclusión de aristas que cruzan paredes.
+- `POST /api/v1/navigations/route` es el endpoint provisional implementado; TS-12 exige
+  A* y el contrato objetivo de TS-13 es `GET /api/v1/sites/{siteId}/routes`.
 - Contratos REST y Spring MockMvc; dominio sin dependencias Spring.
 - Datos de ejemplo disponibles **solo con perfil `demo`**. Sin persistencia productiva,
   subida de planos ni BLE reales; no declarar PR-214 terminado hasta integrar app cliente.
@@ -31,7 +35,7 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
 mvn clean verify
 mvn spring-boot:run -Dspring-boot.run.profiles=demo
 ```
-Endpoints de ejemplo:
+Endpoints implementados de ejemplo (perfil `demo`):
 ```sh
 curl -s 'http://localhost:8080/api/v1/navigations/destinations?siteId=00000000-0000-4000-8000-000000000001&query=cardiologia'
 curl -s -X POST http://localhost:8080/api/v1/navigations/route \
@@ -46,12 +50,13 @@ proponen desde `develop` mediante ramas `feat/<bounded-context>-<funcionalidad>`
 acompañadas de tests y pull request. Solo se fusionan tras aprobar Maven/CI y revisión.
 El código de esta rama todavía no es una release ni está fusionado a `develop`.
 
-## Decisiones aún no cerradas
-1. Persistencia (C4: PostgreSQL + Redis + RabbitMQ; 7.1.1: MongoDB/Atlas).
-2. API contracts reales con el BC Diseño/Planificación y autorizaciones por sede.
-3. Modelo de publicación de planos y políticas de seguridad.
-4. Stack móvil (informe menciona Flutter y Unity/AR según sección).
-5. Web Angular pendiente de cotejo con mockups del capítulo VI.
+## Documentación y decisiones pendientes
+- [ADR 001](docs/decisions/001-architecture-and-contract.md): persistencia elegida,
+  frontera `planning`/`navigation`, A* y ruta REST objetivo.
+- [Contrato API](docs/API-CONTRACT.md): estado provisional y contrato objetivo de modelos,
+  destinos y rutas. El contrato objetivo aún no está implementado.
+- Pendientes: autorización por sede, detalle de publicación de planos y seguridad,
+  stack móvil (Flutter frente a Unity/AR) y cotejo de la web Angular con los mockups.
 
 Fuentes: Informe TF 2026-20, capítulo V (BC Navegación), Jira `PR-214` y MVP
 personal `jahazielgg/rumbo-platform`. No se ha migrado íntegramente todo el MVP.

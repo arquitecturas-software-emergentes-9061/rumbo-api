@@ -5,6 +5,7 @@ import com.uitopic.rumbo.iam.domain.exceptions.AccountLockedException;
 import com.uitopic.rumbo.iam.domain.exceptions.EmailAlreadyRegisteredException;
 import com.uitopic.rumbo.iam.domain.exceptions.IamException;
 import com.uitopic.rumbo.iam.domain.exceptions.InvalidCredentialsException;
+import com.uitopic.rumbo.iam.domain.exceptions.InvalidRefreshTokenException;
 import com.uitopic.rumbo.iam.domain.exceptions.UserAccountNotFoundException;
 import com.uitopic.rumbo.iam.domain.exceptions.WeakPasswordException;
 import com.uitopic.rumbo.shared.interfaces.rest.ProblemDetails;
@@ -72,6 +73,11 @@ public class IamExceptionHandler {
 
   @ExceptionHandler(InvalidCredentialsException.class)
   ProblemDetail invalidCredentials(InvalidCredentialsException exception) {
+    return problem(HttpStatus.UNAUTHORIZED, exception);
+  }
+
+  @ExceptionHandler(InvalidRefreshTokenException.class)
+  ProblemDetail invalidRefreshToken(InvalidRefreshTokenException exception) {
     return problem(HttpStatus.UNAUTHORIZED, exception);
   }
 

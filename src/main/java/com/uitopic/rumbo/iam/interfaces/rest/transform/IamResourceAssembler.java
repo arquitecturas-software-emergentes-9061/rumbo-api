@@ -1,15 +1,18 @@
 package com.uitopic.rumbo.iam.interfaces.rest.transform;
 
 import com.uitopic.rumbo.iam.application.results.AuthenticatedUser;
+import com.uitopic.rumbo.iam.domain.model.aggregates.AuthSession;
 import com.uitopic.rumbo.iam.domain.model.aggregates.UserAccount;
 import com.uitopic.rumbo.iam.domain.model.commands.SignInCommand;
 import com.uitopic.rumbo.iam.domain.model.commands.SignUpCommand;
 import com.uitopic.rumbo.iam.interfaces.rest.resources.AuthenticatedUserResponse;
 import com.uitopic.rumbo.iam.interfaces.rest.resources.SignInRequest;
+import com.uitopic.rumbo.iam.interfaces.rest.resources.SessionResponse;
 import com.uitopic.rumbo.iam.interfaces.rest.resources.SignUpRequest;
 import com.uitopic.rumbo.iam.interfaces.rest.resources.UserAccountResponse;
 
 import java.time.Duration;
+import java.util.UUID;
 
 /** Converts REST resources into commands and domain results into REST resources. */
 public final class IamResourceAssembler {
@@ -27,6 +30,11 @@ public final class IamResourceAssembler {
   public static UserAccountResponse toResponse(UserAccount account) {
     return new UserAccountResponse(account.id(), account.email().value(), account.role().name(),
       account.status().name(), account.clinicId().orElse(null), account.createdAt());
+  }
+
+  public static SessionResponse toResponse(AuthSession session, UUID currentSessionId) {
+    return new SessionResponse(session.id(), session.createdAt(), session.expiresAt(),
+      session.id().equals(currentSessionId));
   }
 
   public static AuthenticatedUserResponse toResponse(AuthenticatedUser user, Duration accessTokenLifetime) {

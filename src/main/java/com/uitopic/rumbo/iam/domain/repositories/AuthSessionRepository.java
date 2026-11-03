@@ -13,7 +13,10 @@ public interface AuthSessionRepository {
 
   Optional<AuthSession> findById(UUID id);
 
-  /** Finds the session that currently owns the given refresh token digest, if any. */
+  /**
+   * Finds the session that currently owns the given refresh token digest, if any, and keeps it locked until the
+   * transaction ends, so two refreshes with the same token cannot both succeed.
+   */
   Optional<AuthSession> findByRefreshTokenHash(String refreshTokenHash);
 
   /** Sessions of the account that are neither revoked nor expired at {@code now}. */

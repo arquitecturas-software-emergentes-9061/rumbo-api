@@ -10,7 +10,7 @@ import java.util.UUID;
  * A navigable point belonging to an indoor-map version in the Planning context.
  * The coordinate retains the floor and plan version used to place the point on its
  * visual plan. Identity is the pair of model version and node ID, not its position.
- * The IndoorMap aggregate will govern edits and publication in a later iteration.
+ * The IndoorMap aggregate governs draft edits; publication is a later use case.
  */
 public final class MapNode {
   private final UUID id;

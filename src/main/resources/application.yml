@@ -30,6 +30,14 @@ spring:
     problemdetails:
       enabled: true
 rumbo:
+  planning:
+    editing:
+      enabled: ${RUMBO_PLANNING_EDITING_ENABLED:false}
+    publication:
+      enabled: ${RUMBO_PLANNING_PUBLICATION_ENABLED:false}
+  navigation:
+    directory:
+      enabled: ${RUMBO_NAVIGATION_DIRECTORY_ENABLED:false}
   security:
     jwt:
       secret: ${JWT_SECRET:}

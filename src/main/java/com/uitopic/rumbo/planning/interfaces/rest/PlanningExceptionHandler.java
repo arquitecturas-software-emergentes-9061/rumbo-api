@@ -1,6 +1,6 @@
 package com.uitopic.rumbo.planning.interfaces.rest;
 
-import com.uitopic.rumbo.planning.application.exceptions.MapVersionNotFoundException;
+import com.uitopic.rumbo.planning.application.internal.exceptions.MapVersionNotFoundException;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapVersionStateException;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
 import com.uitopic.rumbo.planning.domain.exceptions.MapPublicationRejectedException;

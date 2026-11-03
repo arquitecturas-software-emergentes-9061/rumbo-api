@@ -1,6 +1,6 @@
 package com.uitopic.rumbo.planning.infrastructure.persistence.jpa;
 
-import com.uitopic.rumbo.planning.application.ports.IndoorMapStore;
+import com.uitopic.rumbo.planning.domain.repositories.IndoorMapStore;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapVersionStateException;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
@@ -74,6 +74,20 @@ public class JpaIndoorMapStore implements IndoorMapStore {
       throw new InvalidMapVersionStateException(version.status());
     }
 
+    for (PlanCoordinateSpace space : map.plans()) {
+      entityManager.createNativeQuery("INSERT INTO planning_floor_sites (floor_id, site_id) "
+              + "VALUES (:floorId, :siteId) ON CONFLICT (floor_id) DO NOTHING")
+          .setParameter("floorId", space.floorId())
+          .setParameter("siteId", map.siteId()).executeUpdate();
+      UUID owner = (UUID) entityManager.createNativeQuery(
+              "SELECT site_id FROM planning_floor_sites WHERE floor_id = :floorId")
+          .setParameter("floorId", space.floorId()).getSingleResult();
+      if (!owner.equals(map.siteId())) {
+        throw invalidStored(GraphIssueCode.PLAN_FLOOR_MISMATCH, GraphElementType.PLAN,
+            space.planVersionId(), "Floor belongs to another site");
+      }
+    }
+
     UUID versionId = map.modelVersionId();
     entityManager.createQuery("delete from MapConnectionJpaEntity c where c.id.modelVersionId = :versionId")
         .setParameter("versionId", versionId).executeUpdate();
@@ -116,7 +130,7 @@ public class JpaIndoorMapStore implements IndoorMapStore {
 
   @Override
   @Transactional(propagation = Propagation.MANDATORY)
-  public Optional<IndoorMap> findDraftForPublication(UUID mapId, UUID modelVersionId) {
+  public Optional<IndoorMap> findDraftForUpdate(UUID mapId, UUID modelVersionId) {
     return loadDraft(mapId, modelVersionId, true);
   }
 

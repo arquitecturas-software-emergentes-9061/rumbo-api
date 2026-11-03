@@ -4,7 +4,7 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphIssue;
 import java.util.Objects;
 
 /** Rejection of a draft edit that would violate an immediate graph invariant. */
-public final class InvalidMapGraphException extends IllegalArgumentException {
+public final class InvalidMapGraphException extends RuntimeException {
   private final GraphIssue issue;
 
   public InvalidMapGraphException(GraphIssue issue) {

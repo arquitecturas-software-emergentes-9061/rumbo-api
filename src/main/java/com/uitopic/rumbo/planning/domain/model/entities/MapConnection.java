@@ -7,8 +7,8 @@ import java.util.UUID;
 /**
  * A weighted directed or bidirectional link between node IDs of one map version.
  * Physical distance in meters is distinct from routing weight in cost units.
- * Endpoint existence and cross-floor compatibility are aggregate-level rules for
- * later graph-validation work; this entity enforces its own scalar invariants.
+ * The IndoorMap aggregate checks endpoint existence; cross-floor compatibility
+ * belongs to later vertical-link rules. This entity enforces scalar invariants.
  */
 public final class MapConnection {
   private final UUID id;

@@ -1,6 +1,11 @@
 spring:
   application:
     name: rumbo-api
+  config:
+    import: optional:file:.env[.properties]
+  autoconfigure:
+    # Accounts live in IAM; Spring's generated in-memory user is never used.
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/rumbo}
     username: ${DB_USERNAME:rumbo}
@@ -21,6 +26,16 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+rumbo:
+  security:
+    jwt:
+      secret: ${JWT_SECRET:}
+      issuer: rumbo-api
+    session:
+      access-token-lifetime: 15m
+      refresh-token-lifetime: 7d
+    cors:
+      allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
 server:
   port: ${PORT:8080}
 management:

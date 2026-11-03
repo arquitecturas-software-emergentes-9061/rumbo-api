@@ -1,7 +1,7 @@
 package com.uitopic.rumbo.planning.application.acl;
 
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PublishedMapSnapshot;
-import com.uitopic.rumbo.planning.domain.repositories.PublishedMapReader;
+import com.uitopic.rumbo.planning.domain.repositories.PublishedMapRepository;
 import com.uitopic.rumbo.planning.interfaces.acl.PlanningPublishedMapFacade;
 import java.util.Optional;
 import java.util.UUID;
@@ -12,15 +12,15 @@ import org.springframework.stereotype.Service;
 @Service
 @Profile("postgres")
 public class PlanningPublishedMapFacadeImpl implements PlanningPublishedMapFacade {
-  private final PublishedMapReader reader;
+  private final PublishedMapRepository repository;
 
-  public PlanningPublishedMapFacadeImpl(PublishedMapReader reader) {
-    this.reader = reader;
+  public PlanningPublishedMapFacadeImpl(PublishedMapRepository repository) {
+    this.repository = repository;
   }
 
   @Override
   public Optional<PublishedMapData> findCurrentBySite(UUID siteId) {
-    return reader.findBySite(siteId).map(this::toData);
+    return repository.findBySite(siteId).map(this::toData);
   }
 
   private PublishedMapData toData(PublishedMapSnapshot source) {

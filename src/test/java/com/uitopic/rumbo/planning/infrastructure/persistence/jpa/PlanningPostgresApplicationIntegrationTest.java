@@ -3,7 +3,7 @@ package com.uitopic.rumbo.planning.infrastructure.persistence.jpa;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.uitopic.rumbo.planning.domain.repositories.IndoorMapStore;
+import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
 import com.uitopic.rumbo.planning.interfaces.rest.IndoorMapsController;
 import com.uitopic.rumbo.planning.interfaces.rest.IndoorMapGraphController;
 import org.springframework.context.ApplicationContext;
@@ -28,11 +28,11 @@ class PlanningPostgresApplicationIntegrationTest {
     properties.add("spring.datasource.password", () -> System.getenv("RUMBO_TEST_DB_PASSWORD"));
   }
 
-  @Autowired IndoorMapStore store;
+  @Autowired IndoorMapRepository store;
   @Autowired ApplicationContext context;
 
   @Test
-  void startsWithJpaIndoorMapStore() {
+  void startsWithIndoorMapRepositoryImpl() {
     assertNotNull(store);
   }
 

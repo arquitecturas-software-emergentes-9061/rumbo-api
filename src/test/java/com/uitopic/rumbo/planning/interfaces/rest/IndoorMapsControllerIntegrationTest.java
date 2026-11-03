@@ -5,7 +5,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.uitopic.rumbo.planning.domain.repositories.IndoorMapStore;
+import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
 import com.uitopic.rumbo.planning.domain.model.entities.MapNode;
@@ -40,7 +40,7 @@ class IndoorMapsControllerIntegrationTest {
   }
 
   @Autowired MockMvc mvc;
-  @Autowired IndoorMapStore store;
+  @Autowired IndoorMapRepository store;
   @Autowired JdbcTemplate jdbc;
 
   @Test

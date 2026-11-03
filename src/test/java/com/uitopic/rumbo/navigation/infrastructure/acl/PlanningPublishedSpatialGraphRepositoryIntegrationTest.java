@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.uitopic.rumbo.navigation.application.GetPublishedSpatialGraphQueryHandler;
 import com.uitopic.rumbo.navigation.domain.PublishedSpatialGraph;
-import com.uitopic.rumbo.planning.domain.repositories.IndoorMapStore;
+import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.commands.PublishMapVersionCommand;
@@ -42,7 +42,7 @@ class PlanningPublishedSpatialGraphRepositoryIntegrationTest {
     properties.add("spring.datasource.password", () -> System.getenv("RUMBO_TEST_DB_PASSWORD"));
   }
 
-  @Autowired IndoorMapStore store;
+  @Autowired IndoorMapRepository store;
   @Autowired IndoorMapCommandService commands;
   @Autowired GetPublishedSpatialGraphQueryHandler navigation;
 

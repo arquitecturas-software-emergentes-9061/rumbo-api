@@ -1,6 +1,7 @@
 package com.uitopic.rumbo.iam.infrastructure.security;
 
 import com.uitopic.rumbo.iam.application.ports.TokenProvider;
+import com.uitopic.rumbo.iam.application.services.SessionRevocationService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -41,7 +42,7 @@ public class SecurityConfiguration {
   };
 
   @Bean
-  SecurityFilterChain apiSecurity(HttpSecurity http, TokenProvider tokenProvider,
+  SecurityFilterChain apiSecurity(HttpSecurity http, TokenProvider tokenProvider, SessionRevocationService revocation,
                                   ProblemDetailSecurityHandler problemHandler) throws Exception {
     return http
       .csrf(AbstractHttpConfigurer::disable)
@@ -56,7 +57,7 @@ public class SecurityConfiguration {
         .requestMatchers(HttpMethod.POST, PUBLIC_AUTH_ENDPOINTS).permitAll()
         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
         .anyRequest().authenticated())
-      .addFilterBefore(new JwtAuthenticationFilter(tokenProvider), UsernamePasswordAuthenticationFilter.class)
+      .addFilterBefore(new JwtAuthenticationFilter(tokenProvider, revocation), UsernamePasswordAuthenticationFilter.class)
       .build();
   }
 

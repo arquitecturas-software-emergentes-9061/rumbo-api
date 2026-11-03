@@ -5,6 +5,7 @@ import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 
 import java.util.UUID;
@@ -37,9 +38,26 @@ public class IamSteps {
   public void signIn(String email, String password) throws Exception {
     context.send(context.client().post().uri("/api/v1/auth/sign-in").contentType(MediaType.APPLICATION_JSON)
       .body("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(unique(email), password)));
-    if (context.status() == 200) {
-      context.remember("accessToken", mapper.readTree(context.body()).get("accessToken").asText());
-    }
+    rememberCredentials();
+  }
+
+  @When("they refresh the session")
+  public void refresh() throws Exception {
+    String current = context.recall("refreshToken");
+    sendRefresh(current);
+    if (context.status() == 200) context.remember("previousRefreshToken", current);
+    rememberCredentials();
+  }
+
+  @When("they refresh with the previous refresh token")
+  public void refreshWithPrevious() {
+    sendRefresh(context.recall("previousRefreshToken"));
+  }
+
+  @When("they sign out")
+  public void signOut() {
+    context.send(context.client().post().uri("/api/v1/auth/sign-out")
+      .header(HttpHeaders.AUTHORIZATION, "Bearer " + context.accessToken()));
   }
 
   @When("they fail to sign in as {string} {int} times")
@@ -50,6 +68,18 @@ public class IamSteps {
   @Then("the response email is {string}")
   public void responseEmail(String email) throws Exception {
     assertThat(mapper.readTree(context.body()).get("email").asText()).isEqualTo(unique(email));
+  }
+
+  private void sendRefresh(String refreshToken) {
+    context.send(context.client().post().uri("/api/v1/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+      .body("{\"refreshToken\":\"%s\"}".formatted(refreshToken)));
+  }
+
+  private void rememberCredentials() throws Exception {
+    if (context.status() != 200) return;
+    var credentials = mapper.readTree(context.body());
+    context.remember("accessToken", credentials.get("accessToken").asText());
+    context.remember("refreshToken", credentials.get("refreshToken").asText());
   }
 
   private String unique(String email) {

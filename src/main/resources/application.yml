@@ -21,6 +21,9 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+      # Fail fast: if Redis is down, IAM falls back to PostgreSQL instead of holding the request.
+      timeout: 500ms
+      connect-timeout: 500ms
       ssl:
         enabled: ${REDIS_SSL:false}
   mvc:

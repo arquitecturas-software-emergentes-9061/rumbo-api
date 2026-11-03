@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.hamcrest.Matchers.hasSize;
 
 @SpringBootTest
 @ActiveProfiles("demo")
@@ -96,4 +97,44 @@ class BeaconControllerIntegrationTest {
         .contentType(MediaType.APPLICATION_JSON).content(payload)).andExpect(status().isConflict())
       .andExpect(jsonPath("$.code").value("BEACON_IDENTIFIER_EXISTS"));
   }
+  @Test void listByFloorReturnsOnlyThatFloorEvenWhenOtherFloorsHaveInventory() throws Exception {
+    UUID admin = UUID.randomUUID(), siteId = site(admin);
+    UUID floorA = UUID.randomUUID(), floorB = UUID.randomUUID();
+    String base = "/api/v1/sites/" + siteId + "/beacons";
+    mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
+       .contentType(MediaType.APPLICATION_JSON)
+       .content("{\"identifier\":\"aaaa1234\",\"floorId\":\"" + floorA + "\",\"x\":10,\"y\":5}"))
+      .andExpect(status().isCreated());
+    mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
+       .contentType(MediaType.APPLICATION_JSON)
+       .content("{\"identifier\":\"bbbb5678\",\"floorId\":\"" + floorB + "\",\"x\":2,\"y\":1}"))
+      .andExpect(status().isCreated());
+
+    mvc.perform(get(base).with(caller(admin, UserRole.CLINIC_ADMIN)).param("floorId", floorA.toString()))
+      .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(1)))
+      .andExpect(jsonPath("$[0].identifier").value("aaaa1234"))
+      .andExpect(jsonPath("$[0].floorId").value(floorA.toString()));
+
+    mvc.perform(get(base).with(caller(admin, UserRole.CLINIC_ADMIN)).param("floorId", UUID.randomUUID().toString()))
+      .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+    mvc.perform(get(base).with(caller(admin, UserRole.CLINIC_ADMIN)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(2)));
+  }
+
+  @Test void rejectsInvalidCoordinatesAndUnknownBeaconWithoutLeakingSiteData() throws Exception {
+    UUID admin = UUID.randomUUID(), siteId = site(admin), floor = UUID.randomUUID();
+    String base = "/api/v1/sites/" + siteId + "/beacons";
+    mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
+       .contentType(MediaType.APPLICATION_JSON)
+       .content("{\"identifier\":\"test1234\",\"floorId\":\"" + floor + "\",\"x\":-2,\"y\":1}"))
+      .andExpect(status().isUnprocessableEntity())
+      .andExpect(jsonPath("$.code").value("INVALID_BEACON"));
+    mvc.perform(get(base + "/" + UUID.randomUUID()).with(caller(admin, UserRole.CLINIC_ADMIN)))
+      .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("POSITIONING_RESOURCE_NOT_FOUND"));
+    mvc.perform(get(base).with(caller(admin, UserRole.CLINIC_ADMIN)).param("floorId", "not-a-uuid"))
+      .andExpect(status().isBadRequest());
+    mvc.perform(get(base).with(caller(admin, UserRole.CLINIC_ADMIN)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+  }
+
 }

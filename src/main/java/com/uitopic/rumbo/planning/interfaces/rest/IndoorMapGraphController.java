@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Controlled REST entry point for reading and replacing an existing draft graph. */
 @RestController
+@PreAuthorize("hasRole('CLINIC_ADMIN') and @siteOwnerGuard.isOwner(authentication, #siteId)")
 @Profile("postgres")
 @ConditionalOnProperty(name = "rumbo.planning.editing.enabled", havingValue = "true")
 @RequestMapping("/api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}/graph")

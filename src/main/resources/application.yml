@@ -36,6 +36,8 @@ rumbo:
     publication:
       enabled: ${RUMBO_PLANNING_PUBLICATION_ENABLED:false}
   navigation:
+    routes:
+      enabled: ${RUMBO_NAVIGATION_ROUTES_ENABLED:false}
     directory:
       enabled: ${RUMBO_NAVIGATION_DIRECTORY_ENABLED:false}
   security:

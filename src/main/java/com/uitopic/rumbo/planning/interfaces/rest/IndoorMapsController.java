@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** REST entry point for publishing Planning map versions. */
 @RestController
+@PreAuthorize("hasRole('CLINIC_ADMIN') and @siteOwnerGuard.isOwner(authentication, #siteId)")
 @Profile("postgres")
 @ConditionalOnProperty(name = "rumbo.planning.publication.enabled", havingValue = "true")
 @RequestMapping("/api/v1/sites/{siteId}/maps")

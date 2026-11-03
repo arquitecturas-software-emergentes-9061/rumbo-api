@@ -53,6 +53,29 @@ class IndoorMapTest {
   }
 
   @Test
+  void editorNodeOutsidePlanReportsItsIdentifier() {
+    UUID nodeId = UUID.randomUUID();
+    InvalidMapGraphException error = assertThrows(InvalidMapGraphException.class,
+        () -> map.addNode(nodeId, floorId, planVersionId, 101, 1, NodeType.ACCESS));
+    assertEquals(GraphIssueCode.INVALID_NODE_DATA, error.issue().code());
+    assertEquals(nodeId, error.issue().elementId());
+    assertTrue(map.nodes().isEmpty());
+  }
+
+  @Test
+  void editorConnectionWithMissingEndpointReportsItsIdentifier() {
+    UUID accessId = UUID.randomUUID();
+    map.addNode(accessId, floorId, planVersionId, 1, 1, NodeType.ACCESS);
+    UUID connectionId = UUID.randomUUID();
+    InvalidMapGraphException error = assertThrows(InvalidMapGraphException.class,
+        () -> map.addConnection(connectionId, accessId, UUID.randomUUID(),
+            ConnectionType.CORRIDOR, 2, 3, true));
+    assertEquals(GraphIssueCode.MISSING_TARGET_NODE, error.issue().code());
+    assertEquals(connectionId, error.issue().elementId());
+    assertTrue(map.connections().isEmpty());
+  }
+
+  @Test
   void rejectsRepeatedNodeAndConnectionTraversals() {
     MapNode access = node(NodeType.ACCESS, 1);
     MapNode destination = node(NodeType.DESTINATION, 2);
@@ -229,7 +252,7 @@ class IndoorMapTest {
   }
 
   @Test
-  void rejectsCrossFloorCorridorAtPublication() {
+  void rejectsCrossFloorCorridorAndAcceptsVerticalConnector() {
     UUID otherFloorId = UUID.randomUUID();
     UUID otherPlanVersionId = UUID.randomUUID();
     PlanCoordinateSpace otherSpace = new PlanCoordinateSpace(otherFloorId, otherPlanVersionId, 100, 100);
@@ -241,14 +264,17 @@ class IndoorMapTest {
     map.addNode(access);
     map.addNode(destination);
     MapConnection corridor = connection(access.id(), destination.id(), true);
-    map.addConnection(corridor);
-
-    MapPublicationRejectedException error = assertThrows(MapPublicationRejectedException.class, map::publish);
-
-    assertTrue(error.validation().issues().stream().anyMatch(issue ->
-        issue.code() == GraphIssueCode.INVALID_VERTICAL_CONNECTION
-            && corridor.id().equals(issue.elementId())));
+    InvalidMapGraphException error = assertThrows(InvalidMapGraphException.class,
+        () -> map.addConnection(corridor));
+    assertEquals(GraphIssueCode.INVALID_VERTICAL_CONNECTION, error.issue().code());
+    assertEquals(corridor.id(), error.issue().elementId());
+    assertTrue(map.connections().isEmpty());
     assertEquals(MapVersionStatus.DRAFT, map.status());
+
+    map.addConnection(new MapConnection(UUID.randomUUID(), versionId, access.id(),
+        destination.id(), ConnectionType.ELEVATOR, 4, 6, true));
+    map.publish();
+    assertEquals(MapVersionStatus.PUBLISHED, map.status());
   }
 
   private MapNode node(NodeType type, double x) {

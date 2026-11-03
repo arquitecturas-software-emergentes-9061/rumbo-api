@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.uitopic.rumbo.planning.application.ports.IndoorMapStore;
 import com.uitopic.rumbo.planning.interfaces.rest.IndoorMapsController;
+import com.uitopic.rumbo.planning.interfaces.rest.IndoorMapGraphController;
 import org.springframework.context.ApplicationContext;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.junit.jupiter.api.Test;
@@ -39,5 +40,7 @@ class PlanningPostgresApplicationIntegrationTest {
   void publicationEndpointRequiresExplicitEnablement() {
     assertThrows(NoSuchBeanDefinitionException.class,
         () -> context.getBean(IndoorMapsController.class));
+    assertThrows(NoSuchBeanDefinitionException.class,
+        () -> context.getBean(IndoorMapGraphController.class));
   }
 }

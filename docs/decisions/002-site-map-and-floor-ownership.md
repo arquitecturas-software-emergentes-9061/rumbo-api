@@ -16,4 +16,4 @@ Navigation queries a published spatial graph by `siteId`, so a site must have an
 
 Flyway V3 adds uniqueness constraints and backfills floor ownership from existing plans. Applying V3 to a database that already contains multiple maps for one site or a floor ID shared by different sites requires resolving those conflicts before migration. This registry enforces consistency of stored floor IDs; it does not yet establish an administrative Site/Floor API or site authorization.
 
-The exported core includes scales, nodes and weighted links. Destinations, accessibility restrictions and obstacles still need their own modeled contracts before PostgreSQL-backed routes can be exposed.
+The exported core includes scales, nodes, weighted links, and versioned medical destinations tied to destination nodes. Accessibility restrictions and obstacles still need their own modeled contracts before PostgreSQL-backed routes can be exposed.

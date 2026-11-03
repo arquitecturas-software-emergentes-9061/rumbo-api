@@ -13,9 +13,9 @@ Backend académico oficial **preparado localmente**, pendiente de publicarse en 
   [ADR 001](docs/decisions/001-architecture-and-contract.md) y
   [ADR 002](docs/decisions/002-site-map-and-floor-ownership.md).
 - `planning` es dueño del modelo indoor y publica versiones identificables. `navigation`
-  ya lee el núcleo espacial **PUBLISHED** mediante un puerto propio y un adaptador ACL;
-  destinos, restricciones y obstáculos reales siguen pendientes. El adaptador `demo`
-  actual es temporal.
+  ya lee el núcleo espacial **PUBLISHED** y busca destinos médicos persistidos mediante
+  puertos propios y adaptadores ACL; restricciones de accesibilidad y obstáculos siguen
+  pendientes. El adaptador `demo` actual es temporal.
 
 ## GitFlow obligatorio
 `main` (core initial commit) → `develop` → `feat/<bounded-context>-<funcionalidad>`.
@@ -30,13 +30,22 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
   consultar y reemplazar nodos y conexiones de un borrador existente, también con habilitación
   explícita. El núcleo espacial publicado ya se consulta desde `navigation` sin exponer
   borradores ni activar aún rutas PostgreSQL.
+- El directorio médico de `planning` guarda entradas de médicos, especialidades y servicios
+  vinculadas a nodos destino de una versión. La búsqueda indexada de `navigation` solo devuelve
+  entradas de la versión publicada vigente de una sede; su endpoint requiere habilitación
+  explícita mientras falta autorización por sede.
+- Las conexiones verticales guardan una penalización de costo separada del peso y la distancia
+  física. `navigation` ya calcula rutas internas A* sobre el grafo publicado y respeta pesos,
+  penalizaciones y dirección de las conexiones. Las restricciones de accesibilidad y obstáculos
+  todavía no forman parte de ese modelo, por lo que no se expone una ruta PostgreSQL por HTTP.
 - Rama `main` y `develop`: base de Spring Boot, CI y convenciones.
 - Rama `feat/navigation-destination-routing`: primer incremento de `navigation`.
 - `PR-214`: directorio y búsqueda acento-insensible de destinos por nombre/especialidad/tipo.
-- Motor Dijkstra derivado de reglas existentes del prototipo FastAPI:
-  rutas más cortas, filtro de accesibilidad y exclusión de aristas que cruzan paredes.
+- El motor Dijkstra del perfil `demo`, derivado del prototipo FastAPI, ofrece rutas de ejemplo
+  con filtro de accesibilidad y exclusión de aristas que cruzan paredes.
 - `POST /api/v1/navigations/route` es el endpoint provisional implementado; TS-12 exige
-  A* y el contrato objetivo de TS-13 es `GET /api/v1/sites/{siteId}/routes`.
+  A* sobre el modelo publicado, ya disponible internamente. El contrato objetivo de TS-13 es
+  `GET /api/v1/sites/{siteId}/routes` y sigue pendiente.
 - Contratos REST y Spring MockMvc; dominio sin dependencias Spring.
 - Datos de ejemplo disponibles **solo con perfil `demo`**. La publicación de `planning`
   requiere PostgreSQL y permanece desactivada hasta habilitarla para pruebas controladas.
@@ -55,6 +64,8 @@ aplicación con el perfil `postgres`, se usan `RUMBO_DB_URL`, `RUMBO_DB_USER` y
 `RUMBO_DB_PASSWORD`. Para probar localmente la publicación, activar también
 `RUMBO_PLANNING_PUBLICATION_ENABLED=true`; para probar la edición, activar
 `RUMBO_PLANNING_EDITING_ENABLED=true`. No exponer esos endpoints sin autorización por sede.
+La búsqueda del directorio publicado requiere `RUMBO_NAVIGATION_DIRECTORY_ENABLED=true`
+con el perfil `postgres`; permanece desactivada por defecto por la misma razón.
 Véase [Contrato API](docs/API-CONTRACT.md) para métodos, cuerpos y errores.
 
 Endpoints implementados de ejemplo (perfil `demo`):

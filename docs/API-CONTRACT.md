@@ -15,9 +15,23 @@ Status: agreed target contract for future iterations. Sections marked **target**
 
 Each floor-plan version defines an unscaled rectangular visual coordinate space with positive `widthUnits` and `heightUnits`. Its origin is the top-left corner: x increases rightward and y downward. Coordinates include `floorId` and `planVersionId`; they must be finite and inside the inclusive bounds `(0, 0)` to `(widthUnits, heightUnits)`. A rendered or resized image must transform those coordinates for display rather than replacing the stored plan coordinates.
 
-A confirmed `MapScale` is tied to `floorId` and `planVersionId` and expresses `metersPerUnit = realDistanceMeters / EuclideanDistanceInPlanUnits` between two distinct reference points of that version. Physical connection distance is expressed in meters; routing weight is a separate positive cost. A plan without a confirmed physical reference has no confirmed scale. `planning` now stores and reloads these draft values with nodes and connections in PostgreSQL. Publishing and serving a read-only model remain future work.
+A confirmed `MapScale` is tied to `floorId` and `planVersionId` and expresses `metersPerUnit = realDistanceMeters / EuclideanDistanceInPlanUnits` between two distinct reference points of that version. Physical connection distance is expressed in meters; routing weight is a separate positive cost. A plan without a confirmed physical reference has no confirmed scale. `planning` stores and reloads these draft values with nodes and connections in PostgreSQL and can publish a validated version. Serving that version as a read-only model to `navigation` remains future work.
 
-Reads never return drafts. Publishing a new version must be atomic so a route uses one coherent version. Authorization of the consumer and site is required before serving real models; it is not implemented yet.
+Reads never return drafts. Publishing a new version is atomic: a rejected draft leaves the previous published version available. Authorization of the consumer and site is required before serving real models; it is not implemented yet.
+
+## Map version publication — implemented with explicit local enablement
+
+`PATCH /api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}`
+
+Request media type: `application/merge-patch+json`; body: `{"status":"PUBLISHED"}`. All three path IDs are required UUIDs. The endpoint is active only with the `postgres` profile and `RUMBO_PLANNING_PUBLICATION_ENABLED=true`; keep it disabled outside controlled local testing until site authorization is implemented.
+
+- `200 OK`: `siteId`, `mapId`, `modelVersionId`, `status: "PUBLISHED"`. The previous published version, if any, becomes `ARCHIVED` in the same transaction.
+- `400 Bad Request`: malformed ID or JSON, or a status other than `PUBLISHED`.
+- `404 Not Found`: the site, map and version do not match an existing draft.
+- `409 Conflict`: the version exists but is no longer `DRAFT`.
+- `422 Unprocessable Entity`: graph validation failed; response `code: "INVALID_MAP_GRAPH"` and `issues[]` with `code`, `elementType`, `elementId` (null only for graph-wide issues) and `message`. The draft remains `DRAFT` and the previous `PUBLISHED` version is unchanged.
+
+Publication currently requires a confirmed scale for every plan, at least one access and destination, one connected graph, directed reachability of each destination, and vertical connection types for links crossing floors. It does not yet expose the published model to `navigation`; obstacle, accessibility and destination metadata rules belong to later work.
 
 ## Destination search — implemented with `demo` data
 

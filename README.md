@@ -7,10 +7,11 @@ Backend académico oficial **preparado localmente**, pendiente de publicarse en 
 - Java 21 / Spring Boot 3.5.6 / REST + OpenAPI.
 - Domain-Driven Design; cada bounded context con capas `domain`, `application`,
   `interfaces` (plural: `interface` es una palabra reservada Java) e `infrastructure`.
-- PostgreSQL es la persistencia principal elegida y ya guarda borradores de `planning`.
+- PostgreSQL es la persistencia principal elegida y ya guarda borradores y versiones
+  publicadas de `planning`.
   Redis y RabbitMQ se incorporarán cuando una tarea concreta los requiera; véase
   [ADR 001](docs/decisions/001-architecture-and-contract.md).
-- `planning` es dueño del modelo indoor y publicará versiones identificables. `navigation`
+- `planning` es dueño del modelo indoor y publica versiones identificables. `navigation`
   leerá solo modelos **PUBLISHED** mediante un puerto de solo lectura. El adaptador `demo`
   actual es temporal.
 
@@ -22,8 +23,9 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
 ## Estado de implementación
 - `planning` ya contiene coordenadas, escala, nodos, conexiones y un agregado de borrador
   `IndoorMap` con validación de referencias, duplicados y conectividad. Flyway y el adaptador
-  JPA guardan y recuperan borradores completos en PostgreSQL. La publicación y la API de
-  edición aún no están implementadas.
+  JPA guardan y recuperan borradores completos en PostgreSQL. La publicación transaccional
+  y su endpoint `PATCH` están implementados con habilitación explícita; la API de edición
+  y la lectura desde `navigation` siguen pendientes.
 - Rama `main` y `develop`: base de Spring Boot, CI y convenciones.
 - Rama `feat/navigation-destination-routing`: primer incremento de `navigation`.
 - `PR-214`: directorio y búsqueda acento-insensible de destinos por nombre/especialidad/tipo.
@@ -32,8 +34,9 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
 - `POST /api/v1/navigations/route` es el endpoint provisional implementado; TS-12 exige
   A* y el contrato objetivo de TS-13 es `GET /api/v1/sites/{siteId}/routes`.
 - Contratos REST y Spring MockMvc; dominio sin dependencias Spring.
-- Datos de ejemplo disponibles **solo con perfil `demo`**. La persistencia de `planning`
-  todavía no está conectada a endpoints; tampoco hay subida de planos ni BLE reales. No
+- Datos de ejemplo disponibles **solo con perfil `demo`**. La publicación de `planning`
+  requiere PostgreSQL y permanece desactivada hasta habilitarla para pruebas controladas.
+  Tampoco hay subida de planos ni BLE reales. No
   declarar PR-214 terminado hasta integrar app cliente.
 
 ## Ejecutar tras instalar JDK 21 y Maven
@@ -45,7 +48,9 @@ El perfil `demo` no requiere PostgreSQL. La prueba de persistencia se activa con
 `RUMBO_TEST_DB_URL`, `RUMBO_TEST_DB_USER` y `RUMBO_TEST_DB_PASSWORD` apuntando a una base
 PostgreSQL 16 de prueba; CI la ejecuta con un servicio temporal. Para una conexión de la
 aplicación con el perfil `postgres`, se usan `RUMBO_DB_URL`, `RUMBO_DB_USER` y
-`RUMBO_DB_PASSWORD`. El contrato HTTP productivo de `planning` llegará con la publicación.
+`RUMBO_DB_PASSWORD`. Para probar localmente la publicación, activar también
+`RUMBO_PLANNING_PUBLICATION_ENABLED=true`; no exponer ese endpoint sin autorización por
+sede. Véase [Contrato API](docs/API-CONTRACT.md) para método, cuerpo y errores.
 
 Endpoints implementados de ejemplo (perfil `demo`):
 ```sh

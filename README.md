@@ -32,7 +32,7 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
 
 ## Ejecutar tras instalar JDK 21, Maven y Docker
 ```sh
-cp .env.example .env          # opcional: cambia credenciales locales
+cp .env.example .env          # completa JWT_SECRET (mínimo 32 bytes): openssl rand -base64 48
 docker compose up -d          # PostgreSQL 17 y Redis 7
 mvn verify                    # unitarias + integración (Testcontainers) + aceptación (Cucumber)
 mvn spring-boot:run -Dspring-boot.run.profiles=demo
@@ -49,7 +49,21 @@ Hasta que `planning` publique un modelo real, la app necesita el perfil `demo` p
 - **Pruebas de aceptación**: un `.feature` por historia en `src/test/resources/features/<contexto>/`,
   con los criterios de aceptación de Jira. Los pasos HTTP genéricos están en `acceptance/steps/ApiSteps`.
 - **Tests de integración**: `@SpringBootTest` + `@Import(TestcontainersConfiguration.class)`.
-Endpoints de ejemplo:
+- **Seguridad**: todo endpoint exige `Authorization: Bearer <accessToken>` salvo los listados en
+  `iam/infrastructure/security/SecurityConfiguration` (auth, recuperación de contraseña, navigation, health y
+  Swagger). En un controller, el usuario se recibe con `@AuthenticationPrincipal AuthenticatedPrincipal`
+  (`userId`, `role`, `sessionId`, `clinicId`). Sin `JWT_SECRET` la app no arranca; las pruebas usan uno propio.
+- **Errores**: `ProblemDetail` (RFC 7807) con `code` estable, armado con `shared/interfaces/rest/ProblemDetails`.
+
+Cuenta y sesión (IAM):
+```sh
+curl -s -X POST http://localhost:8080/api/v1/auth/sign-up -H 'Content-Type: application/json' \
+  -d '{"email":"ana@clinica.pe","password":"Rumbo2026","role":"CLINIC_ADMIN","fullName":"Ana Torres","clinicName":"Clinica Central","acceptedTerms":true}'
+curl -s -X POST http://localhost:8080/api/v1/auth/sign-in -H 'Content-Type: application/json' \
+  -d '{"email":"ana@clinica.pe","password":"Rumbo2026"}'
+curl -s http://localhost:8080/api/v1/user-accounts/me -H "Authorization: Bearer $ACCESS_TOKEN"
+```
+Endpoints de ejemplo de navigation:
 ```sh
 curl -s 'http://localhost:8080/api/v1/navigations/destinations?siteId=00000000-0000-4000-8000-000000000001&query=cardiologia'
 curl -s -X POST http://localhost:8080/api/v1/navigations/route \

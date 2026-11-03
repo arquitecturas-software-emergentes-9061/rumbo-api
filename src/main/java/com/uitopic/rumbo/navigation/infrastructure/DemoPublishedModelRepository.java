@@ -6,7 +6,7 @@ import java.util.*;
 /** Explicit development fixture; NEVER used as an alternative to real clinic data. */
 @Repository
 @Profile("demo")
-public final class DemoPublishedModelRepository implements NavigableModelRepository {
+public class DemoPublishedModelRepository implements NavigableModelRepository {
   public static final UUID SITE=UUID.fromString("00000000-0000-4000-8000-000000000001");
   public static final UUID FLOOR=UUID.fromString("00000000-0000-4000-8000-000000000002");
   public static final UUID ENTRANCE=UUID.fromString("00000000-0000-4000-8000-000000000010");

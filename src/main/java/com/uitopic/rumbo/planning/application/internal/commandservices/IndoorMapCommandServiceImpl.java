@@ -1,9 +1,10 @@
 package com.uitopic.rumbo.planning.application.internal.commandservices;
 
-import com.uitopic.rumbo.planning.application.exceptions.MapVersionNotFoundException;
-import com.uitopic.rumbo.planning.application.ports.IndoorMapStore;
+import com.uitopic.rumbo.planning.application.internal.exceptions.MapVersionNotFoundException;
+import com.uitopic.rumbo.planning.domain.repositories.IndoorMapStore;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.commands.PublishMapVersionCommand;
+import com.uitopic.rumbo.planning.domain.model.commands.ReplaceDraftGraphCommand;
 import com.uitopic.rumbo.planning.domain.services.IndoorMapCommandService;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -22,11 +23,30 @@ public class IndoorMapCommandServiceImpl implements IndoorMapCommandService {
   @Override
   @Transactional
   public IndoorMap handle(PublishMapVersionCommand command) {
-    IndoorMap map = store.findDraftForPublication(command.mapId(), command.modelVersionId())
+    IndoorMap map = store.findDraftForUpdate(command.mapId(), command.modelVersionId())
         .orElseThrow(MapVersionNotFoundException::new);
     if (!map.siteId().equals(command.siteId())) throw new MapVersionNotFoundException();
     map.publish();
     store.publish(map);
     return map;
+  }
+
+  @Override
+  @Transactional
+  public IndoorMap handle(ReplaceDraftGraphCommand command) {
+    IndoorMap current = store.findDraftForUpdate(command.mapId(), command.modelVersionId())
+        .orElseThrow(MapVersionNotFoundException::new);
+    if (!current.siteId().equals(command.siteId())) throw new MapVersionNotFoundException();
+
+    IndoorMap replacement = new IndoorMap(current.id(), current.siteId(), current.modelVersionId());
+    current.plans().forEach(replacement::addPlan);
+    current.scales().forEach(replacement::setScale);
+    command.nodes().forEach(node -> replacement.addNode(node.id(), node.floorId(),
+        node.planVersionId(), node.x(), node.y(), node.type()));
+    command.connections().forEach(connection -> replacement.addConnection(connection.id(),
+        connection.sourceNodeId(), connection.targetNodeId(), connection.type(),
+        connection.distanceMeters(), connection.weight(), connection.bidirectional()));
+    store.saveDraft(replacement);
+    return replacement;
   }
 }

@@ -15,6 +15,7 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapVersionStatus;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.SpatialCoordinate;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -115,6 +116,27 @@ public final class IndoorMap {
     nodes.put(node.id(), node);
   }
 
+  /** Adds a node from editor coordinates, reporting invalid geometry at the node ID. */
+  public void addNode(UUID nodeId, UUID floorId, UUID planVersionId,
+                      double x, double y, NodeType type) {
+    requireDraft();
+    PlanCoordinateSpace space = plans.get(planVersionId);
+    if (space == null) {
+      reject(GraphIssueCode.MISSING_PLAN_VERSION, GraphElementType.NODE, nodeId,
+          "Node refers to an unregistered plan version");
+    }
+    MapNode node;
+    try {
+      node = new MapNode(nodeId, modelVersionId(),
+          new SpatialCoordinate(floorId, planVersionId, x, y), type, space);
+    } catch (IllegalArgumentException | NullPointerException error) {
+      reject(GraphIssueCode.INVALID_NODE_DATA, GraphElementType.NODE, nodeId,
+          "Node position or type is invalid for its floor-plan version");
+      return;
+    }
+    addNode(node);
+  }
+
   /**
    * Adds a connection after checking its version, endpoints, and overlapping links.
    * Failed edits leave the draft unchanged.
@@ -135,11 +157,37 @@ public final class IndoorMap {
     if (!nodes.containsKey(connection.targetNodeId())) {
       reject(GraphIssueCode.MISSING_TARGET_NODE, GraphElementType.CONNECTION, connection.id(), "Connection target node is missing");
     }
+    MapNode source = nodes.get(connection.sourceNodeId());
+    MapNode target = nodes.get(connection.targetNodeId());
+    if (!source.position().floorId().equals(target.position().floorId())
+        && connection.type() != ConnectionType.STAIRS
+        && connection.type() != ConnectionType.RAMP
+        && connection.type() != ConnectionType.ELEVATOR) {
+      reject(GraphIssueCode.INVALID_VERTICAL_CONNECTION, GraphElementType.CONNECTION,
+          connection.id(), "Cross-floor connection must be stairs, ramp, or elevator");
+    }
     if (connections.values().stream().anyMatch(existing -> overlaps(existing, connection))) {
       reject(GraphIssueCode.DUPLICATE_CONNECTION, GraphElementType.CONNECTION, connection.id(),
           "Connection repeats a traversable link of the same type");
     }
     connections.put(connection.id(), connection);
+  }
+
+  /** Adds a weighted editor connection, reporting invalid metrics at its ID. */
+  public void addConnection(UUID connectionId, UUID sourceNodeId, UUID targetNodeId,
+                            ConnectionType type, double distanceMeters, double weight,
+                            boolean bidirectional) {
+    requireDraft();
+    MapConnection connection;
+    try {
+      connection = new MapConnection(connectionId, modelVersionId(), sourceNodeId,
+          targetNodeId, type, distanceMeters, weight, bidirectional);
+    } catch (IllegalArgumentException | NullPointerException error) {
+      reject(GraphIssueCode.INVALID_CONNECTION_DATA, GraphElementType.CONNECTION, connectionId,
+          "Connection endpoints, type, distance, or weight are invalid");
+      return;
+    }
+    addConnection(connection);
   }
 
   /** Validates the current draft against the rules required before publication. */
@@ -170,15 +218,6 @@ public final class IndoorMap {
     Map<UUID, Set<UUID>> undirected = adjacency();
     Map<UUID, Set<UUID>> directed = adjacency();
     for (MapConnection connection : connections.values()) {
-      MapNode source = nodes.get(connection.sourceNodeId());
-      MapNode target = nodes.get(connection.targetNodeId());
-      if (!source.position().floorId().equals(target.position().floorId())
-          && connection.type() != ConnectionType.STAIRS
-          && connection.type() != ConnectionType.RAMP
-          && connection.type() != ConnectionType.ELEVATOR) {
-        issues.add(issue(GraphIssueCode.INVALID_VERTICAL_CONNECTION, GraphElementType.CONNECTION,
-            connection.id(), "Cross-floor connection must be stairs, ramp, or elevator"));
-      }
       undirected.get(connection.sourceNodeId()).add(connection.targetNodeId());
       undirected.get(connection.targetNodeId()).add(connection.sourceNodeId());
       directed.get(connection.sourceNodeId()).add(connection.targetNodeId());

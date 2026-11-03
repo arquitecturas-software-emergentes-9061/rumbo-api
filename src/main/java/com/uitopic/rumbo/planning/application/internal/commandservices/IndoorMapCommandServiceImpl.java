@@ -1,7 +1,7 @@
 package com.uitopic.rumbo.planning.application.internal.commandservices;
 
 import com.uitopic.rumbo.planning.application.internal.exceptions.MapVersionNotFoundException;
-import com.uitopic.rumbo.planning.domain.repositories.IndoorMapStore;
+import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.commands.PublishMapVersionCommand;
 import com.uitopic.rumbo.planning.domain.model.commands.ReplaceDraftGraphCommand;
@@ -14,27 +14,27 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Profile("postgres")
 public class IndoorMapCommandServiceImpl implements IndoorMapCommandService {
-  private final IndoorMapStore store;
+  private final IndoorMapRepository repository;
 
-  public IndoorMapCommandServiceImpl(IndoorMapStore store) {
-    this.store = store;
+  public IndoorMapCommandServiceImpl(IndoorMapRepository repository) {
+    this.repository = repository;
   }
 
   @Override
   @Transactional
   public IndoorMap handle(PublishMapVersionCommand command) {
-    IndoorMap map = store.findDraftForUpdate(command.mapId(), command.modelVersionId())
+    IndoorMap map = repository.findDraftForUpdate(command.mapId(), command.modelVersionId())
         .orElseThrow(MapVersionNotFoundException::new);
     if (!map.siteId().equals(command.siteId())) throw new MapVersionNotFoundException();
     map.publish();
-    store.publish(map);
+    repository.publish(map);
     return map;
   }
 
   @Override
   @Transactional
   public IndoorMap handle(ReplaceDraftGraphCommand command) {
-    IndoorMap current = store.findDraftForUpdate(command.mapId(), command.modelVersionId())
+    IndoorMap current = repository.findDraftForUpdate(command.mapId(), command.modelVersionId())
         .orElseThrow(MapVersionNotFoundException::new);
     if (!current.siteId().equals(command.siteId())) throw new MapVersionNotFoundException();
 
@@ -46,7 +46,7 @@ public class IndoorMapCommandServiceImpl implements IndoorMapCommandService {
     command.connections().forEach(connection -> replacement.addConnection(connection.id(),
         connection.sourceNodeId(), connection.targetNodeId(), connection.type(),
         connection.distanceMeters(), connection.weight(), connection.bidirectional()));
-    store.saveDraft(replacement);
+    repository.saveDraft(replacement);
     return replacement;
   }
 }

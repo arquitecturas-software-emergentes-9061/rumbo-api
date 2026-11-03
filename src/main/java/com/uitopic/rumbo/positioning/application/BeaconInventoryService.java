@@ -43,7 +43,7 @@ public class BeaconInventoryService {
     String name = cleanName(rawName);
     Site site = new Site(UUID.randomUUID(), name);
     jdbc.update("INSERT INTO indoor_sites (id, owner_user_id, name, created_at) VALUES (?, ?, ?, ?)",
-        site.id(), ownerUserId, name, Instant.now(clock));
+        site.id(), ownerUserId, name, java.sql.Timestamp.from(Instant.now(clock)));
     return site;
   }
 
@@ -65,7 +65,7 @@ public class BeaconInventoryService {
               (id, site_id, floor_id, identifier, x, y, active, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, true, ?, ?)
           """, beacon.id(), beacon.siteId(), beacon.floorId(), beacon.identifier(),
-          beacon.x(), beacon.y(), Instant.now(clock), Instant.now(clock));
+          beacon.x(), beacon.y(), java.sql.Timestamp.from(Instant.now(clock)), java.sql.Timestamp.from(Instant.now(clock)));
     } catch (DataIntegrityViolationException duplicate) {
       throw new DuplicateIdentifier();
     }
@@ -104,7 +104,7 @@ public class BeaconInventoryService {
     int changed = jdbc.update("""
         UPDATE positioning_beacons SET active = ?, updated_at = ?
         WHERE site_id = ? AND id = ?
-        """, active, Instant.now(clock), siteId, beaconId);
+        """, active, java.sql.Timestamp.from(Instant.now(clock)), siteId, beaconId);
     if (changed == 0) throw new NotFound();
     return get(ownerUserId, siteId, beaconId);
   }

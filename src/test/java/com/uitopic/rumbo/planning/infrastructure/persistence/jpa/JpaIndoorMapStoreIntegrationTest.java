@@ -91,6 +91,7 @@ class JpaIndoorMapStoreIntegrationTest {
     IndoorMap map = new IndoorMap(UUID.randomUUID(), UUID.randomUUID(), versionId);
     PlanCoordinateSpace space = new PlanCoordinateSpace(floorId, planVersionId, 50, 50);
     map.addPlan(space);
+    map.setScale(new MapScale(floorId, planVersionId, 0.25));
     MapNode access = new MapNode(UUID.randomUUID(), versionId,
         new SpatialCoordinate(floorId, planVersionId, 1, 1), NodeType.ACCESS, space);
     map.addNode(access);

@@ -1,8 +1,12 @@
 package com.uitopic.rumbo.planning.infrastructure.persistence.jpa;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.uitopic.rumbo.planning.application.ports.IndoorMapStore;
+import com.uitopic.rumbo.planning.interfaces.rest.IndoorMapsController;
+import org.springframework.context.ApplicationContext;
+import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,9 +28,16 @@ class PlanningPostgresApplicationIntegrationTest {
   }
 
   @Autowired IndoorMapStore store;
+  @Autowired ApplicationContext context;
 
   @Test
   void startsWithJpaIndoorMapStore() {
     assertNotNull(store);
+  }
+
+  @Test
+  void publicationEndpointRequiresExplicitEnablement() {
+    assertThrows(NoSuchBeanDefinitionException.class,
+        () -> context.getBean(IndoorMapsController.class));
   }
 }

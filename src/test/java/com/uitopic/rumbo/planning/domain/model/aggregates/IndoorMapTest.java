@@ -3,6 +3,8 @@ package com.uitopic.rumbo.planning.domain.model.aggregates;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
+import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapVersionStateException;
+import com.uitopic.rumbo.planning.domain.exceptions.MapPublicationRejectedException;
 import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
 import com.uitopic.rumbo.planning.domain.model.entities.MapNode;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.*;
@@ -20,6 +22,7 @@ class IndoorMapTest {
   @BeforeEach
   void registerPlan() {
     map.addPlan(space);
+    map.setScale(new MapScale(floorId, planVersionId, 0.25));
   }
 
   @Test
@@ -173,6 +176,79 @@ class IndoorMapTest {
         () -> map.addNode(node));
     assertEquals(GraphIssueCode.MISSING_PLAN_VERSION, error.issue().code());
     assertTrue(map.nodes().isEmpty());
+  }
+
+  @Test
+  void publishesValidGraphAndPreventsFurtherEdits() {
+    MapNode access = node(NodeType.ACCESS, 1);
+    MapNode destination = node(NodeType.DESTINATION, 2);
+    map.addNode(access);
+    map.addNode(destination);
+    map.addConnection(connection(access.id(), destination.id(), true));
+
+    map.publish();
+
+    assertEquals(MapVersionStatus.PUBLISHED, map.status());
+    assertThrows(InvalidMapVersionStateException.class, map::publish);
+    assertThrows(InvalidMapVersionStateException.class, () -> map.addNode(node(NodeType.INTERSECTION, 3)));
+  }
+
+  @Test
+  void failedPublicationLeavesDraftEditableAndReportsIssues() {
+    MapNode access = node(NodeType.ACCESS, 1);
+    MapNode destination = node(NodeType.DESTINATION, 2);
+    map.addNode(access);
+    map.addNode(destination);
+
+    MapPublicationRejectedException error = assertThrows(MapPublicationRejectedException.class, map::publish);
+
+    assertEquals(MapVersionStatus.DRAFT, map.status());
+    assertTrue(error.validation().issues().stream().anyMatch(issue ->
+        issue.code() == GraphIssueCode.DISCONNECTED_NODE && destination.id().equals(issue.elementId())));
+    map.addConnection(connection(access.id(), destination.id(), true));
+    map.publish();
+    assertEquals(MapVersionStatus.PUBLISHED, map.status());
+  }
+
+  @Test
+  void requiresConfirmedScaleBeforePublication() {
+    IndoorMap unscaled = new IndoorMap(UUID.randomUUID(), UUID.randomUUID(), versionId);
+    unscaled.addPlan(space);
+    MapNode access = node(NodeType.ACCESS, 1);
+    MapNode destination = node(NodeType.DESTINATION, 2);
+    unscaled.addNode(access);
+    unscaled.addNode(destination);
+    unscaled.addConnection(connection(access.id(), destination.id(), true));
+
+    MapPublicationRejectedException error = assertThrows(MapPublicationRejectedException.class, unscaled::publish);
+
+    assertTrue(error.validation().issues().stream().anyMatch(issue ->
+        issue.code() == GraphIssueCode.MISSING_SCALE
+            && issue.elementType() == GraphElementType.PLAN
+            && planVersionId.equals(issue.elementId())));
+  }
+
+  @Test
+  void rejectsCrossFloorCorridorAtPublication() {
+    UUID otherFloorId = UUID.randomUUID();
+    UUID otherPlanVersionId = UUID.randomUUID();
+    PlanCoordinateSpace otherSpace = new PlanCoordinateSpace(otherFloorId, otherPlanVersionId, 100, 100);
+    map.addPlan(otherSpace);
+    map.setScale(new MapScale(otherFloorId, otherPlanVersionId, 0.25));
+    MapNode access = node(NodeType.ACCESS, 1);
+    MapNode destination = new MapNode(UUID.randomUUID(), versionId,
+        new SpatialCoordinate(otherFloorId, otherPlanVersionId, 2, 1), NodeType.DESTINATION, otherSpace);
+    map.addNode(access);
+    map.addNode(destination);
+    MapConnection corridor = connection(access.id(), destination.id(), true);
+    map.addConnection(corridor);
+
+    MapPublicationRejectedException error = assertThrows(MapPublicationRejectedException.class, map::publish);
+
+    assertTrue(error.validation().issues().stream().anyMatch(issue ->
+        issue.code() == GraphIssueCode.INVALID_VERTICAL_CONNECTION
+            && corridor.id().equals(issue.elementId())));
+    assertEquals(MapVersionStatus.DRAFT, map.status());
   }
 
   private MapNode node(NodeType type, double x) {

@@ -20,6 +20,12 @@ public class BeaconExceptionHandler {
     return ProblemDetails.of(HttpStatus.CONFLICT, "BEACON_IDENTIFIER_EXISTS", "Beacon already registered in this site");
   }
 
+  @ExceptionHandler(BeaconInventoryService.InvalidSpatialAnchor.class)
+  ProblemDetail badAnchor(Exception ignored) {
+    return ProblemDetails.of(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_SPATIAL_ANCHOR",
+      "Beacon point must lie inside a registered floor plan of the same site");
+  }
+
   @ExceptionHandler(IllegalArgumentException.class)
   ProblemDetail invalid(IllegalArgumentException error) {
     return ProblemDetails.of(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_BEACON", error.getMessage());

@@ -53,8 +53,22 @@ class BeaconControllerIntegrationTest {
     return UUID.fromString(json.readTree(payload).get("id").asText());
   }
 
+  private void draft(UUID siteId, UUID... floors) {
+    UUID mapId = UUID.randomUUID(), modelVersionId = UUID.randomUUID();
+    jdbc.update("INSERT INTO indoor_maps (id, site_id) VALUES (?, ?)", mapId, siteId);
+    jdbc.update("INSERT INTO map_versions (id, map_id, status) VALUES (?, ?, 'DRAFT')", modelVersionId, mapId);
+    for (UUID floorId : floors) {
+      jdbc.update("""
+        INSERT INTO plan_coordinate_spaces
+        (plan_version_id, model_version_id, floor_id, width_units, height_units)
+        VALUES (?, ?, ?, 100, 100)
+        """, UUID.randomUUID(), modelVersionId, floorId);
+    }
+  }
+
   @Test void adminRegistersAndListsByFloorAndTogglesStatus() throws Exception {
     UUID admin = UUID.randomUUID(), siteId = site(admin), floor = UUID.randomUUID();
+    draft(siteId, floor);
     String payload = mvc.perform(post("/api/v1/sites/" + siteId + "/beacons")
         .with(caller(admin, UserRole.CLINIC_ADMIN)).contentType(MediaType.APPLICATION_JSON)
         .content("{\"identifier\":\" AA:BB:CC:DD \",\"floorId\":\"" + floor + "\",\"x\":10.0,\"y\":5.5}"))
@@ -90,6 +104,7 @@ class BeaconControllerIntegrationTest {
 
   @Test void duplicateIdentifierCannotBeRegisteredTwice() throws Exception {
     UUID admin = UUID.randomUUID(), siteId = site(admin), floor = UUID.randomUUID();
+    draft(siteId, floor);
     String payload = "{\"identifier\":\"aa:bb:cc\",\"floorId\":\"" + floor + "\",\"x\":1,\"y\":2}";
     mvc.perform(post("/api/v1/sites/" + siteId + "/beacons").with(caller(admin, UserRole.CLINIC_ADMIN))
         .contentType(MediaType.APPLICATION_JSON).content(payload)).andExpect(status().isCreated());
@@ -100,6 +115,7 @@ class BeaconControllerIntegrationTest {
   @Test void listByFloorReturnsOnlyThatFloorEvenWhenOtherFloorsHaveInventory() throws Exception {
     UUID admin = UUID.randomUUID(), siteId = site(admin);
     UUID floorA = UUID.randomUUID(), floorB = UUID.randomUUID();
+    draft(siteId, floorA, floorB);
     String base = "/api/v1/sites/" + siteId + "/beacons";
     mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
        .contentType(MediaType.APPLICATION_JSON)
@@ -133,6 +149,24 @@ class BeaconControllerIntegrationTest {
       .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("POSITIONING_RESOURCE_NOT_FOUND"));
     mvc.perform(get(base).with(caller(admin, UserRole.CLINIC_ADMIN)).param("floorId", "not-a-uuid"))
       .andExpect(status().isBadRequest());
+    mvc.perform(get(base).with(caller(admin, UserRole.CLINIC_ADMIN)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+  }
+
+  @Test void rejectsUnknownFloorAndCoordinatesOutsidePlan() throws Exception {
+    UUID admin = UUID.randomUUID(), siteId = site(admin), validFloor = UUID.randomUUID();
+    draft(siteId, validFloor);
+    String base = "/api/v1/sites/" + siteId + "/beacons";
+    mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
+       .contentType(MediaType.APPLICATION_JSON)
+       .content("{\"identifier\":\"outside001\",\"floorId\":\"" + UUID.randomUUID() + "\",\"x\":1,\"y\":2}"))
+      .andExpect(status().isUnprocessableEntity())
+      .andExpect(jsonPath("$.code").value("INVALID_SPATIAL_ANCHOR"));
+    mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
+       .contentType(MediaType.APPLICATION_JSON)
+       .content("{\"identifier\":\"outside002\",\"floorId\":\"" + validFloor + "\",\"x\":101,\"y\":2}"))
+      .andExpect(status().isUnprocessableEntity())
+      .andExpect(jsonPath("$.code").value("INVALID_SPATIAL_ANCHOR"));
     mvc.perform(get(base).with(caller(admin, UserRole.CLINIC_ADMIN)))
       .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
   }

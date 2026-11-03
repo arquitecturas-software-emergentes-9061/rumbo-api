@@ -1,7 +1,10 @@
 package com.uitopic.rumbo.planning.infrastructure.persistence.jpa.model;
 
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapVersionStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.util.UUID;
@@ -17,11 +20,12 @@ public class MapVersionJpaEntity {
   private UUID mapId;
 
   @Column(name = "status", nullable = false, length = 16)
-  private String status;
+  @Enumerated(EnumType.STRING)
+  private MapVersionStatus status;
 
   protected MapVersionJpaEntity() {}
 
-  public MapVersionJpaEntity(UUID id, UUID mapId, String status) {
+  public MapVersionJpaEntity(UUID id, UUID mapId, MapVersionStatus status) {
     this.id = id;
     this.mapId = mapId;
     this.status = status;
@@ -29,5 +33,8 @@ public class MapVersionJpaEntity {
 
   public UUID id() { return id; }
   public UUID mapId() { return mapId; }
-  public String status() { return status; }
+  public MapVersionStatus status() { return status; }
+
+  /** Updates stored state after the domain has approved the transition. */
+  public void changeStatus(MapVersionStatus status) { this.status = status; }
 }

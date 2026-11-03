@@ -8,6 +8,8 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphIssueCode;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphElementType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphValidationResult;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,6 +32,8 @@ public final class IndoorMap {
   private final UUID id;
   private final UUID siteId;
   private final UUID draftVersionId;
+  private final Map<UUID, PlanCoordinateSpace> plans = new LinkedHashMap<>();
+  private final Map<UUID, MapScale> scales = new LinkedHashMap<>();
   private final Map<UUID, MapNode> nodes = new LinkedHashMap<>();
   private final Map<UUID, MapConnection> connections = new LinkedHashMap<>();
 
@@ -44,11 +48,42 @@ public final class IndoorMap {
   public UUID siteId() { return siteId; }
   public UUID draftVersionId() { return draftVersionId; }
 
+  /** Read-only snapshot of the plan coordinate spaces used by this draft. */
+  public List<PlanCoordinateSpace> plans() { return List.copyOf(plans.values()); }
+
+  /** Read-only snapshot of confirmed physical scales in this draft. */
+  public List<MapScale> scales() { return List.copyOf(scales.values()); }
+
   /** Read-only snapshot of nodes in this draft. */
   public List<MapNode> nodes() { return List.copyOf(nodes.values()); }
 
   /** Read-only snapshot of connections in this draft. */
   public List<MapConnection> connections() { return List.copyOf(connections.values()); }
+
+  /** Registers the bounded coordinate system of one floor-plan version. */
+  public void addPlan(PlanCoordinateSpace space) {
+    Objects.requireNonNull(space, "space is required");
+    if (plans.containsKey(space.planVersionId())) {
+      reject(GraphIssueCode.DUPLICATE_PLAN_VERSION, GraphElementType.PLAN,
+          space.planVersionId(), "Plan version is already present");
+    }
+    plans.put(space.planVersionId(), space);
+  }
+
+  /** Confirms or replaces the physical scale of a registered floor-plan version. */
+  public void setScale(MapScale scale) {
+    Objects.requireNonNull(scale, "scale is required");
+    PlanCoordinateSpace space = plans.get(scale.planVersionId());
+    if (space == null) {
+      reject(GraphIssueCode.MISSING_PLAN_VERSION, GraphElementType.PLAN,
+          scale.planVersionId(), "Scale refers to an unregistered plan version");
+    }
+    if (!space.floorId().equals(scale.floorId())) {
+      reject(GraphIssueCode.PLAN_FLOOR_MISMATCH, GraphElementType.PLAN,
+          scale.planVersionId(), "Scale floor differs from the registered plan floor");
+    }
+    scales.put(scale.planVersionId(), scale);
+  }
 
   /** Adds a node whose identity belongs to this draft model version. */
   public void addNode(MapNode node) {
@@ -58,6 +93,15 @@ public final class IndoorMap {
     }
     if (nodes.containsKey(node.id())) {
       reject(GraphIssueCode.DUPLICATE_NODE_ID, GraphElementType.NODE, node.id(), "Node ID is already present");
+    }
+    PlanCoordinateSpace space = plans.get(node.position().planVersionId());
+    if (space == null) {
+      reject(GraphIssueCode.MISSING_PLAN_VERSION, GraphElementType.NODE, node.id(),
+          "Node refers to an unregistered plan version");
+    }
+    if (!space.contains(node.position())) {
+      reject(GraphIssueCode.PLAN_FLOOR_MISMATCH, GraphElementType.NODE, node.id(),
+          "Node position does not belong to the registered floor-plan space");
     }
     nodes.put(node.id(), node);
   }

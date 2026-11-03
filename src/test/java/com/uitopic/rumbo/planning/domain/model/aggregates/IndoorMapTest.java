@@ -7,6 +7,7 @@ import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
 import com.uitopic.rumbo.planning.domain.model.entities.MapNode;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.*;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class IndoorMapTest {
@@ -15,6 +16,11 @@ class IndoorMapTest {
   private final UUID planVersionId = UUID.randomUUID();
   private final PlanCoordinateSpace space = new PlanCoordinateSpace(floorId, planVersionId, 100, 100);
   private final IndoorMap map = new IndoorMap(UUID.randomUUID(), UUID.randomUUID(), versionId);
+
+  @BeforeEach
+  void registerPlan() {
+    map.addPlan(space);
+  }
 
   @Test
   void acceptsConnectedDraftWithReachableDestination() {
@@ -144,6 +150,29 @@ class IndoorMapTest {
         () -> map.addNode(foreign));
     assertEquals(GraphIssueCode.WRONG_MODEL_VERSION, error.issue().code());
     assertEquals(foreign.id(), error.issue().elementId());
+  }
+
+  @Test
+  void retainsPlanAndConfirmedScaleWithinDraft() {
+    MapScale scale = new MapScale(floorId, planVersionId, 0.25);
+    map.setScale(scale);
+
+    assertEquals(java.util.List.of(space), map.plans());
+    assertEquals(java.util.List.of(scale), map.scales());
+    assertThrows(UnsupportedOperationException.class, () -> map.plans().clear());
+  }
+
+  @Test
+  void rejectsNodesFromUnregisteredPlanVersion() {
+    UUID otherPlan = UUID.randomUUID();
+    PlanCoordinateSpace otherSpace = new PlanCoordinateSpace(floorId, otherPlan, 100, 100);
+    MapNode node = new MapNode(UUID.randomUUID(), versionId,
+        new SpatialCoordinate(floorId, otherPlan, 1, 1), NodeType.ACCESS, otherSpace);
+
+    InvalidMapGraphException error = assertThrows(InvalidMapGraphException.class,
+        () -> map.addNode(node));
+    assertEquals(GraphIssueCode.MISSING_PLAN_VERSION, error.issue().code());
+    assertTrue(map.nodes().isEmpty());
   }
 
   private MapNode node(NodeType type, double x) {

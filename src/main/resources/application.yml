@@ -36,5 +36,7 @@ spring:
     open-in-view: false
 rumbo:
   planning:
+    editing:
+      enabled: ${RUMBO_PLANNING_EDITING_ENABLED:false}
     publication:
       enabled: ${RUMBO_PLANNING_PUBLICATION_ENABLED:false}

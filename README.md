@@ -10,9 +10,11 @@ Backend académico oficial **preparado localmente**, pendiente de publicarse en 
 - PostgreSQL es la persistencia principal elegida y ya guarda borradores y versiones
   publicadas de `planning`.
   Redis y RabbitMQ se incorporarán cuando una tarea concreta los requiera; véase
-  [ADR 001](docs/decisions/001-architecture-and-contract.md).
+  [ADR 001](docs/decisions/001-architecture-and-contract.md) y
+  [ADR 002](docs/decisions/002-site-map-and-floor-ownership.md).
 - `planning` es dueño del modelo indoor y publica versiones identificables. `navigation`
-  leerá solo modelos **PUBLISHED** mediante un puerto de solo lectura. El adaptador `demo`
+  ya lee el núcleo espacial **PUBLISHED** mediante un puerto propio y un adaptador ACL;
+  destinos, restricciones y obstáculos reales siguen pendientes. El adaptador `demo`
   actual es temporal.
 
 ## GitFlow obligatorio
@@ -24,8 +26,10 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
 - `planning` ya contiene coordenadas, escala, nodos, conexiones y un agregado de borrador
   `IndoorMap` con validación de referencias, duplicados y conectividad. Flyway y el adaptador
   JPA guardan y recuperan borradores completos en PostgreSQL. La publicación transaccional
-  y su endpoint `PATCH` están implementados con habilitación explícita; la API de edición
-  y la lectura desde `navigation` siguen pendientes.
+  y su endpoint `PATCH` están implementados con habilitación explícita. `GET` y `PUT` permiten
+  consultar y reemplazar nodos y conexiones de un borrador existente, también con habilitación
+  explícita. El núcleo espacial publicado ya se consulta desde `navigation` sin exponer
+  borradores ni activar aún rutas PostgreSQL.
 - Rama `main` y `develop`: base de Spring Boot, CI y convenciones.
 - Rama `feat/navigation-destination-routing`: primer incremento de `navigation`.
 - `PR-214`: directorio y búsqueda acento-insensible de destinos por nombre/especialidad/tipo.
@@ -49,8 +53,9 @@ El perfil `demo` no requiere PostgreSQL. La prueba de persistencia se activa con
 PostgreSQL 16 de prueba; CI la ejecuta con un servicio temporal. Para una conexión de la
 aplicación con el perfil `postgres`, se usan `RUMBO_DB_URL`, `RUMBO_DB_USER` y
 `RUMBO_DB_PASSWORD`. Para probar localmente la publicación, activar también
-`RUMBO_PLANNING_PUBLICATION_ENABLED=true`; no exponer ese endpoint sin autorización por
-sede. Véase [Contrato API](docs/API-CONTRACT.md) para método, cuerpo y errores.
+`RUMBO_PLANNING_PUBLICATION_ENABLED=true`; para probar la edición, activar
+`RUMBO_PLANNING_EDITING_ENABLED=true`. No exponer esos endpoints sin autorización por sede.
+Véase [Contrato API](docs/API-CONTRACT.md) para métodos, cuerpos y errores.
 
 Endpoints implementados de ejemplo (perfil `demo`):
 ```sh

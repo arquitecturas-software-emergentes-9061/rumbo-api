@@ -23,11 +23,21 @@ import org.springframework.web.bind.annotation.*;
 @PreAuthorize("hasRole('CLINIC_ADMIN')")
 public class SvgInterpretationController {
   private final SvgGeometryInterpreter interpreter = new SvgGeometryInterpreter();
+  private final SvgRoomTopologyProposalService topology = new SvgRoomTopologyProposalService();
   public record InterpretRequest(@NotBlank String svg) {}
 
   @PostMapping("/svg")
   public SvgGeometryInterpreter.Interpretation interpret(@Valid @RequestBody InterpretRequest request) {
     return interpreter.interpret(request.svg());
+  }
+
+  /**
+   * Identifies rooms, corridors and explicit door openings; returns a candidate
+   * graph only, without persisting or publishing a navigable model.
+   */
+  @PostMapping("/svg/topology")
+  public SvgRoomTopologyProposalService.Proposal topology(@Valid @RequestBody InterpretRequest request) {
+    return topology.propose(request.svg());
   }
 
   @RestControllerAdvice(assignableTypes = SvgInterpretationController.class)

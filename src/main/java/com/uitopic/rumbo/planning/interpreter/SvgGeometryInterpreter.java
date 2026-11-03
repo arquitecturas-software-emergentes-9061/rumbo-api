@@ -12,6 +12,7 @@ import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -61,6 +62,13 @@ public final class SvgGeometryInterpreter {
       if (element.hasAttribute("transform"))
         throw new InvalidSvg("Transformaciones SVG no soportadas; exporte coordenadas absolutas");
       String tag = localName(element);
+      String explicitRole = element.getAttribute("data-rumbo-role").strip().toLowerCase(Locale.ROOT);
+      // A marked doorway is an opening, not a blocking wall. Semantic zones are
+      // candidates for room topology, not physical boundary-wall declarations.
+      if (("line".equals(tag) && "door".equals(explicitRole))
+          || ("rect".equals(tag) && Set.of("room", "corridor", "service").contains(explicitRole))) {
+        continue;
+      }
       switch (tag) {
         case "line" -> add(walls, number(element, "x1", 0), number(element, "y1", 0),
           number(element, "x2", 0), number(element, "y2", 0), "line");
@@ -79,7 +87,7 @@ public final class SvgGeometryInterpreter {
     return new Interpretation(viewBox, walls, labels, warnings);
   }
 
-  private static Document readXml(String source) {
+  static Document readXml(String source) {
     try {
       DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
       factory.setNamespaceAware(true);
@@ -97,7 +105,7 @@ public final class SvgGeometryInterpreter {
     }
   }
 
-  private static String localName(Element element) {
+  static String localName(Element element) {
     String local = element.getLocalName();
     return local == null ? element.getTagName() : local;
   }
@@ -114,7 +122,7 @@ public final class SvgGeometryInterpreter {
     return new ViewBox(values[0], values[1], values[2], values[3]);
   }
 
-  private static double number(Element e, String key, double fallback) {
+  static double number(Element e, String key, double fallback) {
     String raw = e.getAttribute(key);
     return raw == null || raw.isBlank() ? fallback : parse(raw);
   }
@@ -229,7 +237,7 @@ public final class SvgGeometryInterpreter {
     }
   }
 
-  private static String categorize(String value) {
+  static String categorize(String value) {
     String normalized = Normalizer.normalize(value, Normalizer.Form.NFD)
       .replaceAll("\\p{M}+", "").toLowerCase(Locale.ROOT);
     if (normalized.contains("consultorio") || normalized.contains("sala") || normalized.contains("oficina"))

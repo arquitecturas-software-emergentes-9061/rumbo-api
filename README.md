@@ -19,6 +19,9 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
 `develop` y luego merge de `release/*` a `main`. Usar Conventional Commits.
 
 ## Estado de implementación
+- `planning` ya contiene coordenadas, escala, nodos, conexiones y un agregado de borrador
+  `IndoorMap` con validación de referencias, duplicados y conectividad. La publicación,
+  persistencia y API de edición aún no están implementadas.
 - Rama `main` y `develop`: base de Spring Boot, CI y convenciones.
 - Rama `feat/navigation-destination-routing`: primer incremento de `navigation`.
 - `PR-214`: directorio y búsqueda acento-insensible de destinos por nombre/especialidad/tipo.

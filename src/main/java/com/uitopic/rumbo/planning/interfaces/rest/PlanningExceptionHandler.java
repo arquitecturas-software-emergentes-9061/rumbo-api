@@ -14,8 +14,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-/** Translates Planning publication failures into consistent HTTP responses. */
-@RestControllerAdvice(assignableTypes = IndoorMapsController.class)
+/** Translates Planning draft-edit and publication failures into consistent HTTP responses. */
+@RestControllerAdvice(assignableTypes = {IndoorMapsController.class, IndoorMapGraphController.class})
 public class PlanningExceptionHandler {
   @ExceptionHandler(MapPublicationRejectedException.class)
   public ResponseEntity<PlanningErrorResource> invalidGraph(MapPublicationRejectedException error) {
@@ -27,7 +27,7 @@ public class PlanningExceptionHandler {
   @ExceptionHandler(InvalidMapGraphException.class)
   public ResponseEntity<PlanningErrorResource> invalidStoredGraph(InvalidMapGraphException error) {
     return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(new PlanningErrorResource(
-        "INVALID_MAP_GRAPH", "Stored indoor map graph is invalid",
+        "INVALID_MAP_GRAPH", "Indoor map graph is invalid",
         List.of(PlanningErrorResource.IssueResource.from(error.issue()))));
   }
 
@@ -46,7 +46,7 @@ public class PlanningExceptionHandler {
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<PlanningErrorResource> invalidRequest(MethodArgumentNotValidException error) {
     return ResponseEntity.badRequest().body(new PlanningErrorResource(
-        "INVALID_REQUEST", "Only status PUBLISHED is accepted", List.of()));
+        "INVALID_REQUEST", "Request data is invalid", List.of()));
   }
 
   @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})

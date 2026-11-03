@@ -6,7 +6,7 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphIssueCode;
 import java.util.List;
 import java.util.UUID;
 
-/** Stable response for a failed Planning publication request. */
+/** Stable response for a failed Planning draft edit or publication request. */
 public record PlanningErrorResource(String code, String message, List<IssueResource> issues) {
   public PlanningErrorResource {
     issues = List.copyOf(issues);

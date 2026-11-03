@@ -1,8 +1,11 @@
 package com.uitopic.rumbo.planning.domain.model.aggregates;
 
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
+import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapVersionStateException;
+import com.uitopic.rumbo.planning.domain.exceptions.MapPublicationRejectedException;
 import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
 import com.uitopic.rumbo.planning.domain.model.entities.MapNode;
+import com.uitopic.rumbo.planning.domain.model.entities.MapVersion;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphIssue;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphIssueCode;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphElementType;
@@ -10,6 +13,8 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphValidationResul
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapVersionStatus;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -24,29 +29,30 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Planning aggregate root for editing one draft version of a site's indoor map.
- * Publication status, version history, persistence, and external contracts are
- * introduced by later use cases; graph edits must pass through this boundary.
+ * Planning aggregate root for one version of a site's indoor map.
+ * It controls draft edits and the transition to an immutable published graph;
+ * persistence and version history are coordinated outside the domain.
  */
 public final class IndoorMap {
   private final UUID id;
   private final UUID siteId;
-  private final UUID draftVersionId;
+  private final MapVersion version;
   private final Map<UUID, PlanCoordinateSpace> plans = new LinkedHashMap<>();
   private final Map<UUID, MapScale> scales = new LinkedHashMap<>();
   private final Map<UUID, MapNode> nodes = new LinkedHashMap<>();
   private final Map<UUID, MapConnection> connections = new LinkedHashMap<>();
 
   /** Starts an empty draft graph for one site and model version. */
-  public IndoorMap(UUID id, UUID siteId, UUID draftVersionId) {
+  public IndoorMap(UUID id, UUID siteId, UUID modelVersionId) {
     this.id = Objects.requireNonNull(id, "id is required");
     this.siteId = Objects.requireNonNull(siteId, "siteId is required");
-    this.draftVersionId = Objects.requireNonNull(draftVersionId, "draftVersionId is required");
+    this.version = new MapVersion(modelVersionId, MapVersionStatus.DRAFT);
   }
 
   public UUID id() { return id; }
   public UUID siteId() { return siteId; }
-  public UUID draftVersionId() { return draftVersionId; }
+  public UUID modelVersionId() { return version.id(); }
+  public MapVersionStatus status() { return version.status(); }
 
   /** Read-only snapshot of the plan coordinate spaces used by this draft. */
   public List<PlanCoordinateSpace> plans() { return List.copyOf(plans.values()); }
@@ -62,6 +68,7 @@ public final class IndoorMap {
 
   /** Registers the bounded coordinate system of one floor-plan version. */
   public void addPlan(PlanCoordinateSpace space) {
+    requireDraft();
     Objects.requireNonNull(space, "space is required");
     if (plans.containsKey(space.planVersionId())) {
       reject(GraphIssueCode.DUPLICATE_PLAN_VERSION, GraphElementType.PLAN,
@@ -72,6 +79,7 @@ public final class IndoorMap {
 
   /** Confirms or replaces the physical scale of a registered floor-plan version. */
   public void setScale(MapScale scale) {
+    requireDraft();
     Objects.requireNonNull(scale, "scale is required");
     PlanCoordinateSpace space = plans.get(scale.planVersionId());
     if (space == null) {
@@ -87,8 +95,9 @@ public final class IndoorMap {
 
   /** Adds a node whose identity belongs to this draft model version. */
   public void addNode(MapNode node) {
+    requireDraft();
     Objects.requireNonNull(node, "node is required");
-    if (!draftVersionId.equals(node.modelVersionId())) {
+    if (!modelVersionId().equals(node.modelVersionId())) {
       reject(GraphIssueCode.WRONG_MODEL_VERSION, GraphElementType.NODE, node.id(), "Node belongs to another model version");
     }
     if (nodes.containsKey(node.id())) {
@@ -111,8 +120,9 @@ public final class IndoorMap {
    * Failed edits leave the draft unchanged.
    */
   public void addConnection(MapConnection connection) {
+    requireDraft();
     Objects.requireNonNull(connection, "connection is required");
-    if (!draftVersionId.equals(connection.modelVersionId())) {
+    if (!modelVersionId().equals(connection.modelVersionId())) {
       reject(GraphIssueCode.WRONG_MODEL_VERSION, GraphElementType.CONNECTION, connection.id(),
           "Connection belongs to another model version");
     }
@@ -135,6 +145,12 @@ public final class IndoorMap {
   /** Validates the current draft against the rules required before publication. */
   public GraphValidationResult validateForPublication() {
     List<GraphIssue> issues = new ArrayList<>();
+    for (PlanCoordinateSpace space : plans.values()) {
+      if (!scales.containsKey(space.planVersionId())) {
+        issues.add(issue(GraphIssueCode.MISSING_SCALE, GraphElementType.PLAN,
+            space.planVersionId(), "Plan version has no confirmed physical scale"));
+      }
+    }
     if (nodes.isEmpty()) {
       issues.add(issue(GraphIssueCode.EMPTY_GRAPH, GraphElementType.GRAPH, null, "Graph has no nodes"));
     }
@@ -154,6 +170,15 @@ public final class IndoorMap {
     Map<UUID, Set<UUID>> undirected = adjacency();
     Map<UUID, Set<UUID>> directed = adjacency();
     for (MapConnection connection : connections.values()) {
+      MapNode source = nodes.get(connection.sourceNodeId());
+      MapNode target = nodes.get(connection.targetNodeId());
+      if (!source.position().floorId().equals(target.position().floorId())
+          && connection.type() != ConnectionType.STAIRS
+          && connection.type() != ConnectionType.RAMP
+          && connection.type() != ConnectionType.ELEVATOR) {
+        issues.add(issue(GraphIssueCode.INVALID_VERTICAL_CONNECTION, GraphElementType.CONNECTION,
+            connection.id(), "Cross-floor connection must be stairs, ramp, or elevator"));
+      }
       undirected.get(connection.sourceNodeId()).add(connection.targetNodeId());
       undirected.get(connection.targetNodeId()).add(connection.sourceNodeId());
       directed.get(connection.sourceNodeId()).add(connection.targetNodeId());
@@ -178,6 +203,18 @@ public final class IndoorMap {
       }
     }
     return new GraphValidationResult(issues);
+  }
+
+  /** Publishes this draft only when every graph issue has been resolved. */
+  public void publish() {
+    requireDraft();
+    GraphValidationResult validation = validateForPublication();
+    if (!validation.isValid()) throw new MapPublicationRejectedException(validation);
+    version.publish();
+  }
+
+  private void requireDraft() {
+    if (status() != MapVersionStatus.DRAFT) throw new InvalidMapVersionStateException(status());
   }
 
   private boolean overlaps(MapConnection first, MapConnection second) {

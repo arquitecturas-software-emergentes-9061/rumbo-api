@@ -31,6 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class BeaconControllerIntegrationTest {
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper json;
+  @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
 
   private RequestPostProcessor caller(UUID userId, UserRole role) {
     var principal = new AuthenticatedPrincipal(userId, role, UUID.randomUUID(), null);
@@ -40,6 +41,11 @@ class BeaconControllerIntegrationTest {
   }
 
   private UUID site(UUID user) throws Exception {
+    // A real row is needed because indoor_sites enforces an FK to identity_users.
+    jdbc.update("""
+        INSERT INTO identity_users (id, email, password_hash, role, status, created_at, updated_at)
+        VALUES (?, ?, ?, 'CLINIC_ADMIN', 'ACTIVE', now(), now())
+        """, user, "beacons-" + user + "@example.com", "test-only-not-a-real-password-hash");
     String payload = mvc.perform(post("/api/v1/sites").with(caller(user, UserRole.CLINIC_ADMIN))
         .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Centro Medico\"}"))
       .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();

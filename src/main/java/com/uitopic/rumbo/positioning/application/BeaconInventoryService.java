@@ -66,8 +66,13 @@ public class BeaconInventoryService {
           VALUES (?, ?, ?, ?, ?, ?, true, ?, ?)
           """, beacon.id(), beacon.siteId(), beacon.floorId(), beacon.identifier(),
           beacon.x(), beacon.y(), java.sql.Timestamp.from(Instant.now(clock)), java.sql.Timestamp.from(Instant.now(clock)));
-    } catch (DataIntegrityViolationException duplicate) {
-      throw new DuplicateIdentifier();
+    } catch (DataIntegrityViolationException error) {
+      // A FK or CHECK violation is not an identifier conflict.
+      if (error.getMostSpecificCause() instanceof SQLException sql
+          && "23505".equals(sql.getSQLState())) {
+        throw new DuplicateIdentifier();
+      }
+      throw error;
     }
     return beacon;
   }

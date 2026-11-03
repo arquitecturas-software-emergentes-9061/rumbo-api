@@ -15,7 +15,7 @@ Status: agreed target contract for future iterations. Sections marked **target**
 
 Each floor-plan version defines an unscaled rectangular visual coordinate space with positive `widthUnits` and `heightUnits`. Its origin is the top-left corner: x increases rightward and y downward. Coordinates include `floorId` and `planVersionId`; they must be finite and inside the inclusive bounds `(0, 0)` to `(widthUnits, heightUnits)`. A rendered or resized image must transform those coordinates for display rather than replacing the stored plan coordinates.
 
-A confirmed `MapScale` is tied to `floorId` and `planVersionId` and expresses `metersPerUnit = realDistanceMeters / EuclideanDistanceInPlanUnits` between two distinct reference points of that version. Physical connection distance is expressed in meters; routing weight is a separate positive cost. A plan without a confirmed physical reference has no confirmed scale. These domain types are implemented in `planning`; storing and reloading them is a later iteration.
+A confirmed `MapScale` is tied to `floorId` and `planVersionId` and expresses `metersPerUnit = realDistanceMeters / EuclideanDistanceInPlanUnits` between two distinct reference points of that version. Physical connection distance is expressed in meters; routing weight is a separate positive cost. A plan without a confirmed physical reference has no confirmed scale. `planning` now stores and reloads these draft values with nodes and connections in PostgreSQL. Publishing and serving a read-only model remain future work.
 
 Reads never return drafts. Publishing a new version must be atomic so a route uses one coherent version. Authorization of the consumer and site is required before serving real models; it is not implemented yet.
 

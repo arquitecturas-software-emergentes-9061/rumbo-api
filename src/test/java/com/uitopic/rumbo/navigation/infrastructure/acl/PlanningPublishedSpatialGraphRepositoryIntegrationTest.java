@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.uitopic.rumbo.navigation.application.GetPublishedSpatialGraphQueryHandler;
 import com.uitopic.rumbo.navigation.domain.PublishedSpatialGraph;
-import com.uitopic.rumbo.planning.application.ports.IndoorMapStore;
+import com.uitopic.rumbo.planning.domain.repositories.IndoorMapStore;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.commands.PublishMapVersionCommand;

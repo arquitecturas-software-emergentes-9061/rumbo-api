@@ -3,7 +3,7 @@ package com.uitopic.rumbo.planning.infrastructure.persistence.jpa;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.uitopic.rumbo.planning.application.ports.IndoorMapStore;
+import com.uitopic.rumbo.planning.domain.repositories.IndoorMapStore;
 import com.uitopic.rumbo.planning.interfaces.rest.IndoorMapsController;
 import com.uitopic.rumbo.planning.interfaces.rest.IndoorMapGraphController;
 import org.springframework.context.ApplicationContext;

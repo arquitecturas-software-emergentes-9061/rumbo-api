@@ -4,7 +4,7 @@ Status: agreed target contract for future iterations. Sections marked **target**
 
 ## Published indoor model — spatial core implemented, full model target
 
-`planning` owns the editable spatial model. Its `PublishedMapReader` now exports the current `PUBLISHED` graph for one site; an adapter in `navigation` translates it to `PublishedSpatialGraph`. That implemented core contains `siteId`, `mapId`, `modelVersionId`, floor-plan bounds and scales, nodes, and typed connections with physical distances, persisted weights, and direction. It returns no draft or archived version and has no public HTTP endpoint. PostgreSQL now enforces one indoor map per site and one owning site per floor ID ([ADR 002](decisions/002-site-map-and-floor-ownership.md)).
+`planning` owns the editable spatial model. Its `PlanningPublishedMapFacade` in `interfaces/acl` exports the current `PUBLISHED` graph for one site; the implementation in `application/acl` reads through a Planning repository port. An adapter in `navigation` translates that public contract to `PublishedSpatialGraph`. The implemented core contains `siteId`, `mapId`, `modelVersionId`, floor-plan bounds and scales, nodes, and typed connections with physical distances, persisted weights, and direction. It returns no draft or archived version and has no public HTTP endpoint. PostgreSQL enforces one indoor map per site and one owning site per floor ID ([ADR 002](decisions/002-site-map-and-floor-ownership.md)).
 
 The full exchange contract required before real route calculation must additionally contain:
 

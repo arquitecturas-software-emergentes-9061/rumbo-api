@@ -11,4 +11,10 @@ public interface IndoorMapStore {
 
   /** Loads a draft version and all of its plans, nodes, and connections. */
   Optional<IndoorMap> findDraft(UUID mapId, UUID modelVersionId);
+
+  /** Locks and loads the draft so validation and publication see one coherent graph. */
+  Optional<IndoorMap> findDraftForPublication(UUID mapId, UUID modelVersionId);
+
+  /** Changes this validated version to published and archives the previous one atomically. */
+  void publish(IndoorMap map);
 }

@@ -25,9 +25,36 @@ public class ScaleReferenceService {
     public FloorConflict() { super("Plan version already belongs to a different floor"); }
   }
 
+  private record Bounds(UUID modelVersionId, double width, double height) {}
+
   @Transactional
   public ScaleReference upsert(UUID userId, ScaleReference reference) {
     requireSiteOwner(userId, reference.siteId());
+    Integer previousFloor = jdbc.queryForObject("""
+      SELECT count(*) FROM planning_scale_reference_measurements
+      WHERE site_id = ? AND plan_version_id = ? AND floor_id <> ?
+      """, Integer.class, reference.siteId(), reference.planVersionId(), reference.floorId());
+    if (previousFloor != null && previousFloor > 0) throw new FloorConflict();
+
+    // The source of truth is the draft Planning map, not the measurement ledger.
+    // Hold a row lock to avoid editing an archived or published version.
+    List<Bounds> candidates = jdbc.query("""
+      SELECT p.model_version_id, p.width_units, p.height_units
+      FROM plan_coordinate_spaces p
+      JOIN map_versions v ON v.id = p.model_version_id
+      JOIN indoor_maps m ON m.id = v.map_id
+      WHERE m.site_id = ? AND p.floor_id = ? AND p.plan_version_id = ?
+        AND v.status = 'DRAFT'
+      FOR UPDATE OF p
+      """, (rs, i) -> new Bounds(rs.getObject("model_version_id", UUID.class),
+        rs.getDouble("width_units"), rs.getDouble("height_units")),
+      reference.siteId(), reference.floorId(), reference.planVersionId());
+    if (candidates.size() != 1) throw new NotFound();
+    Bounds bounds = candidates.getFirst();
+    if (reference.startX() > bounds.width() || reference.endX() > bounds.width()
+        || reference.startY() > bounds.height() || reference.endY() > bounds.height()) {
+      throw new IllegalArgumentException("Calibration points are outside the referenced plan");
+    }
     String sql = """
       INSERT INTO planning_scale_reference_measurements
         (site_id, floor_id, plan_version_id, physical_unit, measured_distance,
@@ -50,6 +77,12 @@ public class ScaleReferenceService {
       reference.startX(), reference.startY(), reference.endX(), reference.endY(),
       reference.metersPerUnit(), java.sql.Timestamp.from(Instant.now(clock)));
     if (saved.isEmpty()) throw new FloorConflict();
+    int changed = jdbc.update("""
+      UPDATE plan_coordinate_spaces SET meters_per_unit = ?
+      WHERE plan_version_id = ? AND model_version_id = ? AND floor_id = ?
+      """, reference.metersPerUnit(), reference.planVersionId(),
+      bounds.modelVersionId(), reference.floorId());
+    if (changed != 1) throw new NotFound();
     return saved.getFirst();
   }
 

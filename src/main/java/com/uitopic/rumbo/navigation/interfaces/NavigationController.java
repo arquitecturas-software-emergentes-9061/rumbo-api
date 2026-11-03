@@ -12,10 +12,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
 @RestController
 @Tag(name = "Navigation (provisional)", description = "Demo route and destination endpoints. Published Planning routes are not yet exposed.")
+@Profile("demo & !postgres")
 @RequestMapping("/api/v1/navigations")
 public final class NavigationController {
   private final GetDestinationDirectoryQueryHandler directory;

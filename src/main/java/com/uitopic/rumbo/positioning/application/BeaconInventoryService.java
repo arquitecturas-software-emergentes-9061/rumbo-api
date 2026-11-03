@@ -36,6 +36,9 @@ public class BeaconInventoryService {
   public static final class DuplicateIdentifier extends RuntimeException {
     public DuplicateIdentifier() { super("The beacon identifier is already registered in this site"); }
   }
+  public static final class InvalidSpatialAnchor extends RuntimeException {
+    public InvalidSpatialAnchor() { super("Beacon location does not belong to a registered floor-plan version"); }
+  }
 
   @Transactional
   public Site createSite(UUID ownerUserId, String rawName) {
@@ -59,6 +62,19 @@ public class BeaconInventoryService {
                          String rawIdentifier, double x, double y) {
     assertOwner(ownerUserId, siteId);
     Beacon beacon = new Beacon(UUID.randomUUID(), siteId, floorId, rawIdentifier, x, y, true);
+    // Enforce a spatial point in an existing plan of the same site, not an arbitrary UUID.
+    // A beacon can be mounted anywhere inside a valid plan; matching a navigation node
+    // would incorrectly prohibit placements away from the route graph.
+    Integer knownPoint = jdbc.queryForObject("""
+      SELECT count(*) FROM plan_coordinate_spaces p
+      JOIN map_versions v ON v.id = p.model_version_id
+      JOIN indoor_maps m ON m.id = v.map_id
+      WHERE m.site_id = ? AND p.floor_id = ?
+        AND v.status IN ('DRAFT','PUBLISHED')
+        AND ? BETWEEN 0 AND p.width_units
+        AND ? BETWEEN 0 AND p.height_units
+      """, Integer.class, siteId, floorId, x, y);
+    if (knownPoint == null || knownPoint < 1) throw new InvalidSpatialAnchor();
     try {
       jdbc.update("""
           INSERT INTO positioning_beacons

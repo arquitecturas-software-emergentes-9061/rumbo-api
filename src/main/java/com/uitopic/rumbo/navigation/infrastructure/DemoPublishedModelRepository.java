@@ -1,11 +1,11 @@
 package com.uitopic.rumbo.navigation.infrastructure;
 import com.uitopic.rumbo.navigation.domain.*;
 import org.springframework.context.annotation.Profile;
-import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Component;
 import java.util.*;
 /** Explicit development fixture; NEVER used as an alternative to real clinic data. */
-@Repository
-@Profile("demo")
+@Component
+@Profile("demo & !postgres")
 public final class DemoPublishedModelRepository implements NavigableModelRepository {
   public static final UUID SITE=UUID.fromString("00000000-0000-4000-8000-000000000001");
   public static final UUID FLOOR=UUID.fromString("00000000-0000-4000-8000-000000000002");

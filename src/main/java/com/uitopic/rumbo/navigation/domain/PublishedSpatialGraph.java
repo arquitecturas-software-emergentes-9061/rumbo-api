@@ -27,7 +27,7 @@ public record PublishedSpatialGraph(UUID siteId, UUID mapId, UUID modelVersionId
   /** Persisted connection with separate distance and cost. */
   public record Link(UUID id, UUID sourceNodeId, UUID targetNodeId,
                      LinkKind kind, double distanceMeters, double weight,
-                     boolean bidirectional) {}
+                     double verticalPenalty, boolean bidirectional) {}
 
   /** Semantic role used by Navigation without importing Planning entities. */
   public enum NodeRole { INTERSECTION, ACCESS, DESTINATION, VERTICAL_LINK, REFERENCE }

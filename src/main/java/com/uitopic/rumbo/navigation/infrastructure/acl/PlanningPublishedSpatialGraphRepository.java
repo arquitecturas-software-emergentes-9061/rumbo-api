@@ -34,6 +34,7 @@ public class PlanningPublishedSpatialGraphRepository implements PublishedSpatial
         source.connections().stream().map(link -> new PublishedSpatialGraph.Link(link.id(),
             link.sourceNodeId(), link.targetNodeId(),
             PublishedSpatialGraph.LinkKind.valueOf(link.kind()),
-            link.distanceMeters(), link.weight(), link.bidirectional())).toList());
+            link.distanceMeters(), link.weight(), link.verticalPenalty(),
+            link.bidirectional())).toList());
   }
 }

@@ -45,9 +45,25 @@ class MapGraphModelTest {
         ConnectionType.CORRIDOR, 5, 8, true);
     assertEquals(5, connection.distanceMeters());
     assertEquals(8, connection.weight());
+    assertEquals(0, connection.verticalPenalty());
     assertTrue(connection.bidirectional());
     assertEquals(connection, new MapConnection(connectionId, modelVersionId, from, to,
         ConnectionType.CORRIDOR, 5, 9, true));
+  }
+
+  @Test
+  void connectionKeepsVerticalPenaltySeparateAndRejectsInvalidCost() {
+    UUID from = UUID.randomUUID(), to = UUID.randomUUID();
+    var elevator = new MapConnection(UUID.randomUUID(), modelVersionId, from, to,
+        ConnectionType.ELEVATOR, 5, 2, 3, true);
+    assertEquals(5, elevator.distanceMeters());
+    assertEquals(2, elevator.weight());
+    assertEquals(3, elevator.verticalPenalty());
+    assertThrows(IllegalArgumentException.class, () -> new MapConnection(UUID.randomUUID(),
+        modelVersionId, from, to, ConnectionType.ELEVATOR, 5, 2, -1, true));
+    assertThrows(IllegalArgumentException.class, () -> new MapConnection(UUID.randomUUID(),
+        modelVersionId, from, to, ConnectionType.ELEVATOR, 5, 2,
+        Double.POSITIVE_INFINITY, true));
   }
 
   @Test

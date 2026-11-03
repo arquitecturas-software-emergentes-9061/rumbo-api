@@ -6,6 +6,7 @@ import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
 import com.uitopic.rumbo.planning.domain.model.entities.MapNode;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
@@ -61,6 +62,9 @@ class IndoorMapRepositoryImplIntegrationTest {
     map.addNode(access);
     map.addNode(destination);
     map.addConnection(connection);
+    UUID directoryEntryId = UUID.randomUUID();
+    map.addDestination(directoryEntryId, destination.id(), DirectoryEntryType.DOCTOR,
+        "Dra. Núñez", "Cardiología");
 
     store.saveDraft(map);
     entityManager.clear();
@@ -79,6 +83,9 @@ class IndoorMapRepositoryImplIntegrationTest {
     assertEquals(connection.targetNodeId(), reloadedConnection.targetNodeId());
     assertEquals(7.1, reloadedConnection.distanceMeters());
     assertEquals(9.5, reloadedConnection.weight());
+    assertEquals(directoryEntryId, loaded.destinations().getFirst().id());
+    assertEquals(destination.id(), loaded.destinations().getFirst().nodeId());
+    assertEquals("Cardiología", loaded.destinations().getFirst().specialty());
     assertTrue(loaded.validateForPublication().isValid());
     assertTrue(store.findDraft(map.id(), UUID.randomUUID()).isEmpty());
   }

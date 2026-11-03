@@ -13,6 +13,7 @@ import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
 import com.uitopic.rumbo.planning.domain.model.entities.MapNode;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
@@ -71,6 +72,7 @@ class IndoorMapGraphControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("DRAFT"))
         .andExpect(jsonPath("$.plans[0].metersPerUnit").value(0.25))
+        .andExpect(jsonPath("$.connections[0].verticalPenalty").value(0.0))
         .andExpect(jsonPath("$.connections[0].id").value(connectionId.toString()));
 
     mvc.perform(get(url(map))).andExpect(status().isOk())
@@ -84,6 +86,45 @@ class IndoorMapGraphControllerIntegrationTest {
         .findFirst().orElseThrow().position().x());
     assertEquals(20.0, reloaded.nodes().stream().filter(node -> node.id().equals(destinationId))
         .findFirst().orElseThrow().position().x());
+  }
+
+  @Test
+  void replacesAndReloadsDirectoryEntriesWithTheDraftGraph() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    UUID entryId = UUID.randomUUID();
+    UUID destinationNodeId = map.nodes().stream()
+        .filter(node -> node.type() == NodeType.DESTINATION).findFirst().orElseThrow().id();
+    GraphUpdateResource update = new GraphUpdateResource(nodeInputs(map), connectionInputs(map),
+        List.of(new GraphUpdateResource.DestinationInputResource(entryId, destinationNodeId,
+            DirectoryEntryType.DOCTOR, "Dra. Núñez", "Cardiología")));
+
+    mvc.perform(put(url(map)).contentType("application/json")
+        .content(json.writeValueAsString(update)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.destinations[0].id").value(entryId.toString()))
+        .andExpect(jsonPath("$.destinations[0].type").value("DOCTOR"));
+    mvc.perform(get(url(map))).andExpect(status().isOk())
+        .andExpect(jsonPath("$.destinations[0].nodeId").value(destinationNodeId.toString()));
+  }
+
+  @Test
+  void rejectsDirectoryEntryWithoutADestinationNodeAndKeepsDraft() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    UUID entryId = UUID.randomUUID();
+    GraphUpdateResource update = new GraphUpdateResource(nodeInputs(map), connectionInputs(map),
+        List.of(new GraphUpdateResource.DestinationInputResource(entryId, UUID.randomUUID(),
+            DirectoryEntryType.SERVICE, "Farmacia", null)));
+
+    mvc.perform(put(url(map)).contentType("application/json")
+        .content(json.writeValueAsString(update)))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(jsonPath("$.issues[0].elementType").value("DESTINATION"))
+        .andExpect(jsonPath("$.issues[0].code").value("MISSING_DESTINATION_NODE"))
+        .andExpect(jsonPath("$.issues[0].elementId").value(entryId.toString()));
+    assertEquals(0, store.findDraft(map.id(), map.modelVersionId()).orElseThrow()
+        .destinations().size());
   }
 
   @Test
@@ -105,6 +146,26 @@ class IndoorMapGraphControllerIntegrationTest {
         .andExpect(jsonPath("$.issues[0].elementId").value(connectionId.toString()));
     assertEquals(map.connections().getFirst().id(),
         store.findDraft(map.id(), map.modelVersionId()).orElseThrow().connections().getFirst().id());
+  }
+
+  @Test
+  void rejectsPenaltyOnSameFloorAndKeepsTheStoredGraph() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    var connection = map.connections().getFirst();
+    GraphUpdateResource update = new GraphUpdateResource(nodeInputs(map), List.of(
+        new GraphUpdateResource.ConnectionInputResource(connection.id(),
+            connection.sourceNodeId(), connection.targetNodeId(), connection.type(),
+            connection.distanceMeters(), connection.weight(), 3.0,
+            connection.bidirectional())));
+
+    mvc.perform(put(url(map)).contentType("application/json")
+        .content(json.writeValueAsString(update)))
+        .andExpect(status().isUnprocessableEntity())
+        .andExpect(jsonPath("$.issues[0].code").value("INVALID_CONNECTION_DATA"))
+        .andExpect(jsonPath("$.issues[0].elementId").value(connection.id().toString()));
+    assertEquals(0, store.findDraft(map.id(), map.modelVersionId()).orElseThrow()
+        .connections().getFirst().verticalPenalty());
   }
 
   @Test

@@ -39,6 +39,67 @@ class IndoorMapTest {
   }
 
   @Test
+  void acceptsDirectoryEntryOnlyAtADestinationNode() {
+    MapNode access = node(NodeType.ACCESS, 1);
+    MapNode destination = node(NodeType.DESTINATION, 2);
+    map.addNode(access);
+    map.addNode(destination);
+    map.addConnection(connection(access.id(), destination.id(), true));
+    UUID entryId = UUID.randomUUID();
+
+    map.addDestination(entryId, destination.id(), DirectoryEntryType.DOCTOR,
+        "Dra. Núñez", "Cardiología");
+
+    assertEquals(1, map.destinations().size());
+    assertEquals("Dra. Núñez", map.destinations().getFirst().name());
+    assertTrue(map.validateForPublication().isValid());
+    map.publish();
+    assertThrows(InvalidMapVersionStateException.class,
+        () -> map.addDestination(UUID.randomUUID(), destination.id(),
+            DirectoryEntryType.SERVICE, "Farmacia", null));
+  }
+
+  @Test
+  void rejectsDirectoryEntryWithoutCurrentDestinationNode() {
+    MapNode access = node(NodeType.ACCESS, 1);
+    map.addNode(access);
+    UUID missingEntryId = UUID.randomUUID();
+    InvalidMapGraphException missing = assertThrows(InvalidMapGraphException.class,
+        () -> map.addDestination(missingEntryId, UUID.randomUUID(),
+            DirectoryEntryType.SERVICE, "Farmacia", null));
+    assertEquals(GraphIssueCode.MISSING_DESTINATION_NODE, missing.issue().code());
+    assertEquals(missingEntryId, missing.issue().elementId());
+
+    UUID wrongTypeEntryId = UUID.randomUUID();
+    InvalidMapGraphException wrongType = assertThrows(InvalidMapGraphException.class,
+        () -> map.addDestination(wrongTypeEntryId, access.id(),
+            DirectoryEntryType.SERVICE, "Farmacia", null));
+    assertEquals(GraphIssueCode.INVALID_DESTINATION_NODE_TYPE, wrongType.issue().code());
+    assertTrue(map.destinations().isEmpty());
+  }
+
+  @Test
+  void rejectsDuplicateOrForeignVersionDirectoryEntries() {
+    MapNode destination = node(NodeType.DESTINATION, 2);
+    map.addNode(destination);
+    UUID entryId = UUID.randomUUID();
+    map.addDestination(entryId, destination.id(), DirectoryEntryType.SERVICE,
+        "Farmacia", null);
+    InvalidMapGraphException duplicate = assertThrows(InvalidMapGraphException.class,
+        () -> map.addDestination(entryId, destination.id(), DirectoryEntryType.SERVICE,
+            "Otra farmacia", null));
+    assertEquals(GraphIssueCode.DUPLICATE_DESTINATION_ID, duplicate.issue().code());
+
+    var foreign = new com.uitopic.rumbo.planning.domain.model.entities.MapDestination(
+        UUID.randomUUID(), UUID.randomUUID(), destination.id(),
+        DirectoryEntryType.SERVICE, "Laboratorio", null);
+    InvalidMapGraphException wrongVersion = assertThrows(InvalidMapGraphException.class,
+        () -> map.addDestination(foreign));
+    assertEquals(GraphIssueCode.WRONG_MODEL_VERSION, wrongVersion.issue().code());
+    assertEquals(1, map.destinations().size());
+  }
+
+  @Test
   void rejectsMissingEndpointWithoutChangingDraft() {
     MapNode access = node(NodeType.ACCESS, 1);
     map.addNode(access);
@@ -272,9 +333,27 @@ class IndoorMapTest {
     assertEquals(MapVersionStatus.DRAFT, map.status());
 
     map.addConnection(new MapConnection(UUID.randomUUID(), versionId, access.id(),
-        destination.id(), ConnectionType.ELEVATOR, 4, 6, true));
+        destination.id(), ConnectionType.ELEVATOR, 4, 6, 3, true));
+    assertEquals(3, map.connections().getFirst().verticalPenalty());
     map.publish();
     assertEquals(MapVersionStatus.PUBLISHED, map.status());
+  }
+
+  @Test
+  void rejectsVerticalPenaltyOnSameFloorWithoutChangingDraft() {
+    MapNode access = node(NodeType.ACCESS, 1);
+    MapNode destination = node(NodeType.DESTINATION, 2);
+    map.addNode(access);
+    map.addNode(destination);
+    UUID connectionId = UUID.randomUUID();
+
+    InvalidMapGraphException error = assertThrows(InvalidMapGraphException.class,
+        () -> map.addConnection(connectionId, access.id(), destination.id(),
+            ConnectionType.STAIRS, 2, 2, 3, true));
+
+    assertEquals(GraphIssueCode.INVALID_CONNECTION_DATA, error.issue().code());
+    assertEquals(connectionId, error.issue().elementId());
+    assertTrue(map.connections().isEmpty());
   }
 
   private MapNode node(NodeType type, double x) {

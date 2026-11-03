@@ -28,6 +28,9 @@ public class MapConnectionJpaEntity {
   @Column(name = "weight", nullable = false)
   private double weight;
 
+  @Column(name = "vertical_penalty", nullable = false)
+  private double verticalPenalty;
+
   @Column(name = "bidirectional", nullable = false)
   private boolean bidirectional;
 
@@ -35,13 +38,14 @@ public class MapConnectionJpaEntity {
 
   public MapConnectionJpaEntity(VersionedElementId id, UUID sourceNodeId, UUID targetNodeId,
                                 String connectionType, double distanceMeters, double weight,
-                                boolean bidirectional) {
+                                double verticalPenalty, boolean bidirectional) {
     this.id = id;
     this.sourceNodeId = sourceNodeId;
     this.targetNodeId = targetNodeId;
     this.connectionType = connectionType;
     this.distanceMeters = distanceMeters;
     this.weight = weight;
+    this.verticalPenalty = verticalPenalty;
     this.bidirectional = bidirectional;
   }
 
@@ -51,5 +55,6 @@ public class MapConnectionJpaEntity {
   public String connectionType() { return connectionType; }
   public double distanceMeters() { return distanceMeters; }
   public double weight() { return weight; }
+  public double verticalPenalty() { return verticalPenalty; }
   public boolean bidirectional() { return bidirectional; }
 }

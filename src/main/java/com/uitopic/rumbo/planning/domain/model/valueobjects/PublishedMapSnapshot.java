@@ -7,7 +7,7 @@ import java.util.UUID;
 /** Immutable, versioned read model of a published Planning map. */
 public record PublishedMapSnapshot(UUID siteId, UUID mapId, UUID modelVersionId,
                                    List<Plan> plans, List<Node> nodes,
-                                   List<Connection> connections) {
+                                   List<Connection> connections, List<Destination> destinations) {
   public PublishedMapSnapshot {
     Objects.requireNonNull(siteId, "siteId is required");
     Objects.requireNonNull(mapId, "mapId is required");
@@ -15,6 +15,7 @@ public record PublishedMapSnapshot(UUID siteId, UUID mapId, UUID modelVersionId,
     plans = List.copyOf(plans);
     nodes = List.copyOf(nodes);
     connections = List.copyOf(connections);
+    destinations = List.copyOf(destinations);
   }
 
   /** Coordinate frame and confirmed physical scale of one floor-plan version. */
@@ -28,5 +29,10 @@ public record PublishedMapSnapshot(UUID siteId, UUID mapId, UUID modelVersionId,
   /** Persisted link with independent physical distance and routing weight. */
   public record Connection(UUID id, UUID sourceNodeId, UUID targetNodeId,
                            ConnectionType type, double distanceMeters,
-                           double weight, boolean bidirectional) {}
+                           double weight, double verticalPenalty,
+                           boolean bidirectional) {}
+
+  /** Medical entry attached to a node in this published version. */
+  public record Destination(UUID id, UUID modelVersionId, UUID nodeId, UUID floorId,
+                            DirectoryEntryType type, String name, String specialty) {}
 }

@@ -4,6 +4,7 @@ import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapVersionStateException;
 import com.uitopic.rumbo.planning.domain.exceptions.MapPublicationRejectedException;
 import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
+import com.uitopic.rumbo.planning.domain.model.entities.MapDestination;
 import com.uitopic.rumbo.planning.domain.model.entities.MapNode;
 import com.uitopic.rumbo.planning.domain.model.entities.MapVersion;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphIssue;
@@ -11,6 +12,7 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphIssueCode;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphElementType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphValidationResult;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapVersionStatus;
@@ -42,6 +44,7 @@ public final class IndoorMap {
   private final Map<UUID, MapScale> scales = new LinkedHashMap<>();
   private final Map<UUID, MapNode> nodes = new LinkedHashMap<>();
   private final Map<UUID, MapConnection> connections = new LinkedHashMap<>();
+  private final Map<UUID, MapDestination> destinations = new LinkedHashMap<>();
 
   /** Starts an empty draft graph for one site and model version. */
   public IndoorMap(UUID id, UUID siteId, UUID modelVersionId) {
@@ -66,6 +69,47 @@ public final class IndoorMap {
 
   /** Read-only snapshot of connections in this draft. */
   public List<MapConnection> connections() { return List.copyOf(connections.values()); }
+
+  /** Read-only snapshot of medical entries tied to this version's destination nodes. */
+  public List<MapDestination> destinations() { return List.copyOf(destinations.values()); }
+
+  /** Adds one medical entry only when its node is a destination in this version. */
+  public void addDestination(MapDestination destination) {
+    requireDraft();
+    Objects.requireNonNull(destination, "destination is required");
+    if (!modelVersionId().equals(destination.modelVersionId())) {
+      reject(GraphIssueCode.WRONG_MODEL_VERSION, GraphElementType.DESTINATION,
+          destination.id(), "Destination belongs to another model version");
+    }
+    if (destinations.containsKey(destination.id())) {
+      reject(GraphIssueCode.DUPLICATE_DESTINATION_ID, GraphElementType.DESTINATION,
+          destination.id(), "Destination ID is already present");
+    }
+    MapNode node = nodes.get(destination.nodeId());
+    if (node == null) {
+      reject(GraphIssueCode.MISSING_DESTINATION_NODE, GraphElementType.DESTINATION,
+          destination.id(), "Destination node is missing");
+    }
+    if (node.type() != NodeType.DESTINATION) {
+      reject(GraphIssueCode.INVALID_DESTINATION_NODE_TYPE, GraphElementType.DESTINATION,
+          destination.id(), "Entry must refer to a destination node");
+    }
+    destinations.put(destination.id(), destination);
+  }
+
+  /** Adds an editor entry and reports invalid metadata at its identifier. */
+  public void addDestination(UUID id, UUID nodeId, DirectoryEntryType type,
+                             String name, String specialty) {
+    MapDestination destination;
+    try {
+      destination = new MapDestination(id, modelVersionId(), nodeId, type, name, specialty);
+    } catch (IllegalArgumentException | NullPointerException error) {
+      reject(GraphIssueCode.INVALID_DESTINATION_DATA, GraphElementType.DESTINATION,
+          id, "Destination identity, type, or label is invalid");
+      return;
+    }
+    addDestination(destination);
+  }
 
   /** Registers the bounded coordinate system of one floor-plan version. */
   public void addPlan(PlanCoordinateSpace space) {
@@ -159,12 +203,17 @@ public final class IndoorMap {
     }
     MapNode source = nodes.get(connection.sourceNodeId());
     MapNode target = nodes.get(connection.targetNodeId());
-    if (!source.position().floorId().equals(target.position().floorId())
+    boolean crossesFloor = !source.position().floorId().equals(target.position().floorId());
+    if (crossesFloor
         && connection.type() != ConnectionType.STAIRS
         && connection.type() != ConnectionType.RAMP
         && connection.type() != ConnectionType.ELEVATOR) {
       reject(GraphIssueCode.INVALID_VERTICAL_CONNECTION, GraphElementType.CONNECTION,
           connection.id(), "Cross-floor connection must be stairs, ramp, or elevator");
+    }
+    if (!crossesFloor && connection.verticalPenalty() != 0) {
+      reject(GraphIssueCode.INVALID_CONNECTION_DATA, GraphElementType.CONNECTION,
+          connection.id(), "Vertical penalty requires a cross-floor connection");
     }
     if (connections.values().stream().anyMatch(existing -> overlaps(existing, connection))) {
       reject(GraphIssueCode.DUPLICATE_CONNECTION, GraphElementType.CONNECTION, connection.id(),
@@ -176,18 +225,26 @@ public final class IndoorMap {
   /** Adds a weighted editor connection, reporting invalid metrics at its ID. */
   public void addConnection(UUID connectionId, UUID sourceNodeId, UUID targetNodeId,
                             ConnectionType type, double distanceMeters, double weight,
-                            boolean bidirectional) {
+                            double verticalPenalty, boolean bidirectional) {
     requireDraft();
     MapConnection connection;
     try {
       connection = new MapConnection(connectionId, modelVersionId(), sourceNodeId,
-          targetNodeId, type, distanceMeters, weight, bidirectional);
+          targetNodeId, type, distanceMeters, weight, verticalPenalty, bidirectional);
     } catch (IllegalArgumentException | NullPointerException error) {
       reject(GraphIssueCode.INVALID_CONNECTION_DATA, GraphElementType.CONNECTION, connectionId,
           "Connection endpoints, type, distance, or weight are invalid");
       return;
     }
     addConnection(connection);
+  }
+
+  /** Adds a legacy editor connection with no separate vertical penalty. */
+  public void addConnection(UUID connectionId, UUID sourceNodeId, UUID targetNodeId,
+                            ConnectionType type, double distanceMeters, double weight,
+                            boolean bidirectional) {
+    addConnection(connectionId, sourceNodeId, targetNodeId, type,
+        distanceMeters, weight, 0, bidirectional);
   }
 
   /** Validates the current draft against the rules required before publication. */

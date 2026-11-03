@@ -5,9 +5,11 @@ import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapVersionStateExcept
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
+import com.uitopic.rumbo.planning.domain.model.entities.MapDestination;
 import com.uitopic.rumbo.planning.domain.model.entities.MapNode;
 import com.uitopic.rumbo.planning.domain.model.entities.MapVersion;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphElementType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphIssue;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphIssueCode;
@@ -18,6 +20,7 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.SpatialCoordinate;
 import com.uitopic.rumbo.planning.infrastructure.persistence.jpa.model.IndoorMapJpaEntity;
 import com.uitopic.rumbo.planning.infrastructure.persistence.jpa.model.MapConnectionJpaEntity;
+import com.uitopic.rumbo.planning.infrastructure.persistence.jpa.model.MapDestinationJpaEntity;
 import com.uitopic.rumbo.planning.infrastructure.persistence.jpa.model.MapNodeJpaEntity;
 import com.uitopic.rumbo.planning.infrastructure.persistence.jpa.model.MapVersionJpaEntity;
 import com.uitopic.rumbo.planning.infrastructure.persistence.jpa.model.PlanCoordinateSpaceJpaEntity;
@@ -89,6 +92,8 @@ public class IndoorMapRepositoryImpl implements IndoorMapRepository {
     }
 
     UUID versionId = map.modelVersionId();
+    entityManager.createQuery("delete from MapDestinationJpaEntity d where d.id.modelVersionId = :versionId")
+        .setParameter("versionId", versionId).executeUpdate();
     entityManager.createQuery("delete from MapConnectionJpaEntity c where c.id.modelVersionId = :versionId")
         .setParameter("versionId", versionId).executeUpdate();
     entityManager.createQuery("delete from MapNodeJpaEntity n where n.id.modelVersionId = :versionId")
@@ -117,7 +122,15 @@ public class IndoorMapRepositoryImpl implements IndoorMapRepository {
       entityManager.persist(new MapConnectionJpaEntity(
           new VersionedElementId(connection.id(), versionId), connection.sourceNodeId(),
           connection.targetNodeId(), connection.type().name(), connection.distanceMeters(),
-          connection.weight(), connection.bidirectional()));
+          connection.weight(), connection.verticalPenalty(), connection.bidirectional()));
+    }
+    entityManager.flush();
+    for (MapDestination destination : map.destinations()) {
+      entityManager.persist(new MapDestinationJpaEntity(
+          new VersionedElementId(destination.id(), versionId), destination.nodeId(),
+          destination.type().name(), destination.name(), destination.specialty(),
+          DirectorySearchIndex.searchableText(destination.name(), destination.specialty(),
+              destination.type().name())));
     }
     entityManager.flush();
   }
@@ -231,12 +244,27 @@ public class IndoorMapRepositoryImpl implements IndoorMapRepository {
       try {
         map.addConnection(new MapConnection(row.id().elementId(), modelVersionId,
             row.sourceNodeId(), row.targetNodeId(), ConnectionType.valueOf(row.connectionType()),
-            row.distanceMeters(), row.weight(), row.bidirectional()));
+            row.distanceMeters(), row.weight(), row.verticalPenalty(), row.bidirectional()));
       } catch (InvalidMapGraphException error) {
         throw error;
       } catch (IllegalArgumentException error) {
         throw invalidStored(GraphIssueCode.INVALID_CONNECTION_DATA, GraphElementType.CONNECTION,
             row.id().elementId(), "Stored connection geometry, type, or metrics are invalid");
+      }
+    }
+    var destinationRows = entityManager.createQuery("select d from MapDestinationJpaEntity d "
+        + "where d.id.modelVersionId = :versionId order by d.id.elementId", MapDestinationJpaEntity.class)
+        .setParameter("versionId", modelVersionId).getResultList();
+    for (MapDestinationJpaEntity row : destinationRows) {
+      try {
+        map.addDestination(new MapDestination(row.id().elementId(), modelVersionId,
+            row.nodeId(), DirectoryEntryType.valueOf(row.entryType()),
+            row.name(), row.specialty()));
+      } catch (InvalidMapGraphException error) {
+        throw error;
+      } catch (IllegalArgumentException error) {
+        throw invalidStored(GraphIssueCode.INVALID_DESTINATION_DATA, GraphElementType.DESTINATION,
+            row.id().elementId(), "Stored destination metadata is invalid");
       }
     }
     return Optional.of(map);

@@ -45,7 +45,10 @@ public class IndoorMapCommandServiceImpl implements IndoorMapCommandService {
         node.planVersionId(), node.x(), node.y(), node.type()));
     command.connections().forEach(connection -> replacement.addConnection(connection.id(),
         connection.sourceNodeId(), connection.targetNodeId(), connection.type(),
-        connection.distanceMeters(), connection.weight(), connection.bidirectional()));
+        connection.distanceMeters(), connection.weight(), connection.verticalPenalty(),
+        connection.bidirectional()));
+    command.destinations().forEach(destination -> replacement.addDestination(destination.id(),
+        destination.nodeId(), destination.type(), destination.name(), destination.specialty()));
     repository.saveDraft(replacement);
     return replacement;
   }

@@ -28,9 +28,9 @@ import org.springframework.test.context.DynamicPropertySource;
 @DataJpaTest(properties = {"spring.jpa.hibernate.ddl-auto=validate", "spring.jpa.show-sql=false"})
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("postgres")
-@Import(JpaIndoorMapStore.class)
+@Import(IndoorMapRepositoryImpl.class)
 @EnabledIfEnvironmentVariable(named = "RUMBO_TEST_DB_URL", matches = ".+")
-class JpaIndoorMapStoreIntegrationTest {
+class IndoorMapRepositoryImplIntegrationTest {
   @DynamicPropertySource
   static void databaseProperties(DynamicPropertyRegistry properties) {
     properties.add("spring.datasource.url", () -> System.getenv("RUMBO_TEST_DB_URL"));
@@ -38,7 +38,7 @@ class JpaIndoorMapStoreIntegrationTest {
     properties.add("spring.datasource.password", () -> System.getenv("RUMBO_TEST_DB_PASSWORD"));
   }
 
-  @Autowired JpaIndoorMapStore store;
+  @Autowired IndoorMapRepositoryImpl store;
   @Autowired EntityManager entityManager;
   @Autowired JdbcTemplate jdbc;
 

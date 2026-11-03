@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.uitopic.rumbo.navigation.application.GetPublishedSpatialGraphQueryHandler;
 import com.uitopic.rumbo.navigation.domain.PublishedSpatialGraph;
+import com.uitopic.rumbo.navigation.domain.CalculatedRoute;
+import com.uitopic.rumbo.navigation.domain.services.PublishedRouteQueryService;
 import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
@@ -45,6 +47,7 @@ class PlanningPublishedSpatialGraphRepositoryIntegrationTest {
   @Autowired IndoorMapRepository store;
   @Autowired IndoorMapCommandService commands;
   @Autowired GetPublishedSpatialGraphQueryHandler navigation;
+  @Autowired PublishedRouteQueryService routes;
 
   @Test
   void readsOnlyCurrentPublishedVersionWithVerticalWeightAndScale() {
@@ -56,6 +59,8 @@ class PlanningPublishedSpatialGraphRepositoryIntegrationTest {
     store.saveDraft(first);
 
     assertTrue(navigation.handle(siteId).isEmpty());
+    assertTrue(routes.calculate(siteId, first.nodes().getFirst().id(),
+        first.nodes().getLast().id()).isEmpty());
     commands.handle(new PublishMapVersionCommand(siteId, mapId, first.modelVersionId()));
     PublishedSpatialGraph published = navigation.handle(siteId).orElseThrow();
     assertEquals(first.modelVersionId(), published.modelVersionId());
@@ -65,6 +70,12 @@ class PlanningPublishedSpatialGraphRepositoryIntegrationTest {
     assertEquals(2, published.nodes().size());
     assertEquals(PublishedSpatialGraph.LinkKind.ELEVATOR, published.links().getFirst().kind());
     assertEquals(7, published.links().getFirst().weight());
+    assertEquals(3, published.links().getFirst().verticalPenalty());
+    CalculatedRoute route = routes.calculate(siteId, first.nodes().getFirst().id(),
+        first.nodes().getLast().id()).orElseThrow();
+    assertEquals(10, route.totalCost());
+    assertEquals(5, route.totalDistanceMeters());
+    assertEquals(first.modelVersionId(), route.modelVersionId());
     assertFalse(navigation.handle(UUID.randomUUID()).isPresent());
 
     IndoorMap next = twoFloorDraft(siteId, mapId, UUID.randomUUID(), lowerFloor, upperFloor, 11);
@@ -74,6 +85,9 @@ class PlanningPublishedSpatialGraphRepositoryIntegrationTest {
     PublishedSpatialGraph current = navigation.handle(siteId).orElseThrow();
     assertEquals(next.modelVersionId(), current.modelVersionId());
     assertEquals(11, current.links().getFirst().weight());
+    assertEquals(3, current.links().getFirst().verticalPenalty());
+    assertEquals(14, routes.calculate(siteId, next.nodes().getFirst().id(),
+        next.nodes().getLast().id()).orElseThrow().totalCost());
   }
 
   @Test
@@ -118,7 +132,7 @@ class PlanningPublishedSpatialGraphRepositoryIntegrationTest {
     map.addNode(access);
     map.addNode(destination);
     map.addConnection(new MapConnection(UUID.randomUUID(), versionId, access.id(),
-        destination.id(), ConnectionType.ELEVATOR, 5, weight, true));
+        destination.id(), ConnectionType.ELEVATOR, 5, weight, 3, true));
     return map;
   }
 }

@@ -4,9 +4,11 @@ import com.uitopic.rumbo.navigation.domain.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.*;
 import java.util.*;
 @RestController
+@Profile("demo & !postgres")
 @RequestMapping("/api/v1/navigations")
 public final class NavigationController {
   private final GetDestinationDirectoryQueryHandler directory;

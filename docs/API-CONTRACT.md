@@ -26,9 +26,9 @@ A confirmed `MapScale` is tied to `floorId` and `planVersionId` and expresses `m
 
 `PUT /api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}/graph`
 
-Both operations address an **existing DRAFT** version; they do not create a map, version, floor plan, or scale. The `GET` response contains `siteId`, `mapId`, `modelVersionId`, `status`, `plans[]` with coordinate bounds and optional `metersPerUnit`, `nodes[]`, `connections[]`, and `destinations[]`. `PUT` replaces nodes, connections, and directory destinations atomically, preserving registered plans and confirmed scales. Each directory entry has `id`, `nodeId`, `type` (`DOCTOR`, `SPECIALTY`, or `SERVICE`), `name`, and optional `specialty`. Its node must exist in that version with type `DESTINATION`. Omitting `destinations` is equivalent to an empty list, so a full replacement without that field removes existing directory metadata. A connection may include `verticalPenalty`, a nonnegative routing cost added to `weight` when it crosses floors; omission means `0`, and a nonzero value on a same-floor connection is rejected. `accessibility` is optional (`UNKNOWN`, `ACCESSIBLE`, or `INACCESSIBLE`), defaults to `UNKNOWN`, and is returned by `GET`. An empty collection is allowed while editing; publication still requires a valid navigable graph. The endpoint requires the `postgres` profile and `RUMBO_PLANNING_EDITING_ENABLED=true`, and is disabled by default until site authorization exists.
+Both operations address an **existing DRAFT** version; they do not create a map, version, floor plan, or scale. The `GET` response contains `siteId`, `mapId`, `modelVersionId`, `status`, `plans[]` with coordinate bounds and optional `metersPerUnit`, `nodes[]`, `connections[]`, and `destinations[]`. `PUT` replaces nodes, connections, and directory destinations atomically, preserving registered plans and confirmed scales. The request must explicitly contain all three collections: `nodes`, `connections`, and `destinations`. An empty array intentionally clears that collection; an omitted collection is a `400` and cannot silently delete stored data. Each directory entry has `id`, `nodeId`, `type` (`DOCTOR`, `SPECIALTY`, or `SERVICE`), `name`, and optional `specialty`. Its node must exist in that version with type `DESTINATION`. A connection may include `verticalPenalty`, a nonnegative routing cost added to `weight` when it crosses floors; omission means `0`, and a nonzero value on a same-floor connection is rejected. `accessibility` is optional (`UNKNOWN`, `ACCESSIBLE`, or `INACCESSIBLE`), defaults to `UNKNOWN`, and is returned by `GET`. An empty collection is allowed while editing; publication still requires a valid navigable graph. The endpoint requires the `postgres` profile and `RUMBO_PLANNING_EDITING_ENABLED=true`, and is disabled by default until site authorization exists.
 
-Example `PUT` body (`verticalPenalty`, `accessibility`, `destinations`, and each destination's `specialty` are optional):
+Example `PUT` body (`verticalPenalty`, `accessibility`, and each destination's `specialty` are optional):
 
 ```json
 {
@@ -46,13 +46,17 @@ Example `PUT` body (`verticalPenalty`, `accessibility`, `destinations`, and each
 ```
 
 - `200 OK`: draft graph snapshot after a successful read or replacement.
-- `400 Bad Request`: malformed UUID, JSON, required field, or enum value.
+- `400 Bad Request`: malformed UUID, JSON, required collection or field, enum value, or `If-Match` syntax.
 - `404 Not Found`: site, map, and version do not identify an existing draft.
 - `409 Conflict`: a replacement targets a version no longer in `DRAFT` state.
+- `412 Precondition Failed`: the draft changed since the editor read it; response `code: "STALE_DRAFT_GRAPH"`. The editor must GET the latest graph and reconcile its changes before retrying.
 - `422 Unprocessable Entity`: invalid graph element; `code: "INVALID_MAP_GRAPH"` and `issues[]` locate the offending node, connection, or plan by `elementType` and `elementId`. The stored draft is unchanged.
+- `428 Precondition Required`: a `PUT` omitted `If-Match`; response `code: "PRECONDITION_REQUIRED"`.
 - Invalid directory entries also return `422` with `elementType: "DESTINATION"`; missing or non-destination nodes are rejected before saving.
 
-Concurrent replacements are serialized by locking the draft version. The API does not yet provide an edit revision or conditional request; clients must coordinate concurrent editor sessions to avoid a later valid replacement overwriting an earlier one.
+`GET` returns a strong `ETag` such as `"rev-0"`. `PUT` must send that exact value in `If-Match`; on success it returns the next `ETag`, for example `"rev-1"`. Replacements lock and check the persisted draft revision, then increment it in the same transaction. A stale editor cannot overwrite a newer save. The writable collections form one atomic replacement; `plans[]`, scales and version identity are server-managed metadata in the read representation.
+
+Regenerating a graph is a separate future US-09/US-10 proposal workflow. This `PUT` does not infer which new room corresponds to an existing destination; the client must include the approved destination entries. See [ADR 003](decisions/003-draft-graph-editing-and-regeneration.md).
 
 ## Map version publication — implemented with explicit local enablement
 

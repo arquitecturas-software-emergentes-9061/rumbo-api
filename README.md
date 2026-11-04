@@ -33,8 +33,10 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
   `IndoorMap` con validación de referencias, duplicados y conectividad. Flyway y el adaptador
   JPA guardan y recuperan borradores completos en PostgreSQL. La publicación transaccional
   y su endpoint `PATCH` están implementados con habilitación explícita. `GET` y `PUT` permiten
-  consultar y reemplazar nodos y conexiones de un borrador existente, también con habilitación
-  explícita. El núcleo espacial publicado ya se consulta desde `navigation` sin exponer
+  consultar y reemplazar nodos, conexiones y destinos de un borrador existente, también con
+  habilitación explícita. El `PUT` exige las tres colecciones y el `If-Match` devuelto como
+  `ETag` por el `GET`, para evitar borrados por omisión y sobrescrituras entre editores.
+  El núcleo espacial publicado ya se consulta desde `navigation` sin exponer
   borradores. El GET de rutas publicadas se activa por separado para pruebas controladas.
 - El directorio médico de `planning` guarda entradas de médicos, especialidades y servicios
   vinculadas a nodos destino de una versión. La búsqueda indexada de `navigation` solo devuelve
@@ -97,6 +99,8 @@ El código de esta rama todavía no es una release ni está fusionado a `develop
 ## Documentación y decisiones pendientes
 - [ADR 001](docs/decisions/001-architecture-and-contract.md): persistencia elegida,
   frontera `planning`/`navigation`, A* y ruta REST objetivo.
+- [ADR 003](docs/decisions/003-draft-graph-editing-and-regeneration.md): guardado
+  completo del borrador, `If-Match` y reconciliación pendiente con `US-09`.
 - [Contrato API](docs/API-CONTRACT.md): contratos implementados, habilitación y requisitos
   pendientes para modelos, destinos y rutas.
 - Pendientes: autorización por sede, detalle de publicación de planos y seguridad,

@@ -1,6 +1,7 @@
 package com.uitopic.rumbo.analytics.interfaces.rest;
 
 import com.uitopic.rumbo.analytics.domain.exceptions.InvalidDateRangeException;
+import com.uitopic.rumbo.analytics.domain.exceptions.MetricsUnavailableException;
 import com.uitopic.rumbo.shared.interfaces.rest.ProblemDetails;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -24,6 +25,11 @@ public class AnalyticsExceptionHandler {
   @ExceptionHandler(InvalidDateRangeException.class)
   ProblemDetail invalidDateRange(InvalidDateRangeException exception) {
     return ProblemDetails.of(HttpStatus.BAD_REQUEST, InvalidDateRangeException.CODE, exception.getMessage());
+  }
+
+  @ExceptionHandler(MetricsUnavailableException.class)
+  ProblemDetail metricsUnavailable(MetricsUnavailableException exception) {
+    return ProblemDetails.of(HttpStatus.SERVICE_UNAVAILABLE, MetricsUnavailableException.CODE, exception.getMessage());
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)

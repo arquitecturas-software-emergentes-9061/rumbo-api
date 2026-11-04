@@ -1,7 +1,7 @@
 package com.uitopic.rumbo.navigation.domain.services;
+
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.CalculatedRoute;
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.PublishedSpatialGraph;
-
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,12 +31,19 @@ public final class AStarRouteCalculationDomainService {
    */
   public Optional<CalculatedRoute> calculate(PublishedSpatialGraph graph,
                                              UUID fromNodeId, UUID toNodeId) {
+    return calculate(graph, fromNodeId, toNodeId, false);
+  }
+
+  /** Excludes links without confirmed accessibility when requested. */
+  public Optional<CalculatedRoute> calculate(PublishedSpatialGraph graph,
+                                             UUID fromNodeId, UUID toNodeId,
+                                             boolean accessibleOnly) {
     Objects.requireNonNull(graph, "graph is required");
     Objects.requireNonNull(fromNodeId, "fromNodeId is required");
     Objects.requireNonNull(toNodeId, "toNodeId is required");
     Map<UUID, PublishedSpatialGraph.Plan> plans = plansById(graph);
     Map<UUID, PublishedSpatialGraph.Node> nodes = nodesById(graph, plans);
-    Map<UUID, List<Traversal>> adjacency = adjacency(graph, nodes);
+    Map<UUID, List<Traversal>> adjacency = adjacency(graph, nodes, accessibleOnly);
     if (!nodes.containsKey(fromNodeId) || !nodes.containsKey(toNodeId)) {
       throw new IllegalArgumentException("Both route nodes must belong to the published model");
     }
@@ -115,7 +122,7 @@ public final class AStarRouteCalculationDomainService {
   }
 
   private Map<UUID, List<Traversal>> adjacency(PublishedSpatialGraph graph,
-      Map<UUID, PublishedSpatialGraph.Node> nodes) {
+      Map<UUID, PublishedSpatialGraph.Node> nodes, boolean accessibleOnly) {
     Map<UUID, List<Traversal>> adjacency = new HashMap<>();
     nodes.keySet().forEach(id -> adjacency.put(id, new ArrayList<>()));
     Set<UUID> linkIds = new HashSet<>();
@@ -126,7 +133,8 @@ public final class AStarRouteCalculationDomainService {
           || !Double.isFinite(link.distanceMeters()) || link.distanceMeters() <= 0
           || !Double.isFinite(link.weight()) || link.weight() <= 0
           || !Double.isFinite(link.verticalPenalty()) || link.verticalPenalty() < 0
-          || !Double.isFinite(link.weight() + link.verticalPenalty())) {
+          || !Double.isFinite(link.weight() + link.verticalPenalty())
+          || link.accessibility() == null) {
         throw new IllegalArgumentException("Published connection is invalid");
       }
       PublishedSpatialGraph.Node source = nodes.get(link.sourceNodeId());
@@ -142,6 +150,9 @@ public final class AStarRouteCalculationDomainService {
       }
       if (!crossesFloor && link.verticalPenalty() != 0) {
         throw new IllegalArgumentException("Same-floor connection has a vertical penalty");
+      }
+      if (accessibleOnly && link.accessibility() != PublishedSpatialGraph.Accessibility.ACCESSIBLE) {
+        continue;
       }
       adjacency.get(link.sourceNodeId()).add(new Traversal(link.sourceNodeId(),
           link.targetNodeId(), link));
@@ -196,7 +207,8 @@ public final class AStarRouteCalculationDomainService {
       if (traversal == null) throw new IllegalStateException("Route predecessor is missing");
       PublishedSpatialGraph.Link link = traversal.link();
       orderedLegs.add(new CalculatedRoute.Leg(link.id(), traversal.from(), traversal.to(),
-          link.kind(), link.distanceMeters(), link.weight(), link.verticalPenalty()));
+          link.kind(), link.distanceMeters(), link.weight(), link.verticalPenalty(),
+          link.accessibility()));
       totalDistance += link.distanceMeters();
       cursor = traversal.from();
       orderedNodes.add(nodes.get(cursor));

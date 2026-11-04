@@ -23,6 +23,11 @@ public class PlanningPublishedSpatialGraphRepository implements PublishedSpatial
     return planning.findCurrentBySite(siteId).map(this::translate);
   }
 
+  @Override
+  public boolean existsCurrentNodeOutsideSite(UUID nodeId, UUID siteId) {
+    return planning.existsCurrentNodeOutsideSite(nodeId, siteId);
+  }
+
   private PublishedSpatialGraph translate(PlanningPublishedMapFacade.PublishedMapData source) {
     return new PublishedSpatialGraph(source.siteId(), source.mapId(), source.modelVersionId(),
         source.plans().stream().map(plan -> new PublishedSpatialGraph.Plan(plan.floorId(),
@@ -35,6 +40,7 @@ public class PlanningPublishedSpatialGraphRepository implements PublishedSpatial
             link.sourceNodeId(), link.targetNodeId(),
             PublishedSpatialGraph.LinkKind.valueOf(link.kind()),
             link.distanceMeters(), link.weight(), link.verticalPenalty(),
+            PublishedSpatialGraph.Accessibility.valueOf(link.accessibility()),
             link.bidirectional())).toList());
   }
 }

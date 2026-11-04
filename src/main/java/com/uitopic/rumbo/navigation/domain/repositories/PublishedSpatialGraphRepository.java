@@ -9,4 +9,7 @@ import java.util.UUID;
 public interface PublishedSpatialGraphRepository {
   /** Never returns a draft or archived version. */
   Optional<PublishedSpatialGraph> findCurrentBySite(UUID siteId);
+
+  /** Checks only current published versions when an ID is absent from the requested site. */
+  boolean existsCurrentNodeOutsideSite(UUID nodeId, UUID siteId);
 }

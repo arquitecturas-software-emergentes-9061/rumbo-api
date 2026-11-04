@@ -1,6 +1,7 @@
 package com.uitopic.rumbo.planning.interfaces.rest;
 
 import com.uitopic.rumbo.planning.application.internal.exceptions.MapVersionNotFoundException;
+import com.uitopic.rumbo.planning.domain.exceptions.DraftGraphRevisionConflictException;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapVersionStateException;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
 import com.uitopic.rumbo.planning.domain.exceptions.MapPublicationRejectedException;
@@ -41,6 +42,20 @@ public class PlanningExceptionHandler {
   public ResponseEntity<PlanningErrorResource> conflict(InvalidMapVersionStateException error) {
     return ResponseEntity.status(HttpStatus.CONFLICT).body(new PlanningErrorResource(
         "MAP_VERSION_STATE_CONFLICT", error.getMessage(), List.of()));
+  }
+
+  @ExceptionHandler(DraftGraphRevisionConflictException.class)
+  public ResponseEntity<PlanningErrorResource> staleDraft(DraftGraphRevisionConflictException error) {
+    return ResponseEntity.status(HttpStatus.PRECONDITION_FAILED).body(new PlanningErrorResource(
+        "STALE_DRAFT_GRAPH", error.getMessage(), List.of()));
+  }
+
+  @ExceptionHandler(GraphEditPreconditionException.class)
+  public ResponseEntity<PlanningErrorResource> invalidPrecondition(GraphEditPreconditionException error) {
+    return ResponseEntity.status(error.missing() ? HttpStatus.PRECONDITION_REQUIRED
+        : HttpStatus.BAD_REQUEST).body(new PlanningErrorResource(
+            error.missing() ? "PRECONDITION_REQUIRED" : "INVALID_REQUEST",
+            error.getMessage(), List.of()));
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)

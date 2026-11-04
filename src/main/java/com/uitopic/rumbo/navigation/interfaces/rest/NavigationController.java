@@ -8,6 +8,11 @@ import com.uitopic.rumbo.navigation.interfaces.rest.resources.DestinationRespons
 import com.uitopic.rumbo.navigation.interfaces.rest.resources.RouteRequest;
 import com.uitopic.rumbo.navigation.interfaces.rest.resources.RouteResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -48,8 +53,30 @@ public final class NavigationController {
 
   /** Calculates a provisional route using the demo routing policy. */
   @Operation(summary = "Calculate a demonstration route")
+  @ApiResponses({
+      @ApiResponse(responseCode = "200", description = "Demonstration route found",
+          content = @Content(mediaType = "application/json",
+              schema = @Schema(implementation = RouteResponse.class),
+              examples = @ExampleObject(name = "demoRoute", value = """
+                  {"totalDistanceMeters":5.0,"nodes":[],"links":[]}
+                  """))),
+      @ApiResponse(responseCode = "400", description = "Invalid request"),
+      @ApiResponse(responseCode = "422", description = "No navigable demonstration route")
+  })
   @PostMapping("/route")
-  public ResponseEntity<RouteResponse> route(@Valid @RequestBody RouteRequest request) {
+  public ResponseEntity<RouteResponse> route(
+      @io.swagger.v3.oas.annotations.parameters.RequestBody(
+          content = @Content(mediaType = "application/json",
+              schema = @Schema(implementation = RouteRequest.class),
+              examples = @ExampleObject(name = "demoRouteRequest", value = """
+                  {"siteId":"00000000-0000-4000-8000-000000000001",
+                   "startFloorId":"00000000-0000-4000-8000-000000000002",
+                   "startNodeId":"00000000-0000-4000-8000-000000000003",
+                   "destinationFloorId":"00000000-0000-4000-8000-000000000002",
+                   "destinationNodeId":"00000000-0000-4000-8000-000000000004",
+                   "accessibleOnly":false}
+                  """)))
+      @Valid @RequestBody RouteRequest request) {
     return ResponseEntity.ok(RouteResponse.from(routing.calculate(new CalculateRouteQuery(
         request.siteId(), request.startFloorId(), request.startNodeId(),
         request.destinationFloorId(), request.destinationNodeId(), request.accessibleOnly()))));

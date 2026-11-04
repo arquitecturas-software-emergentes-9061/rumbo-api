@@ -1,11 +1,13 @@
 package com.uitopic.rumbo.planning.interfaces.rest;
 
+import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configuration.OpenApiConfiguration;
 import com.uitopic.rumbo.planning.domain.services.IndoorMapCommandService;
 import com.uitopic.rumbo.planning.domain.services.IndoorMapQueryService;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.interfaces.rest.resources.DraftGraphResource;
 import com.uitopic.rumbo.planning.interfaces.rest.resources.GraphUpdateResource;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -14,6 +16,7 @@ import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Controlled REST entry point for reading and replacing an existing draft graph. */
 @RestController
+@PreAuthorize("hasRole('CLINIC_ADMIN') and @siteOwnerGuard.isOwner(authentication, #siteId)")
+@SecurityRequirement(name = OpenApiConfiguration.BEARER_AUTH)
 @Tag(name = "Indoor map graph")
 @Profile("postgres")
 @ConditionalOnProperty(name = "rumbo.planning.editing.enabled", havingValue = "true")

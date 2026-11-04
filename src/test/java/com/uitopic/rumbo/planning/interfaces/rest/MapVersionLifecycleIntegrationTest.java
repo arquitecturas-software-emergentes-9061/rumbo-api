@@ -2,6 +2,8 @@ package com.uitopic.rumbo.planning.interfaces.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -11,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.uitopic.rumbo.shared.infrastructure.security.SiteOwnerGuard;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
@@ -25,6 +28,7 @@ import com.uitopic.rumbo.planning.interfaces.rest.resources.GraphUpdateResource;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -36,6 +40,8 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /** Exercises creation, editing, and publication of successive PostgreSQL map versions. */
 @SpringBootTest(properties = {"rumbo.planning.publication.enabled=true",
@@ -44,6 +50,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 @ActiveProfiles("postgres")
 @EnabledIfEnvironmentVariable(named = "RUMBO_TEST_DB_URL", matches = ".+")
+@WithMockUser(roles = "CLINIC_ADMIN")
 class MapVersionLifecycleIntegrationTest {
   @DynamicPropertySource
   static void databaseProperties(DynamicPropertyRegistry properties) {
@@ -57,6 +64,11 @@ class MapVersionLifecycleIntegrationTest {
   @Autowired IndoorMapRepository maps;
   @Autowired PublishedMapRepository published;
   @Autowired JdbcTemplate jdbc;
+  @MockitoBean SiteOwnerGuard siteOwnerGuard;
+
+  @BeforeEach void allowFixtureSites() {
+    when(siteOwnerGuard.isOwner(any(), any())).thenReturn(true);
+  }
 
   @Test
   void createsEditsAndPublishesSuccessorWithoutChangingCurrentVersionEarly() throws Exception {

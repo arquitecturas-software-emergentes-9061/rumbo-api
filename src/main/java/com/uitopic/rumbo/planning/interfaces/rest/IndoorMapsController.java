@@ -1,5 +1,6 @@
 package com.uitopic.rumbo.planning.interfaces.rest;
 
+import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configuration.OpenApiConfiguration;
 import com.uitopic.rumbo.planning.domain.model.commands.CreateDraftMapVersionCommand;
 import com.uitopic.rumbo.planning.domain.model.commands.PublishMapVersionCommand;
 import com.uitopic.rumbo.planning.domain.services.IndoorMapCommandService;
@@ -8,6 +9,7 @@ import com.uitopic.rumbo.planning.interfaces.rest.resources.DraftGraphResource;
 import com.uitopic.rumbo.planning.interfaces.rest.resources.MapVersionResource;
 import com.uitopic.rumbo.planning.interfaces.rest.resources.MapVersionStatusPatchResource;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,6 +18,7 @@ import java.net.URI;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,6 +29,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** REST entry point for publishing Planning map versions. */
 @RestController
+@PreAuthorize("hasRole('CLINIC_ADMIN') and @siteOwnerGuard.isOwner(authentication, #siteId)")
+@SecurityRequirement(name = OpenApiConfiguration.BEARER_AUTH)
 @Tag(name = "Indoor maps")
 @Profile("postgres")
 @ConditionalOnProperty(name = "rumbo.planning.publication.enabled", havingValue = "true")

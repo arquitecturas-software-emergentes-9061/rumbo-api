@@ -1,9 +1,11 @@
 package com.uitopic.rumbo.navigation.interfaces.rest;
 
+import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configuration.OpenApiConfiguration;
 import com.uitopic.rumbo.navigation.application.internal.exceptions.RouteNotFoundException;
 import com.uitopic.rumbo.navigation.domain.services.PublishedRouteQueryService;
 import com.uitopic.rumbo.navigation.interfaces.rest.resources.PublishedRouteResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
@@ -14,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,11 +26,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Controlled route API over the current published version of a site. */
 @RestController
+@PreAuthorize("hasRole('CLINIC_ADMIN') and @siteOwnerGuard.isOwner(authentication, #siteId)")
+@SecurityRequirement(name = OpenApiConfiguration.BEARER_AUTH)
 @Tag(name = "Published routes")
 @Profile("postgres")
 @ConditionalOnProperty(name = "rumbo.navigation.routes.enabled", havingValue = "true")
 @RequestMapping("/api/v1/sites/{siteId}/routes")
-public final class PublishedRoutesController {
+public class PublishedRoutesController {
   private final PublishedRouteQueryService routes;
 
   public PublishedRoutesController(PublishedRouteQueryService routes) {

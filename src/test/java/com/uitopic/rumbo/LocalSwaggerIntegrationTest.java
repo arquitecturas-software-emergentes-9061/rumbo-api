@@ -2,6 +2,8 @@ package com.uitopic.rumbo;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -9,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.uitopic.rumbo.shared.infrastructure.security.SiteOwnerGuard;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,11 +22,14 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-/** Verifies that local Swagger exposes PostgreSQL and isolated demo APIs together. */
+/** Verifies local Swagger and both published and isolated demo APIs together. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @EnabledIfEnvironmentVariable(named = "RUMBO_TEST_DB_URL", matches = ".+")
+@WithMockUser(roles = "CLINIC_ADMIN")
 class LocalSwaggerIntegrationTest {
   private static final String PUBLISHED_SITE = "10000000-0000-4000-8000-000000000001";
   private static final String DRAFT_SITE = "20000000-0000-4000-8000-000000000001";
@@ -37,9 +44,14 @@ class LocalSwaggerIntegrationTest {
 
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper json;
+  @MockitoBean SiteOwnerGuard siteOwnerGuard;
+
+  @BeforeEach void allowLocalFixtureSites() {
+    when(siteOwnerGuard.isOwner(any(), any())).thenReturn(true);
+  }
 
   @Test
-  void allEightOperationsAreDocumentedAndLocalExamplesRespond() throws Exception {
+  void planningAndNavigationOperationsAreDocumentedAndLocalExamplesRespond() throws Exception {
     JsonNode spec = json.readTree(mvc.perform(get("/v3/api-docs"))
         .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     assertEquals("Rumbo API", spec.path("info").path("title").asText());

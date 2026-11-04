@@ -2,6 +2,8 @@ package com.uitopic.rumbo.planning.interfaces.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -10,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.uitopic.rumbo.shared.infrastructure.security.SiteOwnerGuard;
 import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
@@ -28,6 +31,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -36,6 +40,9 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /** HTTP and PostgreSQL checks for reading and atomically replacing draft graphs. */
 @SpringBootTest(properties = {"rumbo.planning.editing.enabled=true",
@@ -43,6 +50,7 @@ import org.springframework.test.web.servlet.MockMvc;
 @AutoConfigureMockMvc
 @ActiveProfiles("postgres")
 @EnabledIfEnvironmentVariable(named = "RUMBO_TEST_DB_URL", matches = ".+")
+@WithMockUser(roles = "CLINIC_ADMIN")
 class IndoorMapGraphControllerIntegrationTest {
   @DynamicPropertySource
   static void databaseProperties(DynamicPropertyRegistry properties) {
@@ -54,6 +62,11 @@ class IndoorMapGraphControllerIntegrationTest {
   @Autowired MockMvc mvc;
   @Autowired IndoorMapRepository store;
   @Autowired ObjectMapper json;
+  @MockitoBean SiteOwnerGuard siteOwnerGuard;
+
+  @BeforeEach void allowFixtureSites() {
+    when(siteOwnerGuard.isOwner(any(), any())).thenReturn(true);
+  }
 
   @Test
   void readsAndReplacesGraphWithoutLosingPlanOrScale() throws Exception {
@@ -191,18 +204,29 @@ class IndoorMapGraphControllerIntegrationTest {
             access.planVersionId(), 6.0, access.y(), access.type()), destination),
         connectionInputs(map), List.of()));
     CountDownLatch start = new CountDownLatch(1);
+    var securityContext = SecurityContextHolder.getContext();
     try (var workers = Executors.newFixedThreadPool(2)) {
       var first = workers.submit(() -> {
-        start.await();
-        return mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"")
-            .contentType("application/json").content(firstBody))
-            .andReturn().getResponse().getStatus();
+        SecurityContextHolder.setContext(securityContext);
+        try {
+          start.await();
+          return mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"")
+              .contentType("application/json").content(firstBody))
+              .andReturn().getResponse().getStatus();
+        } finally {
+          SecurityContextHolder.clearContext();
+        }
       });
       var second = workers.submit(() -> {
-        start.await();
-        return mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"")
-            .contentType("application/json").content(secondBody))
-            .andReturn().getResponse().getStatus();
+        SecurityContextHolder.setContext(securityContext);
+        try {
+          start.await();
+          return mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"")
+              .contentType("application/json").content(secondBody))
+              .andReturn().getResponse().getStatus();
+        } finally {
+          SecurityContextHolder.clearContext();
+        }
       });
       start.countDown();
       List<Integer> statuses = List.of(first.get(10, TimeUnit.SECONDS),

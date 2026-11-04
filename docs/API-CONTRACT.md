@@ -3,10 +3,14 @@
 Status: implemented contracts are marked with their enablement conditions; remaining requirements are identified below. See [ADR 001](decisions/001-architecture-and-contract.md) for the domain and route decisions, [ADR 004](decisions/004-local-default-api-visibility.md) for the local startup policy, and [ADR 005](decisions/005-successor-draft-versions.md) for successor map versions.
 
 Normal local startup defaults to the `postgres,local` profiles, enables the four HTTP
-feature flags, and registers all eight operations in Swagger. The two provisional
+feature flags, and registers operations from Planning, Navigation, IAM, Positioning,
+and Analytics in Swagger. The two provisional
 operations are tagged **Demo navigation**. The server binds to loopback and seeds
 separate draft and published example sites after Flyway migration. PostgreSQL and
-private connection variables are required. See the README for startup commands and IDs.
+private connection variables, a JWT signing key, and Redis are required. The real
+Planning and Navigation operations require a `CLINIC_ADMIN` JWT and ownership of the
+requested site; the fixed local example maps currently have no IAM owner. See the
+README for startup commands and IDs.
 
 ## Published indoor model — spatial core and destinations implemented
 
@@ -16,7 +20,7 @@ The spatial core now also carries each connection's accessibility status: `UNKNO
 
 - Obstacles needed to validate traversable connections.
 
-Obstacles are **not yet persisted in the published spatial core**. A connection marked `ACCESSIBLE` records an explicit editor assertion, not independently validated obstacle clearance. Directory metadata does not establish that a route is accessible. The PostgreSQL navigation route endpoint is enabled for local loopback review; site authorization and obstacle validation are still required before exposing it to users. The existing `demo` route endpoint remains separate.
+Obstacles are **not yet persisted in the published spatial core**. A connection marked `ACCESSIBLE` records an explicit editor assertion, not independently validated obstacle clearance. Directory metadata does not establish that a route is accessible. The PostgreSQL navigation route endpoint has IAM owner authorization; obstacle validation and clinic membership remain pending. The existing `demo` route endpoint remains separate.
 
 ### Coordinate convention for Planning
 
@@ -24,7 +28,7 @@ Each floor-plan version defines an unscaled rectangular visual coordinate space 
 
 A confirmed `MapScale` is tied to `floorId` and `planVersionId` and expresses `metersPerUnit = realDistanceMeters / EuclideanDistanceInPlanUnits` between two distinct reference points of that version. Physical connection distance is expressed in meters; routing weight is a separate positive cost. A plan without a confirmed physical reference has no confirmed scale. `planning` stores and reloads these values in PostgreSQL and exports the published spatial core to `navigation` through a read-only contract.
 
-`navigation` reads never return drafts. Publishing a new version is atomic: a rejected draft leaves the previous published version available. Authorization of the consumer and site is required before serving real models; it is not implemented yet.
+`navigation` reads never return drafts. Publishing a new version is atomic: a rejected draft leaves the previous published version available. IAM currently authorizes a site through its owning account; membership-based authorization is not implemented yet.
 
 ## Successor map version — implemented for local review
 
@@ -49,7 +53,7 @@ published. A map can have only one draft at a time.
 
 The existing draft `GET`/`PUT` and publication `PATCH` complete the successor workflow.
 When the successor publishes, the previous published version becomes `ARCHIVED` in the
-same transaction. This endpoint is local-only until site authorization exists; it is
+same transaction. This endpoint requires an authenticated site-owning administrator; it is
 enabled with `postgres` and `rumbo.planning.publication.enabled=true`. It does not create
 an initial map or floor plan, and it does not reconcile generated rooms with destinations.
 
@@ -95,7 +99,7 @@ Regenerating a graph is a separate future US-09/US-10 proposal workflow. This `P
 
 `PATCH /api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}`
 
-Request media type: `application/merge-patch+json`; body: `{"status":"PUBLISHED"}`. All three path IDs are required UUIDs. The endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.planning.publication.enabled` can disable it. Do not expose it outside controlled local testing until site authorization is implemented.
+Request media type: `application/merge-patch+json`; body: `{"status":"PUBLISHED"}`. All three path IDs are required UUIDs. The endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.planning.publication.enabled` can disable it. A `CLINIC_ADMIN` JWT and site ownership are required.
 
 - `200 OK`: `siteId`, `mapId`, `modelVersionId`, `status: "PUBLISHED"`. The previous published version, if any, becomes `ARCHIVED` in the same transaction.
 - `400 Bad Request`: malformed ID or JSON, or a status other than `PUBLISHED`.
@@ -120,7 +124,7 @@ Publication currently requires a confirmed scale for every plan, at least one ac
 - `200 OK`: an array of `{id, siteId, modelVersionId, floorId, nodeId, type, name, specialty}`; an unmatched term returns `[]`.
 - `400 Bad Request`: missing or malformed `siteId`, or missing, blank, or overlong `searchTerm`; body `{code: "INVALID_REQUEST", message: "..."}`.
 
-This endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.navigation.directory.enabled` can disable it. Site authorization is still required before external exposure. This directory does not claim route accessibility or replace the separate `demo` destination endpoint. The Sprint Backlog's global `q`-only URL was scoped under the site resource because the current backend has no authenticated site context. The path identifies the site's directory collection; `searchTerm` filters its entries.
+This endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.navigation.directory.enabled` can disable it. A `CLINIC_ADMIN` JWT and site ownership are required. This directory does not claim route accessibility or replace the separate `demo` destination endpoint. The Sprint Backlog's global `q`-only URL was scoped under the site resource to make the site explicit. The path identifies the site's directory collection; `searchTerm` filters its entries.
 
 ## Published route calculation — implemented for local review
 
@@ -158,7 +162,7 @@ Example `200` response:
 }
 ```
 
-The endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.navigation.routes.enabled` can disable it. IAM site authorization and obstacle validation are required before external exposure. The Sprint Backlog shows a global `/api/v1/routes?from&to`; the team accepted the site-scoped path in ADR 001 because the current backend has no authenticated site context. The TS-13 latency test uses a published synthetic grid of 300 nodes and 565 links, 10 warm-ups and 30 timed MockMvc requests through PostgreSQL 16. In the local `clean verify` run of 2026-11-04, p95 was 16 ms and the maximum was 17 ms. MockMvc includes controller, application, JPA, database and serialization but omits network transit. This fixture and local measurement are not a guarantee for every clinic map or deployment. Authentication and site authorization responses will be specified with IAM before real data is exposed.
+The endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.navigation.routes.enabled` can disable it. A `CLINIC_ADMIN` JWT and site ownership are required (`401` without authentication, `403` without permission). Obstacle validation remains pending. The Sprint Backlog shows a global `/api/v1/routes?from&to`; the team accepted the site-scoped path in ADR 001. The TS-13 latency test uses a published synthetic grid of 300 nodes and 565 links, 10 warm-ups and 30 timed MockMvc requests through PostgreSQL 16. In the local `clean verify` run of 2026-11-04 before IAM integration, p95 was 16 ms and the maximum was 17 ms. That measurement is historical and does not establish latency after this merge. MockMvc omits network transit.
 
 ### Current provisional endpoint
 
@@ -166,7 +170,8 @@ The endpoint is enabled by default for loopback-only local review; the feature f
 
 ## Shared rules
 
-- HTTP error bodies always contain `code` and `message`. Planning graph validation
+- HTTP error bodies contain `code` and `message`; IAM, Positioning and Analytics also
+  return RFC 7807 `detail` with the same text. Planning graph validation
   additionally includes `issues[]` with element-specific details. Shared HTTP failures
   use `INVALID_REQUEST` (400), `RESOURCE_NOT_FOUND` (404), `METHOD_NOT_ALLOWED`
   (405), or `UNSUPPORTED_MEDIA_TYPE` (415); bounded contexts keep their own

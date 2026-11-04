@@ -14,7 +14,7 @@ Backend académico oficial **preparado localmente**, pendiente de publicarse en 
   en `infrastructure/demo`.
 - PostgreSQL es la persistencia principal elegida y ya guarda borradores y versiones
   publicadas de `planning`.
-  Redis y RabbitMQ se incorporarán cuando una tarea concreta los requiera; véase
+  Redis ya se usa para sesiones y caché de métricas; RabbitMQ sigue pendiente. Véase
   [ADR 001](docs/decisions/001-architecture-and-contract.md) y
   [ADR 002](docs/decisions/002-site-map-and-floor-ownership.md).
 - `planning` es dueño del modelo indoor y publica versiones identificables. `navigation`
@@ -40,13 +40,13 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
   borradores. Los endpoints se muestran en el arranque local predeterminado.
 - El directorio médico de `planning` guarda entradas de médicos, especialidades y servicios
   vinculadas a nodos destino de una versión. La búsqueda indexada de `navigation` solo devuelve
-  entradas de la versión publicada vigente de una sede. La API escucha solo en la máquina
-  local mientras falta autorización por sede.
+  entradas de la versión publicada vigente de una sede. IAM protege los endpoints reales
+  con JWT, rol de administrador y propiedad temporal de la sede.
 - Las conexiones verticales guardan una penalización de costo separada del peso y la distancia
   física. Cada conexión guarda `UNKNOWN`, `ACCESSIBLE` o `INACCESSIBLE` (por defecto `UNKNOWN`).
   `navigation` calcula rutas A* sobre el grafo publicado y respeta pesos, penalizaciones,
-  dirección y el filtro `accessibleOnly`. El `GET` de rutas PostgreSQL está disponible para
-  pruebas locales; faltan autorización por sede y validación de obstáculos.
+  dirección y el filtro `accessibleOnly`. El `GET` de rutas PostgreSQL requiere JWT y
+  propiedad de sede; falta validar obstáculos.
 - Rama `main` y `develop`: base de Spring Boot, CI y convenciones.
 - Rama `feat/navigation-destination-routing`: primer incremento de `navigation`.
 - `PR-214`: directorio y búsqueda acento-insensible de destinos por nombre/especialidad/tipo.
@@ -57,9 +57,9 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
   publicada con A* en el arranque predeterminado. La respuesta
   ordena nodos y enlaces e identifica los tramos entre pisos en `verticalSections[]`.
 - Contratos REST y Spring MockMvc; dominio sin dependencias Spring.
-- El arranque predeterminado usa `postgres,local`: muestra los dos endpoints con datos fijos
-  y seis endpoints PostgreSQL, y crea ejemplos persistidos de un borrador y una versión
-  publicada. La aplicación requiere PostgreSQL para arrancar.
+- El arranque predeterminado usa `postgres,local`: muestra los endpoints de `planning`,
+  `navigation`, IAM, beacons y analytics en Swagger. También crea ejemplos persistidos de
+  un borrador y una versión publicada. La aplicación requiere PostgreSQL y Redis.
   Tampoco hay subida de planos ni BLE reales. No
   declarar PR-214 terminado hasta integrar app cliente.
 
@@ -73,13 +73,15 @@ los perfiles predeterminados. Las credenciales se proporcionan por variables de 
 ```sh
 mvn clean verify
 ```
-La prueba de persistencia se activa con
+Las pruebas de persistencia de la rama original se activan con
 `RUMBO_TEST_DB_URL`, `RUMBO_TEST_DB_USER` y `RUMBO_TEST_DB_PASSWORD` apuntando a una base
-PostgreSQL 16 de prueba; CI la ejecuta con un servicio temporal. Para arrancar la aplicación
-se usan `RUMBO_DB_URL`, `RUMBO_DB_USER` y `RUMBO_DB_PASSWORD`. Los cuatro endpoints
+PostgreSQL de prueba; las nuevas pruebas de IAM usan Testcontainers. Para arrancar la aplicación
+se usan `RUMBO_DB_URL`, `RUMBO_DB_USER`, `RUMBO_DB_PASSWORD` y `JWT_SECRET`.
+Redis se configura con `REDIS_HOST` y `REDIS_PORT`. Los cuatro endpoints
 controlados por banderas están activos por defecto y el servidor escucha solo en
 `127.0.0.1`. `accessibleOnly=true` excluye conexiones sin accesibilidad confirmada.
-El uso productivo espera autorización por sede y reglas de obstáculos.
+La autorización actual verifica el dueño de la sede; la membresía de varios administradores
+y las reglas de obstáculos siguen pendientes.
 Véase [Contrato API](docs/API-CONTRACT.md) para métodos, cuerpos y errores.
 
 Endpoints provisionales de ejemplo, visibles junto con los de PostgreSQL:
@@ -91,24 +93,31 @@ curl -s -X POST http://localhost:8080/api/v1/navigations/route \
 Swagger UI: `http://localhost:8080/swagger-ui/index.html`.
 Health check: `http://localhost:8080/actuator/health`.
 
-### Arrancar los ocho endpoints en Swagger (PowerShell)
+### Arrancar Swagger con todas las operaciones (PowerShell)
 
-El arranque predeterminado activa los seis endpoints PostgreSQL y conserva los dos
-provisionales etiquetados **Demo navigation**. Solo escucha en `127.0.0.1`; no contiene
-credenciales. Se necesita Docker
-con PostgreSQL 16 y una contraseña privada elegida por cada desarrollador:
+El arranque predeterminado registra las operaciones de los contextos integrados y conserva
+las dos provisionales etiquetadas **Demo navigation**. Solo escucha en `127.0.0.1`.
+Se necesitan PostgreSQL 17, Redis 7 y una clave JWT privada:
 
 ```powershell
-$env:RUMBO_DB_USER = "rumbo_local"
+$env:RUMBO_DB_USER = "rumbo"
 $env:RUMBO_DB_PASSWORD = Read-Host -MaskInput "Contraseña local de PostgreSQL"
-$env:RUMBO_DB_URL = "jdbc:postgresql://localhost:15432/rumbo_local"
-docker compose -f compose.local.yml up -d --wait
+$env:DB_PASSWORD = $env:RUMBO_DB_PASSWORD
+$env:RUMBO_DB_URL = "jdbc:postgresql://localhost:5432/rumbo"
+$env:JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
+docker compose up -d --wait
 mvn spring-boot:run
 ```
 
 Abrir `http://localhost:8080/swagger-ui/index.html`. Flyway crea el esquema al arrancar.
+Usa una base **nueva**: la base PostgreSQL 16 del trabajo anterior conserva el historial
+Flyway `V1`–`V7`, incompatible con las versiones fechadas que llegaron de `develop`.
+No ejecutes `repair` ni borres ese volumen sin migrar o respaldar sus datos.
 El perfil local añade una vez un mapa publicado y un borrador, sin reemplazar las ediciones
-posteriores. Los identificadores para **Try it out** son:
+posteriores. IAM exige iniciar sesión y ser dueño de la sede para probar las operaciones
+reales. Los mapas fijos del perfil local aún no tienen dueño IAM, así que sirven como datos
+de referencia pero sus rutas protegidas responden `403` hasta asociarlos a una cuenta.
+Los identificadores son:
 
 | Prueba | Identificadores y parámetros |
 |---|---|
@@ -125,7 +134,7 @@ leer su grafo y un `ETag` inicial. Para el `PUT`, leer primero el borrador y env
 completos. Publicar el sucesor archiva la versión publicada anterior en la misma
 transacción. Publicar el borrador de ejemplo lo convierte en `PUBLISHED`, por lo que
 su `GET`/`PUT` de borrador dejará de funcionar; después se puede crear otro sucesor.
-Detener la base cuando termines con `docker compose -f compose.local.yml down`; el volumen
+Detener los servicios cuando termines con `docker compose down`; el volumen
 conserva los datos y la contraseña elegida en el primer inicio. Usa esa misma contraseña
 al reiniciar. No subir contraseñas ni archivos `.env` al repositorio.
 
@@ -146,7 +155,8 @@ El código de esta rama todavía no es una release ni está fusionado a `develop
   sucesor desde la versión publicada y archivo atómico al publicar el reemplazo.
 - [Contrato API](docs/API-CONTRACT.md): contratos implementados, habilitación y requisitos
   pendientes para modelos, destinos y rutas.
-- Pendientes: autorización por sede, detalle de publicación de planos y seguridad,
+- Pendientes: membresía de sede para varios administradores, validación de obstáculos,
+  detalle de publicación de planos y seguridad,
   stack móvil (Flutter frente a Unity/AR) y cotejo de la web Angular con los mockups.
 
 Fuentes: Informe TF 2026-20, capítulo V (BC Navegación), Jira `PR-214` y MVP

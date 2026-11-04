@@ -35,6 +35,9 @@ spring:
     problemdetails:
       enabled: true
 rumbo:
+  analytics:
+    # Dashboard summaries; events of a site invalidate its entries at once, this only bounds stale reads.
+    metrics-cache-ttl: 5m
   planning:
     editing:
       enabled: ${RUMBO_PLANNING_EDITING_ENABLED:false}

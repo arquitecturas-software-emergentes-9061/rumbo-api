@@ -1,11 +1,14 @@
 package com.uitopic.rumbo.iam.interfaces.rest;
 
+import com.uitopic.rumbo.iam.application.commandhandlers.ChangePasswordCommandHandler;
 import com.uitopic.rumbo.iam.application.commandhandlers.SignOutCommandHandler;
+import com.uitopic.rumbo.iam.domain.model.commands.ChangePasswordCommand;
 import com.uitopic.rumbo.iam.application.queryhandlers.GetActiveSessionsQueryHandler;
 import com.uitopic.rumbo.iam.application.queryhandlers.GetUserAccountByIdQueryHandler;
 import com.uitopic.rumbo.iam.domain.model.commands.SignOutCommand;
 import com.uitopic.rumbo.iam.domain.model.queries.GetActiveSessionsQuery;
 import com.uitopic.rumbo.iam.domain.model.queries.GetUserAccountByIdQuery;
+import com.uitopic.rumbo.iam.interfaces.rest.resources.ChangePasswordRequest;
 import com.uitopic.rumbo.iam.interfaces.rest.resources.SessionResponse;
 import com.uitopic.rumbo.iam.interfaces.rest.resources.UserAccountResponse;
 import com.uitopic.rumbo.iam.interfaces.rest.transform.IamResourceAssembler;
@@ -14,12 +17,15 @@ import com.uitopic.rumbo.shared.interfaces.rest.openapi.OpenApiConfiguration;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -35,12 +41,15 @@ public class UserAccountsController {
   private final GetUserAccountByIdQueryHandler getUserAccount;
   private final GetActiveSessionsQueryHandler getActiveSessions;
   private final SignOutCommandHandler signOut;
+  private final ChangePasswordCommandHandler changePassword;
 
   public UserAccountsController(GetUserAccountByIdQueryHandler getUserAccount,
-                                GetActiveSessionsQueryHandler getActiveSessions, SignOutCommandHandler signOut) {
+                                GetActiveSessionsQueryHandler getActiveSessions, SignOutCommandHandler signOut,
+                                ChangePasswordCommandHandler changePassword) {
     this.getUserAccount = getUserAccount;
     this.getActiveSessions = getActiveSessions;
     this.signOut = signOut;
+    this.changePassword = changePassword;
   }
 
   @GetMapping("/me")
@@ -55,6 +64,15 @@ public class UserAccountsController {
     return getActiveSessions.handle(new GetActiveSessionsQuery(principal.userId())).stream()
       .map(session -> IamResourceAssembler.toResponse(session, principal.sessionId()))
       .toList();
+  }
+
+  @PatchMapping(value = "/me/password", consumes = MediaType.APPLICATION_JSON_VALUE)
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  @Operation(summary = "Change the caller's password; this session stays open and every other one ends")
+  public void changePassword(@AuthenticationPrincipal AuthenticatedPrincipal principal,
+                             @Valid @RequestBody ChangePasswordRequest request) {
+    changePassword.handle(new ChangePasswordCommand(principal.userId(), principal.sessionId(),
+      request.currentPassword(), request.newPassword()));
   }
 
   @DeleteMapping("/me/sessions/{sessionId}")

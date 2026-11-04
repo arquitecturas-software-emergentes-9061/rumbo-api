@@ -28,4 +28,12 @@ public interface AuthSessionRepository {
    * @return identifiers of the sessions that were revoked
    */
   List<UUID> revokeAllByUserId(UUID userId, Instant now);
+
+  /**
+   * Revokes every open session of the account except {@code keptSessionId}, for example the device where the user
+   * just changed the password.
+   *
+   * @return identifiers of the sessions that were revoked
+   */
+  List<UUID> revokeAllByUserIdExcept(UUID userId, UUID keptSessionId, Instant now);
 }

@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: rumbo_local
+      POSTGRES_USER: ${RUMBO_DB_USER:?Set RUMBO_DB_USER in your local environment}
+      POSTGRES_PASSWORD: ${RUMBO_DB_PASSWORD:?Set RUMBO_DB_PASSWORD in your local environment}
+    ports:
+      - "127.0.0.1:15432:5432"
+    volumes:
+      - rumbo-local-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  rumbo-local-postgres:

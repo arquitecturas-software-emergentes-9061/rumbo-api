@@ -1,6 +1,9 @@
 package com.uitopic.rumbo.iam.interfaces.rest;
 
+import com.uitopic.rumbo.iam.application.ports.PasswordResetTokenStore;
 import com.uitopic.rumbo.iam.domain.exceptions.AccountDisabledException;
+import com.uitopic.rumbo.iam.domain.exceptions.IncorrectCurrentPasswordException;
+import com.uitopic.rumbo.iam.domain.exceptions.InvalidPasswordResetTokenException;
 import com.uitopic.rumbo.iam.domain.exceptions.AccountLockedException;
 import com.uitopic.rumbo.iam.domain.exceptions.EmailAlreadyRegisteredException;
 import com.uitopic.rumbo.iam.domain.exceptions.IamException;
@@ -79,6 +82,24 @@ public class IamExceptionHandler {
   @ExceptionHandler(InvalidRefreshTokenException.class)
   ProblemDetail invalidRefreshToken(InvalidRefreshTokenException exception) {
     return problem(HttpStatus.UNAUTHORIZED, exception);
+  }
+
+  @ExceptionHandler(InvalidPasswordResetTokenException.class)
+  ProblemDetail invalidResetToken(InvalidPasswordResetTokenException exception) {
+    return problem(HttpStatus.BAD_REQUEST, exception);
+  }
+
+  @ExceptionHandler(IncorrectCurrentPasswordException.class)
+  ProblemDetail incorrectCurrentPassword(IncorrectCurrentPasswordException exception) {
+    return ProblemDetails.withErrors(HttpStatus.BAD_REQUEST, exception.code(), exception.getMessage(),
+      Map.of("currentPassword", exception.getMessage()));
+  }
+
+  /** Nothing was changed and the link is still valid, so the user can simply try again. */
+  @ExceptionHandler(PasswordResetTokenStore.Unavailable.class)
+  ProblemDetail recoveryUnavailable(PasswordResetTokenStore.Unavailable exception) {
+    return ProblemDetails.of(HttpStatus.SERVICE_UNAVAILABLE, "PASSWORD_RECOVERY_UNAVAILABLE",
+      "Password recovery is temporarily unavailable, try again in a few minutes");
   }
 
   @ExceptionHandler(AccountLockedException.class)

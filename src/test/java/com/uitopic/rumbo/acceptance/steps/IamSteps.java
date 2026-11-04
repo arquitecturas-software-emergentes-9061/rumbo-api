@@ -26,6 +26,15 @@ public class IamSteps {
     assertThat(context.status()).as(context.body()).isEqualTo(201);
   }
 
+  @Given("a patient registered as {string} with password {string}")
+  public void registeredPatient(String email, String password) {
+    context.send(context.client().post().uri("/api/v1/auth/sign-up").contentType(MediaType.APPLICATION_JSON)
+      .body("""
+        {"email":"%s","password":"%s","role":"PATIENT","fullName":"Luis Rojas","acceptedTerms":true}"""
+        .formatted(unique(email), password)));
+    assertThat(context.status()).as(context.body()).isEqualTo(201);
+  }
+
   @When("a clinic administrator signs up as {string} with password {string}")
   public void signUp(String email, String password) {
     context.send(context.client().post().uri("/api/v1/auth/sign-up").contentType(MediaType.APPLICATION_JSON)

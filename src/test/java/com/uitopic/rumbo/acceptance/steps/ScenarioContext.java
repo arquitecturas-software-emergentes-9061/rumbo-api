@@ -41,4 +41,11 @@ public class ScenarioContext {
   public String recall(String key) { return values.get(key); }
 
   public String accessToken() { return values.get("accessToken"); }
+
+  /** Replaces {@code {key}} placeholders in a path with remembered values, e.g. {@code /api/v1/sites/{siteId}}. */
+  public String resolve(String path) {
+    String resolved = path;
+    for (var entry : values.entrySet()) resolved = resolved.replace("{" + entry.getKey() + "}", entry.getValue());
+    return resolved;
+  }
 }

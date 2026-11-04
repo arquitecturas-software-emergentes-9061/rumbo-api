@@ -1,6 +1,7 @@
 package com.uitopic.rumbo.acceptance;
 
 import com.uitopic.rumbo.TestcontainersConfiguration;
+import com.uitopic.rumbo.acceptance.support.RecoveryMailbox;
 import io.cucumber.spring.CucumberContextConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
@@ -10,6 +11,6 @@ import org.springframework.test.context.ActiveProfiles;
 @CucumberContextConfiguration
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("demo")
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, RecoveryMailbox.class})
 public class CucumberSpringConfiguration {
 }

@@ -2,6 +2,7 @@ package com.uitopic.rumbo.iam.infrastructure.configuration;
 
 import com.uitopic.rumbo.iam.domain.model.valueobjects.LockoutPolicy;
 import com.uitopic.rumbo.iam.domain.model.valueobjects.PasswordPolicy;
+import com.uitopic.rumbo.iam.domain.model.valueobjects.PasswordRecoveryPolicy;
 import com.uitopic.rumbo.iam.domain.model.valueobjects.SessionPolicy;
 import com.uitopic.rumbo.iam.infrastructure.tokens.jwt.JwtProperties;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,6 +24,12 @@ public class IamConfiguration {
   @Bean
   LockoutPolicy lockoutPolicy() {
     return LockoutPolicy.DEFAULT;
+  }
+
+  @Bean
+  PasswordRecoveryPolicy passwordRecoveryPolicy(
+    @Value("${rumbo.security.password-recovery.token-lifetime:30m}") Duration tokenLifetime) {
+    return new PasswordRecoveryPolicy(tokenLifetime);
   }
 
   @Bean

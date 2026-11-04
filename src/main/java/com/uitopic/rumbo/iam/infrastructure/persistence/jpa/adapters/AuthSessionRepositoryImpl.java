@@ -43,7 +43,17 @@ public class AuthSessionRepositoryImpl implements AuthSessionRepository {
 
   @Override
   public List<UUID> revokeAllByUserId(UUID userId, Instant now) {
-    List<UUID> ids = jpa.findActiveByUserId(userId, now).stream().map(AuthSessionJpaEntity::getId).toList();
+    return revokeActive(userId, null, now);
+  }
+
+  @Override
+  public List<UUID> revokeAllByUserIdExcept(UUID userId, UUID keptSessionId, Instant now) {
+    return revokeActive(userId, keptSessionId, now);
+  }
+
+  private List<UUID> revokeActive(UUID userId, UUID keptSessionId, Instant now) {
+    List<UUID> ids = jpa.findActiveByUserId(userId, now).stream().map(AuthSessionJpaEntity::getId)
+      .filter(id -> !id.equals(keptSessionId)).toList();
     if (!ids.isEmpty()) jpa.revokeAll(ids, now);
     return ids;
   }

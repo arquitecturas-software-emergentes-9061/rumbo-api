@@ -1,7 +1,9 @@
 package com.uitopic.rumbo.iam.domain;
 
 import com.uitopic.rumbo.iam.domain.model.aggregates.UserAccount;
+import com.uitopic.rumbo.iam.domain.model.events.PasswordResetRequestedEvent;
 import com.uitopic.rumbo.iam.domain.model.events.UserAccountLockedEvent;
+import com.uitopic.rumbo.iam.domain.model.events.UserPasswordChangedEvent;
 import com.uitopic.rumbo.iam.domain.model.events.UserRegisteredEvent;
 import com.uitopic.rumbo.iam.domain.model.valueobjects.AccountStatus;
 import com.uitopic.rumbo.iam.domain.model.valueobjects.EmailAddress;
@@ -117,6 +119,48 @@ class UserAccountTest {
 
     assertThat(account.failedLoginAttempts()).isZero();
     assertThat(account.canSignIn(NOW)).isFalse();
+  }
+
+  @Test
+  void requestingARecoveryRecordsTheLinkForTheEmail() {
+    UserAccount account = admin();
+    account.pullDomainEvents();
+    Instant expiresAt = NOW.plus(Duration.ofMinutes(30));
+
+    account.requestPasswordReset("raw-token", expiresAt, NOW);
+
+    assertThat(account.pullDomainEvents()).singleElement().isInstanceOfSatisfying(PasswordResetRequestedEvent.class,
+      event -> {
+        assertThat(event.email()).isEqualTo("ana@clinica.pe");
+        assertThat(event.resetToken()).isEqualTo("raw-token");
+        assertThat(event.expiresAt()).isEqualTo(expiresAt);
+        assertThat(event.toString()).as("the secret never reaches the logs").doesNotContain("raw-token");
+      });
+  }
+
+  @Test
+  void changingThePasswordLiftsALockAndRecordsTheChange() {
+    UserAccount account = lockedAccount();
+    account.pullDomainEvents();
+
+    account.changePassword(new PasswordHash("new-hash"), NOW.plusSeconds(60));
+
+    assertThat(account.passwordHash()).isEqualTo(new PasswordHash("new-hash"));
+    assertThat(account.canSignIn(NOW.plusSeconds(60))).isTrue();
+    assertThat(account.failedLoginAttempts()).isZero();
+    assertThat(account.pullDomainEvents()).singleElement().isInstanceOf(UserPasswordChangedEvent.class);
+  }
+
+  @Test
+  void aDisabledAccountCannotRecoverNorChangeItsPassword() {
+    UserAccount account = UserAccount.restore(UUID.randomUUID(), new EmailAddress("ana@clinica.pe"),
+      new PasswordHash("hash"), UserRole.CLINIC_ADMIN, AccountStatus.DISABLED, 0, null, null, NOW, NOW);
+
+    assertThat(account.canRecoverPassword()).isFalse();
+    assertThatThrownBy(() -> account.requestPasswordReset("raw-token", NOW.plusSeconds(60), NOW))
+      .isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(() -> account.changePassword(new PasswordHash("new-hash"), NOW))
+      .isInstanceOf(IllegalStateException.class);
   }
 
   private static UserAccount admin() {

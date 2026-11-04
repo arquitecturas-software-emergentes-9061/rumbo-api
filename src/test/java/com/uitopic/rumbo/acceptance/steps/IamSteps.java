@@ -1,6 +1,7 @@
 package com.uitopic.rumbo.acceptance.steps;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.uitopic.rumbo.acceptance.support.RecoveryMailbox;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
@@ -19,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 public class IamSteps {
   @Autowired ScenarioContext context;
   @Autowired ObjectMapper mapper;
+  @Autowired RecoveryMailbox mailbox;
 
   @Given("a clinic administrator registered as {string} with password {string}")
   public void registeredAdmin(String email, String password) {
@@ -74,9 +76,38 @@ public class IamSteps {
     for (int attempt = 0; attempt < times; attempt++) signIn(email, "Wrong-Password-1");
   }
 
+  @When("they request a password recovery for {string}")
+  public void requestRecovery(String email) {
+    context.send(context.client().post().uri("/api/v1/password-recovery/requests")
+      .contentType(MediaType.APPLICATION_JSON).body("{\"email\":\"%s\"}".formatted(unique(email))));
+  }
+
+  @When("they open the link sent to {string} and choose the password {string}")
+  public void resetWithLink(String email, String newPassword) {
+    String link = mailbox.lastLinkSentTo(unique(email)).orElseThrow(() -> new AssertionError("No link was sent"));
+    context.remember("resetToken", link);
+    sendResetConfirmation(link, newPassword);
+  }
+
+  @When("they open the same link again and choose the password {string}")
+  public void reuseLink(String newPassword) {
+    sendResetConfirmation(context.recall("resetToken"), newPassword);
+  }
+
+  @Then("no recovery link was sent to {string}")
+  public void noLink(String email) {
+    assertThat(mailbox.lastLinkSentTo(unique(email))).isEmpty();
+  }
+
   @Then("the response email is {string}")
   public void responseEmail(String email) throws Exception {
     assertThat(mapper.readTree(context.body()).get("email").asText()).isEqualTo(unique(email));
+  }
+
+  private void sendResetConfirmation(String resetToken, String newPassword) {
+    context.send(context.client().post().uri("/api/v1/password-recovery/confirmations")
+      .contentType(MediaType.APPLICATION_JSON)
+      .body("{\"resetToken\":\"%s\",\"newPassword\":\"%s\"}".formatted(resetToken, newPassword)));
   }
 
   private void sendRefresh(String refreshToken) {

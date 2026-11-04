@@ -69,7 +69,7 @@ class LocalSwaggerIntegrationTest {
             .param("to", "10000000-0000-4000-8000-000000000007"))
         .andExpect(status().isOk()).andExpect(jsonPath("$.nodes.length()").value(2));
     mvc.perform(get("/api/v1/sites/{siteId}/directory-entries", PUBLISHED_SITE)
-            .param("q", "cardio"))
+            .param("searchTerm", "cardio"))
         .andExpect(status().isOk()).andExpect(jsonPath("$[0].name").value("Cardiologia"));
     mvc.perform(get("/api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}/graph",
             DRAFT_SITE, "20000000-0000-4000-8000-000000000002",

@@ -1,6 +1,7 @@
 package com.uitopic.rumbo.navigation.interfaces.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -105,16 +106,18 @@ class DirectoryControllerIntegrationTest {
     mvc.perform(get("/api/v1/sites/{siteId}/directory-entries", siteId))
         .andExpect(status().isBadRequest());
     mvc.perform(get("/api/v1/sites/{siteId}/directory-entries", "wrong")
-        .param("q", "farmacia")).andExpect(status().isBadRequest());
+        .param("searchTerm", "farmacia")).andExpect(status().isBadRequest());
     mvc.perform(get("/api/v1/sites/{siteId}/directory-entries", siteId)
-        .param("q", " ")).andExpect(status().isBadRequest())
+        .param("searchTerm", " ")).andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
   }
 
   @Test
   void publishesSearchOperationInOpenApiWhenEnabled() throws Exception {
     mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
-        .andExpect(jsonPath("$.paths['/api/v1/sites/{siteId}/directory-entries'].get").exists());
+        .andExpect(jsonPath("$.paths['/api/v1/sites/{siteId}/directory-entries'].get").exists())
+        .andExpect(jsonPath("$.paths['/api/v1/sites/{siteId}/directory-entries'].get.parameters[*].name")
+            .value(hasItem("searchTerm")));
   }
 
   @Test
@@ -146,7 +149,7 @@ class DirectoryControllerIntegrationTest {
 
   private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder search(
       UUID siteId, String term) {
-    return get("/api/v1/sites/{siteId}/directory-entries", siteId).param("q", term);
+    return get("/api/v1/sites/{siteId}/directory-entries", siteId).param("searchTerm", term);
   }
 
   private IndoorMap draft(UUID siteId, UUID mapId, UUID versionId,

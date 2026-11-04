@@ -126,7 +126,7 @@ class MapVersionLifecycleIntegrationTest {
             .param("to", destinationId.toString()).param("accessibleOnly", "true"))
         .andExpect(status().isNotFound());
     mvc.perform(get("/api/v1/sites/{siteId}/directory-entries", first.siteId())
-            .param("q", "farmacia"))
+            .param("searchTerm", "farmacia"))
         .andExpect(status().isOk()).andExpect(jsonPath("$[0].name").value("Farmacia Nueva"));
     mvc.perform(get(graphUrl)).andExpect(status().isNotFound());
     mvc.perform(post(versionsUrl(first.siteId(), first.id()))

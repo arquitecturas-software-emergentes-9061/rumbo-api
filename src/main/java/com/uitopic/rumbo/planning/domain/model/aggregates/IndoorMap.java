@@ -19,6 +19,7 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.MapVersionStatus;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.SpatialCoordinate;
+import com.uitopic.rumbo.shared.domain.model.aggregates.AbstractDomainAggregateRoot;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,7 +38,7 @@ import java.util.UUID;
  * It controls draft edits and the transition to an immutable published graph;
  * persistence and version history are coordinated outside the domain.
  */
-public final class IndoorMap {
+public final class IndoorMap extends AbstractDomainAggregateRoot<UUID> {
   private final UUID id;
   private final UUID siteId;
   private final MapVersion version;
@@ -62,7 +63,7 @@ public final class IndoorMap {
     this.editRevision = editRevision;
   }
 
-  public UUID id() { return id; }
+  @Override public UUID id() { return id; }
   public UUID siteId() { return siteId; }
   public UUID modelVersionId() { return version.id(); }
   public MapVersionStatus status() { return version.status(); }

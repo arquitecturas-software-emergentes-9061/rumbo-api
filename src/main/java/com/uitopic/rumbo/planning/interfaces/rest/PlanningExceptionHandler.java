@@ -6,6 +6,8 @@ import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapVersionStateExcept
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
 import com.uitopic.rumbo.planning.domain.exceptions.MapPublicationRejectedException;
 import com.uitopic.rumbo.planning.interfaces.rest.resources.PlanningErrorResource;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Translates Planning draft-edit and publication failures into consistent HTTP responses. */
 @RestControllerAdvice(assignableTypes = {IndoorMapsController.class, IndoorMapGraphController.class})
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class PlanningExceptionHandler {
   @ExceptionHandler(MapPublicationRejectedException.class)
   public ResponseEntity<PlanningErrorResource> invalidGraph(MapPublicationRejectedException error) {

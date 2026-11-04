@@ -7,6 +7,7 @@ import com.uitopic.rumbo.planning.domain.services.IndoorMapQueryService;
 import java.util.UUID;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /** Resolves draft graph reads without exposing the persistence adapter to REST. */
@@ -20,7 +21,7 @@ public class IndoorMapQueryServiceImpl implements IndoorMapQueryService {
   }
 
   @Override
-  @Transactional(readOnly = true)
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
   public IndoorMap getDraft(UUID siteId, UUID mapId, UUID modelVersionId) {
     IndoorMap map = repository.findDraft(mapId, modelVersionId)
         .orElseThrow(MapVersionNotFoundException::new);

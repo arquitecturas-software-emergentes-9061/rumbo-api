@@ -15,7 +15,8 @@ review configuration must not be exposed to other machines.
 The single `application.properties` uses `postgres,local` as its default profiles,
 enables all four controlled HTTP feature flags, and binds the server to `127.0.0.1`.
 The two provisional demo operations remain clearly labeled and use only their fixed
-fixture; the other five operations use PostgreSQL. A local initializer creates
+fixture; the original five PostgreSQL operations now include a sixth for creating
+successor drafts ([ADR 005](005-successor-draft-versions.md)). A local initializer creates
 separate draft and published examples after Flyway migration. Credentials remain
 environment variables, and Docker Compose is optional when PostgreSQL is already
 available.

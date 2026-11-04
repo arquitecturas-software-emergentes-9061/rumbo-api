@@ -19,7 +19,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** Verifies that local Swagger exposes live PostgreSQL and isolated demo APIs together. */
+/** Verifies that local Swagger exposes PostgreSQL and isolated demo APIs together. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @EnabledIfEnvironmentVariable(named = "RUMBO_TEST_DB_URL", matches = ".+")
@@ -39,7 +39,7 @@ class LocalSwaggerIntegrationTest {
   @Autowired ObjectMapper json;
 
   @Test
-  void allSevenOperationsAreDocumentedAndLocalExamplesRespond() throws Exception {
+  void allEightOperationsAreDocumentedAndLocalExamplesRespond() throws Exception {
     JsonNode spec = json.readTree(mvc.perform(get("/v3/api-docs"))
         .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
     assertEquals("Rumbo API", spec.path("info").path("title").asText());
@@ -49,6 +49,7 @@ class LocalSwaggerIntegrationTest {
     assertTrue(paths.path(graph).has("get"));
     assertTrue(paths.path(graph).has("put"));
     assertTrue(paths.path("/api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}").has("patch"));
+    assertTrue(paths.path("/api/v1/sites/{siteId}/maps/{mapId}/versions").has("post"));
     assertTrue(paths.path("/api/v1/sites/{siteId}/directory-entries").has("get"));
     assertTrue(paths.path("/api/v1/sites/{siteId}/routes").has("get"));
     assertTrue(paths.path("/api/v1/navigations/destinations").has("get"));

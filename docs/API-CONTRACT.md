@@ -1,9 +1,9 @@
 # Rumbo API — Planning and Navigation contract
 
-Status: implemented contracts are marked with their enablement conditions; remaining requirements are identified below. See [ADR 001](decisions/001-architecture-and-contract.md) for the domain and route decisions and [ADR 004](decisions/004-local-default-api-visibility.md) for the local startup policy.
+Status: implemented contracts are marked with their enablement conditions; remaining requirements are identified below. See [ADR 001](decisions/001-architecture-and-contract.md) for the domain and route decisions, [ADR 004](decisions/004-local-default-api-visibility.md) for the local startup policy, and [ADR 005](decisions/005-successor-draft-versions.md) for successor map versions.
 
 Normal local startup defaults to the `postgres,local` profiles, enables the four HTTP
-feature flags, and registers all seven operations in Swagger. The two provisional
+feature flags, and registers all eight operations in Swagger. The two provisional
 operations are tagged **Demo navigation**. The server binds to loopback and seeds
 separate draft and published example sites after Flyway migration. PostgreSQL and
 private connection variables are required. See the README for startup commands and IDs.
@@ -25,6 +25,33 @@ Each floor-plan version defines an unscaled rectangular visual coordinate space 
 A confirmed `MapScale` is tied to `floorId` and `planVersionId` and expresses `metersPerUnit = realDistanceMeters / EuclideanDistanceInPlanUnits` between two distinct reference points of that version. Physical connection distance is expressed in meters; routing weight is a separate positive cost. A plan without a confirmed physical reference has no confirmed scale. `planning` stores and reloads these values in PostgreSQL and exports the published spatial core to `navigation` through a read-only contract.
 
 `navigation` reads never return drafts. Publishing a new version is atomic: a rejected draft leaves the previous published version available. Authorization of the consumer and site is required before serving real models; it is not implemented yet.
+
+## Successor map version — implemented for local review
+
+`POST /api/v1/sites/{siteId}/maps/{mapId}/versions`
+
+Request body: `{"sourceVersionId":"<current-published-version-uuid>"}`. The site and map must
+identify an existing map, and the source must still be its current `PUBLISHED` version.
+The operation creates one independent `DRAFT` with a server-generated `modelVersionId`.
+It copies plan bounds and scales, nodes, weighted connections including accessibility and
+vertical penalties, and medical destinations. Element IDs remain stable across versions;
+each stored element is associated with the new model version. The source remains
+`PUBLISHED` and continues serving directory and route reads until the successor is
+published. A map can have only one draft at a time.
+
+- `201 Created`: complete draft graph, `Location` pointing to
+  `/api/v1/sites/{siteId}/maps/{mapId}/versions/{newVersionId}/graph`, and `ETag: "rev-0"`.
+- `400 Bad Request`: missing or malformed `sourceVersionId`, site ID, or map ID.
+- `404 Not Found`: the site/map has no current published source.
+- `409 Conflict`: a draft already exists (`DRAFT_ALREADY_EXISTS`) or the supplied
+  source is no longer current (`SOURCE_VERSION_NOT_CURRENT`).
+- `422 Unprocessable Entity`: stored published data cannot form a valid draft.
+
+The existing draft `GET`/`PUT` and publication `PATCH` complete the successor workflow.
+When the successor publishes, the previous published version becomes `ARCHIVED` in the
+same transaction. This endpoint is local-only until site authorization exists; it is
+enabled with `postgres` and `rumbo.planning.publication.enabled=true`. It does not create
+an initial map or floor plan, and it does not reconcile generated rooms with destinations.
 
 ## Draft graph editing — implemented for local review
 

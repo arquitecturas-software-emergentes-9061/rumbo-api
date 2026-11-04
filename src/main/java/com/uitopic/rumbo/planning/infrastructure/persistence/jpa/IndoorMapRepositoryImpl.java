@@ -57,6 +57,24 @@ public class IndoorMapRepositoryImpl implements IndoorMapRepository {
   }
 
   @Override
+  @Transactional(propagation = Propagation.MANDATORY)
+  public boolean lockMapForUpdate(UUID siteId, UUID mapId) {
+    IndoorMapJpaEntity root = entityManager.find(IndoorMapJpaEntity.class,
+        mapId, LockModeType.PESSIMISTIC_WRITE);
+    return root != null && root.siteId().equals(siteId);
+  }
+
+  @Override
+  @Transactional(propagation = Propagation.MANDATORY)
+  public boolean hasDraft(UUID mapId) {
+    return !entityManager.createQuery("select v.id from MapVersionJpaEntity v "
+            + "where v.mapId = :mapId and v.status = :status", UUID.class)
+        .setParameter("mapId", mapId)
+        .setParameter("status", MapVersionStatus.DRAFT)
+        .setMaxResults(1).getResultList().isEmpty();
+  }
+
+  @Override
   @Transactional
   public void saveDraft(IndoorMap map) {
     if (map.status() != MapVersionStatus.DRAFT) {

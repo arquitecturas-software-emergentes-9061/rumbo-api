@@ -1,6 +1,7 @@
 package com.uitopic.rumbo.planning.infrastructure.persistence.jpa;
 
 import com.uitopic.rumbo.planning.domain.repositories.PublishedMapRepository;
+import com.uitopic.rumbo.planning.domain.exceptions.InvalidPublishedMapDataException;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PublishedMapSnapshot;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
@@ -34,6 +35,14 @@ public class PublishedMapRepositoryImpl implements PublishedMapRepository {
   @Override
   @Transactional(readOnly = true)
   public Optional<PublishedMapSnapshot> findBySite(UUID siteId) {
+    try {
+      return readPublishedSnapshot(siteId);
+    } catch (IllegalArgumentException | IllegalStateException error) {
+      throw new InvalidPublishedMapDataException(error);
+    }
+  }
+
+  private Optional<PublishedMapSnapshot> readPublishedSnapshot(UUID siteId) {
     var roots = entityManager.createQuery("select m from IndoorMapJpaEntity m "
         + "where m.siteId = :siteId", IndoorMapJpaEntity.class)
         .setParameter("siteId", siteId).getResultList();
@@ -72,11 +81,14 @@ public class PublishedMapRepositoryImpl implements PublishedMapRepository {
             row.bidirectional())).toList();
     Map<UUID, PublishedMapSnapshot.Node> nodesById = nodes.stream()
         .collect(Collectors.toMap(PublishedMapSnapshot.Node::id, Function.identity()));
-    var destinations = entityManager.createQuery("select d from MapDestinationJpaEntity d "
+    var destinationRows = entityManager.createQuery("select d from MapDestinationJpaEntity d "
         + "where d.id.modelVersionId = :versionId order by d.id.elementId",
-        MapDestinationJpaEntity.class).setParameter("versionId", versionId).getResultList()
-        .stream().filter(row -> nodesById.containsKey(row.nodeId())
-            && nodesById.get(row.nodeId()).type() == NodeType.DESTINATION)
+        MapDestinationJpaEntity.class).setParameter("versionId", versionId).getResultList();
+    if (destinationRows.stream().anyMatch(row -> !nodesById.containsKey(row.nodeId())
+        || nodesById.get(row.nodeId()).type() != NodeType.DESTINATION)) {
+      throw new IllegalStateException("Published directory contains an invalid destination node");
+    }
+    var destinations = destinationRows.stream()
         .map(row -> new PublishedMapSnapshot.Destination(row.id().elementId(), versionId,
             row.nodeId(), nodesById.get(row.nodeId()).floorId(),
             DirectoryEntryType.valueOf(row.entryType()), row.name(), row.specialty())).toList();

@@ -32,7 +32,8 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
 - `planning` ya contiene coordenadas, escala, nodos, conexiones y un agregado de borrador
   `IndoorMap` con validación de referencias, duplicados y conectividad. Flyway y el adaptador
   JPA guardan y recuperan borradores completos en PostgreSQL. La publicación transaccional
-  y su endpoint `PATCH` están implementados. `GET` y `PUT` permiten consultar y reemplazar
+  y su endpoint `PATCH` están implementados. `POST /versions` crea un nuevo borrador
+  copiando la versión publicada vigente sin cambiarla; `GET` y `PUT` permiten consultar y reemplazar
   nodos, conexiones y destinos de un borrador existente. El `PUT` exige las tres colecciones y el `If-Match` devuelto como
   `ETag` por el `GET`, para evitar borrados por omisión y sobrescrituras entre editores.
   El núcleo espacial publicado ya se consulta desde `navigation` sin exponer
@@ -57,7 +58,7 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
   ordena nodos y enlaces e identifica los tramos entre pisos en `verticalSections[]`.
 - Contratos REST y Spring MockMvc; dominio sin dependencias Spring.
 - El arranque predeterminado usa `postgres,local`: muestra los dos endpoints con datos fijos
-  y cinco endpoints PostgreSQL, y crea ejemplos persistidos de un borrador y una versión
+  y seis endpoints PostgreSQL, y crea ejemplos persistidos de un borrador y una versión
   publicada. La aplicación requiere PostgreSQL para arrancar.
   Tampoco hay subida de planos ni BLE reales. No
   declarar PR-214 terminado hasta integrar app cliente.
@@ -90,9 +91,9 @@ curl -s -X POST http://localhost:8080/api/v1/navigations/route \
 Swagger UI: `http://localhost:8080/swagger-ui/index.html`.
 Health check: `http://localhost:8080/actuator/health`.
 
-### Arrancar los siete endpoints en Swagger (PowerShell)
+### Arrancar los ocho endpoints en Swagger (PowerShell)
 
-El arranque predeterminado activa los cinco endpoints PostgreSQL y conserva los dos
+El arranque predeterminado activa los seis endpoints PostgreSQL y conserva los dos
 provisionales etiquetados **Demo navigation**. Solo escucha en `127.0.0.1`; no contiene
 credenciales. Se necesita Docker
 con PostgreSQL 16 y una contraseña privada elegida por cada desarrollador:
@@ -113,13 +114,17 @@ posteriores. Los identificadores para **Try it out** son:
 |---|---|
 | Ruta publicada | `siteId=10000000-0000-4000-8000-000000000001`, `from=10000000-0000-4000-8000-000000000006`, `to=10000000-0000-4000-8000-000000000007` |
 | Directorio publicado | El mismo `siteId`, `q=cardio` |
+| Crear sucesor del mapa publicado | `siteId=10000000-0000-4000-8000-000000000001`, `mapId=10000000-0000-4000-8000-000000000002`, cuerpo `{"sourceVersionId":"10000000-0000-4000-8000-000000000003"}` |
 | Leer o editar borrador | `siteId=20000000-0000-4000-8000-000000000001`, `mapId=20000000-0000-4000-8000-000000000002`, `versionId=20000000-0000-4000-8000-000000000003` |
 | Publicar borrador | Los mismos tres IDs, cuerpo `{"status":"PUBLISHED"}` y `Content-Type: application/merge-patch+json` |
 | Endpoints Demo | Usar los IDs del ejemplo `demo` anterior; no consultan PostgreSQL |
 
-Para el `PUT`, leer primero el borrador y enviar su `ETag` en `If-Match`; el cuerpo debe
-contener `nodes`, `connections` y `destinations` completos. Publicar el borrador de ejemplo
-lo convierte en `PUBLISHED`, por lo que su `GET`/`PUT` de borrador dejará de funcionar.
+El `POST` de sucesor responde `201` con un nuevo `modelVersionId`, un `Location` para
+leer su grafo y un `ETag` inicial. Para el `PUT`, leer primero el borrador y enviar su
+`ETag` en `If-Match`; el cuerpo debe contener `nodes`, `connections` y `destinations`
+completos. Publicar el sucesor archiva la versión publicada anterior en la misma
+transacción. Publicar el borrador de ejemplo lo convierte en `PUBLISHED`, por lo que
+su `GET`/`PUT` de borrador dejará de funcionar; después se puede crear otro sucesor.
 Detener la base cuando termines con `docker compose -f compose.local.yml down`; el volumen
 conserva los datos y la contraseña elegida en el primer inicio. Usa esa misma contraseña
 al reiniciar. No subir contraseñas ni archivos `.env` al repositorio.
@@ -135,8 +140,10 @@ El código de esta rama todavía no es una release ni está fusionado a `develop
   frontera `planning`/`navigation`, A* y ruta REST objetivo.
 - [ADR 003](docs/decisions/003-draft-graph-editing-and-regeneration.md): guardado
   completo del borrador, `If-Match` y reconciliación pendiente con `US-09`.
-- [ADR 004](docs/decisions/004-local-default-api-visibility.md): los siete endpoints
+- [ADR 004](docs/decisions/004-local-default-api-visibility.md): los endpoints
   visibles en el arranque local predeterminado, limitado a `127.0.0.1`.
+- [ADR 005](docs/decisions/005-successor-draft-versions.md): creación de un borrador
+  sucesor desde la versión publicada y archivo atómico al publicar el reemplazo.
 - [Contrato API](docs/API-CONTRACT.md): contratos implementados, habilitación y requisitos
   pendientes para modelos, destinos y rutas.
 - Pendientes: autorización por sede, detalle de publicación de planos y seguridad,

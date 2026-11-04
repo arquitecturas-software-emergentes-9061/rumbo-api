@@ -19,6 +19,7 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.MapVersionStatus;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.SpatialCoordinate;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.PublishedMapSnapshot;
 import com.uitopic.rumbo.shared.domain.model.aggregates.AbstractDomainAggregateRoot;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -61,6 +62,41 @@ public final class IndoorMap extends AbstractDomainAggregateRoot<UUID> {
     this.version = new MapVersion(modelVersionId, MapVersionStatus.DRAFT);
     if (editRevision < 0) throw new IllegalArgumentException("editRevision must be nonnegative");
     this.editRevision = editRevision;
+  }
+
+  /**
+   * Creates an independent draft from a published graph while retaining stable element IDs.
+   * Every copied element is rebound to the new model version and checked by this aggregate.
+   */
+  public static IndoorMap draftFromPublished(PublishedMapSnapshot source, UUID newVersionId) {
+    Objects.requireNonNull(source, "source is required");
+    Objects.requireNonNull(newVersionId, "newVersionId is required");
+    if (newVersionId.equals(source.modelVersionId())) {
+      throw new IllegalArgumentException("New draft needs a different model version ID");
+    }
+    IndoorMap draft = new IndoorMap(source.mapId(), source.siteId(), newVersionId);
+    for (PublishedMapSnapshot.Plan plan : source.plans()) {
+      draft.addPlan(new PlanCoordinateSpace(plan.floorId(), plan.planVersionId(),
+          plan.widthUnits(), plan.heightUnits()));
+      draft.setScale(new MapScale(plan.floorId(), plan.planVersionId(), plan.metersPerUnit()));
+    }
+    for (PublishedMapSnapshot.Node node : source.nodes()) {
+      draft.addNode(node.id(), node.floorId(), node.planVersionId(),
+          node.x(), node.y(), node.type());
+    }
+    for (PublishedMapSnapshot.Connection connection : source.connections()) {
+      draft.addConnection(connection.id(), connection.sourceNodeId(),
+          connection.targetNodeId(), connection.type(), connection.distanceMeters(),
+          connection.weight(), connection.verticalPenalty(), connection.accessibility(),
+          connection.bidirectional());
+    }
+    for (PublishedMapSnapshot.Destination destination : source.destinations()) {
+      draft.addDestination(destination.id(), destination.nodeId(), destination.type(),
+          destination.name(), destination.specialty());
+    }
+    GraphValidationResult validation = draft.validateForPublication();
+    if (!validation.isValid()) throw new MapPublicationRejectedException(validation);
+    return draft;
   }
 
   @Override public UUID id() { return id; }

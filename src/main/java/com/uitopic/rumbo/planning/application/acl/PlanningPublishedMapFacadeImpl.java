@@ -1,5 +1,6 @@
 package com.uitopic.rumbo.planning.application.acl;
 
+import com.uitopic.rumbo.planning.domain.exceptions.InvalidPublishedMapDataException;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PublishedMapSnapshot;
 import com.uitopic.rumbo.planning.domain.repositories.PublishedMapRepository;
 import com.uitopic.rumbo.planning.interfaces.acl.PlanningPublishedMapFacade;
@@ -21,7 +22,11 @@ public class PlanningPublishedMapFacadeImpl implements PlanningPublishedMapFacad
 
   @Override
   public Optional<PublishedMapData> findCurrentBySite(UUID siteId) {
-    return repository.findBySite(siteId).map(this::toData);
+    try {
+      return repository.findBySite(siteId).map(this::toData);
+    } catch (InvalidPublishedMapDataException error) {
+      throw new IllegalStateException("Published map contract cannot be read", error);
+    }
   }
 
   @Override

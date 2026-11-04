@@ -1,6 +1,9 @@
 package com.uitopic.rumbo.planning.interfaces.rest;
 
 import com.uitopic.rumbo.planning.application.internal.exceptions.MapVersionNotFoundException;
+import com.uitopic.rumbo.planning.application.internal.exceptions.DraftMapVersionAlreadyExistsException;
+import com.uitopic.rumbo.planning.application.internal.exceptions.PublishedMapVersionChangedException;
+import com.uitopic.rumbo.planning.application.internal.exceptions.InvalidPublishedMapVersionException;
 import com.uitopic.rumbo.planning.domain.exceptions.DraftGraphRevisionConflictException;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapVersionStateException;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
@@ -45,6 +48,24 @@ public class PlanningExceptionHandler {
   public ResponseEntity<PlanningErrorResource> conflict(InvalidMapVersionStateException error) {
     return ResponseEntity.status(HttpStatus.CONFLICT).body(new PlanningErrorResource(
         "MAP_VERSION_STATE_CONFLICT", error.getMessage(), List.of()));
+  }
+
+  @ExceptionHandler(DraftMapVersionAlreadyExistsException.class)
+  public ResponseEntity<PlanningErrorResource> draftAlreadyExists(DraftMapVersionAlreadyExistsException error) {
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(new PlanningErrorResource(
+        "DRAFT_ALREADY_EXISTS", error.getMessage(), List.of()));
+  }
+
+  @ExceptionHandler(PublishedMapVersionChangedException.class)
+  public ResponseEntity<PlanningErrorResource> publishedSourceChanged(PublishedMapVersionChangedException error) {
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(new PlanningErrorResource(
+        "SOURCE_VERSION_NOT_CURRENT", error.getMessage(), List.of()));
+  }
+
+  @ExceptionHandler(InvalidPublishedMapVersionException.class)
+  public ResponseEntity<PlanningErrorResource> invalidPublishedSource(InvalidPublishedMapVersionException error) {
+    return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(new PlanningErrorResource(
+        "INVALID_PUBLISHED_MODEL", error.getMessage(), List.of()));
   }
 
   @ExceptionHandler(DraftGraphRevisionConflictException.class)

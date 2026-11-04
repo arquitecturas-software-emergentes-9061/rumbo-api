@@ -24,7 +24,7 @@ public class DirectoryQueryServiceImpl implements DirectoryQueryService {
   public List<DirectoryEntry> search(UUID siteId, String term) {
     Objects.requireNonNull(siteId, "siteId is required");
     if (term == null || term.isBlank() || term.length() > 150) {
-      throw new IllegalArgumentException("q must contain 1 to 150 characters");
+      throw new IllegalArgumentException("searchTerm must contain 1 to 150 characters");
     }
     return repository.search(siteId, term.strip());
   }

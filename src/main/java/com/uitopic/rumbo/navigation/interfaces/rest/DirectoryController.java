@@ -3,6 +3,7 @@ package com.uitopic.rumbo.navigation.interfaces.rest;
 import com.uitopic.rumbo.navigation.domain.services.DirectoryQueryService;
 import com.uitopic.rumbo.navigation.interfaces.rest.resources.DirectoryEntryResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.List;
 import java.util.UUID;
@@ -32,8 +33,9 @@ public class DirectoryController {
   @Operation(summary = "Search the current published medical directory of one site")
   @GetMapping
   public ResponseEntity<List<DirectoryEntryResponse>> search(@PathVariable UUID siteId,
-                                                               @RequestParam String q) {
-    return ResponseEntity.ok(queries.search(siteId, q).stream()
+      @Parameter(description = "Text to search in entry names, specialties, and types", example = "cardio")
+      @RequestParam(name = "searchTerm") String searchTerm) {
+    return ResponseEntity.ok(queries.search(siteId, searchTerm).stream()
         .map(DirectoryEntryResponse::from).toList());
   }
 

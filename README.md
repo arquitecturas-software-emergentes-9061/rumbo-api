@@ -113,7 +113,7 @@ posteriores. Los identificadores para **Try it out** son:
 | Prueba | Identificadores y parámetros |
 |---|---|
 | Ruta publicada | `siteId=10000000-0000-4000-8000-000000000001`, `from=10000000-0000-4000-8000-000000000006`, `to=10000000-0000-4000-8000-000000000007` |
-| Directorio publicado | El mismo `siteId`, `q=cardio` |
+| Directorio publicado | El mismo `siteId`, `searchTerm=cardio` |
 | Crear sucesor del mapa publicado | `siteId=10000000-0000-4000-8000-000000000001`, `mapId=10000000-0000-4000-8000-000000000002`, cuerpo `{"sourceVersionId":"10000000-0000-4000-8000-000000000003"}` |
 | Leer o editar borrador | `siteId=20000000-0000-4000-8000-000000000001`, `mapId=20000000-0000-4000-8000-000000000002`, `versionId=20000000-0000-4000-8000-000000000003` |
 | Publicar borrador | Los mismos tres IDs, cuerpo `{"status":"PUBLISHED"}` y `Content-Type: application/merge-patch+json` |

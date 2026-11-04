@@ -113,14 +113,14 @@ Publication currently requires a confirmed scale for every plan, at least one ac
 
 ## Published medical directory — implemented for local review
 
-`GET /api/v1/sites/{siteId}/directory-entries?q={term}`
+`GET /api/v1/sites/{siteId}/directory-entries?searchTerm={term}`
 
-`siteId` is a required UUID path parameter, and a non-blank `q` of at most 150 characters is a required query parameter. Search is case and accent insensitive and matches prefixes of every query token against name, specialty, and entry type. Results are ordered by name and ID and limited to 50. PostgreSQL uses a GIN text-search index. Only entries in the site's current `PUBLISHED` map version with a node of type `DESTINATION` are returned; drafts, archived versions, foreign sites, and invalid destination-node references are excluded.
+`siteId` is a required UUID path parameter, and a non-blank `searchTerm` of at most 150 characters is a required query parameter. Search is case and accent insensitive and matches prefixes of every query token against name, specialty, and entry type. Results are ordered by name and ID and limited to 50. PostgreSQL uses a GIN text-search index. Only entries in the site's current `PUBLISHED` map version with a node of type `DESTINATION` are returned; drafts, archived versions, foreign sites, and invalid destination-node references are excluded.
 
 - `200 OK`: an array of `{id, siteId, modelVersionId, floorId, nodeId, type, name, specialty}`; an unmatched term returns `[]`.
-- `400 Bad Request`: missing or malformed `siteId`, or missing, blank, or overlong `q`; body `{code: "INVALID_REQUEST", message: "..."}`.
+- `400 Bad Request`: missing or malformed `siteId`, or missing, blank, or overlong `searchTerm`; body `{code: "INVALID_REQUEST", message: "..."}`.
 
-This endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.navigation.directory.enabled` can disable it. Site authorization is still required before external exposure. This directory does not claim route accessibility or replace the separate `demo` destination endpoint. The Sprint Backlog's global `q`-only URL was scoped under the site resource because the current backend has no authenticated site context. The path identifies the site's directory collection; `q` filters its entries.
+This endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.navigation.directory.enabled` can disable it. Site authorization is still required before external exposure. This directory does not claim route accessibility or replace the separate `demo` destination endpoint. The Sprint Backlog's global `q`-only URL was scoped under the site resource because the current backend has no authenticated site context. The path identifies the site's directory collection; `searchTerm` filters its entries.
 
 ## Published route calculation — implemented for local review
 

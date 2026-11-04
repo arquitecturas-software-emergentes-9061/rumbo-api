@@ -18,7 +18,7 @@ public class DirectoryExceptionHandler {
       MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
   public ResponseEntity<ApiErrorResource> invalidRequest(Exception error) {
     return ResponseEntity.badRequest().body(new ApiErrorResource("INVALID_REQUEST",
-        "A valid siteId and a non-empty q of at most 150 characters are required"));
+        "A valid siteId and a non-empty searchTerm of at most 150 characters are required"));
   }
 
 }

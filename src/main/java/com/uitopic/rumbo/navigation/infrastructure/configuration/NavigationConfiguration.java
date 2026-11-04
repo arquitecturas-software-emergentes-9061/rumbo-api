@@ -5,7 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 @Configuration
-@Profile("demo & !postgres")
+@Profile({"demo & !postgres", "postgres & local"})
 public class NavigationConfiguration {
   @Bean RouteCalculationDomainService routePlanner() {return new RouteCalculationDomainService();}
 }

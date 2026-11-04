@@ -18,8 +18,13 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-/** Ensures the PostgreSQL profile boots with Planning persistence enabled. */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+/** Ensures PostgreSQL persistence boots and feature flags can hide controlled APIs. */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = {
+    "rumbo.planning.editing.enabled=false",
+    "rumbo.planning.publication.enabled=false",
+    "rumbo.navigation.directory.enabled=false",
+    "rumbo.navigation.routes.enabled=false"
+})
 @ActiveProfiles("postgres")
 @EnabledIfEnvironmentVariable(named = "RUMBO_TEST_DB_URL", matches = ".+")
 class PlanningPostgresApplicationIntegrationTest {
@@ -39,7 +44,7 @@ class PlanningPostgresApplicationIntegrationTest {
   }
 
   @Test
-  void publicationEndpointRequiresExplicitEnablement() {
+  void featureFlagsCanDisableHttpEndpoints() {
     assertThrows(NoSuchBeanDefinitionException.class,
         () -> context.getBean(IndoorMapsController.class));
     assertThrows(NoSuchBeanDefinitionException.class,

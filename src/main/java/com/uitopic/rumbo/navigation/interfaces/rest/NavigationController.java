@@ -7,6 +7,8 @@ import com.uitopic.rumbo.navigation.domain.services.RouteQueryService;
 import com.uitopic.rumbo.navigation.interfaces.rest.resources.DestinationResponse;
 import com.uitopic.rumbo.navigation.interfaces.rest.resources.RouteRequest;
 import com.uitopic.rumbo.navigation.interfaces.rest.resources.RouteResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -21,7 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Provisional routes and destination search backed only by the demo fixture. */
 @RestController
-@Profile("demo & !postgres")
+@Profile({"demo & !postgres", "postgres & local"})
+@Tag(name = "Demo navigation", description = "Provisional endpoints using fixed demonstration data")
 @RequestMapping("/api/v1/navigations")
 public final class NavigationController {
   private final DestinationQueryService directory;
@@ -33,6 +36,7 @@ public final class NavigationController {
   }
 
   /** Searches demo destinations within a site. */
+  @Operation(summary = "Search demonstration destinations")
   @GetMapping("/destinations")
   public ResponseEntity<List<DestinationResponse>> destinations(@RequestParam UUID siteId,
       @RequestParam(defaultValue = "") String query,
@@ -43,6 +47,7 @@ public final class NavigationController {
   }
 
   /** Calculates a provisional route using the demo routing policy. */
+  @Operation(summary = "Calculate a demonstration route")
   @PostMapping("/route")
   public ResponseEntity<RouteResponse> route(@Valid @RequestBody RouteRequest request) {
     return ResponseEntity.ok(RouteResponse.from(routing.calculate(new CalculateRouteQuery(

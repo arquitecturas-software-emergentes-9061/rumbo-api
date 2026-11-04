@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 
 /** Resolves a provisional route query against the demo read model. */
 @Service
-@Profile("demo & !postgres")
+@Profile({"demo & !postgres", "postgres & local"})
 public final class DemoRouteQueryServiceImpl implements RouteQueryService {
   private final NavigableModelRepository repository;
   private final RouteCalculationDomainService planner;

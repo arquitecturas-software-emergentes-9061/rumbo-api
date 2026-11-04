@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Controlled route API over the current published version of a site. */
 @RestController
+@Tag(name = "Published routes")
 @Profile("postgres")
 @ConditionalOnProperty(name = "rumbo.navigation.routes.enabled", havingValue = "true")
 @RequestMapping("/api/v1/sites/{siteId}/routes")

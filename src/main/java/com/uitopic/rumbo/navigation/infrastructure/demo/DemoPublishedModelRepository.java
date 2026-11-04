@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import java.util.*;
 /** Explicit development fixture; NEVER used as an alternative to real clinic data. */
 @Component
-@Profile("demo & !postgres")
+@Profile({"demo & !postgres", "postgres & local"})
 public final class DemoPublishedModelRepository implements NavigableModelRepository {
   public static final UUID SITE=UUID.fromString("00000000-0000-4000-8000-000000000001");
   public static final UUID FLOOR=UUID.fromString("00000000-0000-4000-8000-000000000002");

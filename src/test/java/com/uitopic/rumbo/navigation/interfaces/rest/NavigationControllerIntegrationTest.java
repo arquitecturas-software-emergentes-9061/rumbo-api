@@ -8,7 +8,10 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-@SpringBootTest
+@SpringBootTest(properties = "spring.autoconfigure.exclude="
+    + "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,"
+    + "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration,"
+    + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration")
 @ActiveProfiles("demo")
 @AutoConfigureMockMvc
 class NavigationControllerIntegrationTest {

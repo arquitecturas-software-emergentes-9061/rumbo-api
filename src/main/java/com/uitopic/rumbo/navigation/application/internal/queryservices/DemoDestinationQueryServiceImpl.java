@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 
 /** Searches destinations in the explicitly enabled demonstration model. */
 @Service
-@Profile("demo & !postgres")
+@Profile({"demo & !postgres", "postgres & local"})
 public final class DemoDestinationQueryServiceImpl implements DestinationQueryService {
   private final NavigableModelRepository repository;
   public DemoDestinationQueryServiceImpl(NavigableModelRepository repository) { this.repository=Objects.requireNonNull(repository); }

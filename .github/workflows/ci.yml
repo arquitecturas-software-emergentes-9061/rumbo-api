@@ -11,7 +11,7 @@ jobs:
       contents: read
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17-alpine
         env:
           POSTGRES_DB: rumbo_test
           POSTGRES_USER: rumbo_test

@@ -93,7 +93,7 @@ The TS-12 calculator reads only the current published graph through the `navigat
 
 - `siteId`, `from` and `to` are required UUIDs. `accessibleOnly` is optional and defaults to `false`.
 - Both nodes must belong to the current published version of the site. Calculation uses persisted graph weights, connection accessibility and vertical connection penalties. It cannot include nonexistent links; obstacle crossing is not yet checked.
-- `200 OK`: `siteId`, `modelVersionId`, `totalDistanceMeters`, `totalCost`, ordered `nodes[]` and ordered `links[]`. Each node identifies its floor, node and coordinates; each link identifies its endpoints, type, physical distance, persisted weight, vertical penalty and accessibility. `totalCost` sums applied weights and penalties and can differ from physical distance.
+- `200 OK`: `siteId`, `modelVersionId`, `totalDistanceMeters`, `totalCost`, ordered `nodes[]`, ordered `links[]`, and `verticalSections[]`. Each node identifies its floor, node and coordinates; each link identifies its endpoints, type, physical distance, persisted weight, vertical penalty and accessibility. Each vertical section identifies a cross-floor link, its position in `links[]` (`linkIndex`), both floors and the applied cost. A same-floor route has `verticalSections: []`. `totalCost` sums applied weights and penalties and can differ from physical distance.
 - `400 Bad Request`: invalid parameters, or existing nodes from different sites or outside `{siteId}`.
 - `404 Not Found`: a node or published model is missing, or no compatible route exists. Never return a partial route.
 - `422 Unprocessable Entity`: a published model exists but its data is invalid for route calculation. Publication should prevent this state; this response is defensive.
@@ -107,18 +107,21 @@ Example `200` response:
   "siteId": "00000000-0000-4000-8000-000000000001",
   "modelVersionId": "00000000-0000-4000-8000-000000000002",
   "totalDistanceMeters": 5.0,
-  "totalCost": 7.0,
+  "totalCost": 10.0,
   "nodes": [
     {"nodeId": "00000000-0000-4000-8000-000000000010", "floorId": "00000000-0000-4000-8000-000000000020", "planVersionId": "00000000-0000-4000-8000-000000000030", "x": 1.0, "y": 2.0, "role": "ACCESS"},
-    {"nodeId": "00000000-0000-4000-8000-000000000011", "floorId": "00000000-0000-4000-8000-000000000020", "planVersionId": "00000000-0000-4000-8000-000000000030", "x": 2.0, "y": 2.0, "role": "DESTINATION"}
+    {"nodeId": "00000000-0000-4000-8000-000000000011", "floorId": "00000000-0000-4000-8000-000000000021", "planVersionId": "00000000-0000-4000-8000-000000000031", "x": 2.0, "y": 2.0, "role": "DESTINATION"}
   ],
   "links": [
-    {"linkId": "00000000-0000-4000-8000-000000000040", "fromNodeId": "00000000-0000-4000-8000-000000000010", "toNodeId": "00000000-0000-4000-8000-000000000011", "type": "CORRIDOR", "distanceMeters": 5.0, "weight": 7.0, "verticalPenalty": 0.0, "accessibility": "ACCESSIBLE"}
+    {"linkId": "00000000-0000-4000-8000-000000000040", "fromNodeId": "00000000-0000-4000-8000-000000000010", "toNodeId": "00000000-0000-4000-8000-000000000011", "type": "ELEVATOR", "distanceMeters": 5.0, "weight": 7.0, "verticalPenalty": 3.0, "accessibility": "ACCESSIBLE"}
+  ],
+  "verticalSections": [
+    {"linkIndex": 0, "linkId": "00000000-0000-4000-8000-000000000040", "fromNodeId": "00000000-0000-4000-8000-000000000010", "toNodeId": "00000000-0000-4000-8000-000000000011", "fromFloorId": "00000000-0000-4000-8000-000000000020", "toFloorId": "00000000-0000-4000-8000-000000000021", "type": "ELEVATOR", "distanceMeters": 5.0, "cost": 10.0}
   ]
 }
 ```
 
-The endpoint requires the `postgres` profile and `RUMBO_NAVIGATION_ROUTES_ENABLED=true`; it is **disabled by default** until IAM site authorization and obstacle validation exist. The Sprint Backlog shows a global `/api/v1/routes?from&to`; ADR 001 deliberately scopes the resource under `sites/{siteId}` because the current backend has no authenticated site context. TS-13's `<200 ms` acceptance target was checked locally with a two-node published graph, 30 warmed MockMvc requests and a measured p95 of 7 ms. This small test is not a general performance guarantee. Authentication and site authorization responses will be specified with IAM before real data is exposed.
+The endpoint requires the `postgres` profile and `RUMBO_NAVIGATION_ROUTES_ENABLED=true`; it is **disabled by default** until IAM site authorization and obstacle validation exist. The Sprint Backlog shows a global `/api/v1/routes?from&to`; the team accepted the site-scoped path in ADR 001 because the current backend has no authenticated site context. The TS-13 latency test uses a published synthetic grid of 300 nodes and 565 links, 10 warm-ups and 30 timed MockMvc requests through PostgreSQL 16. In the local `clean verify` run of 2026-11-04, p95 was 16 ms and the maximum was 17 ms. MockMvc includes controller, application, JPA, database and serialization but omits network transit. This fixture and local measurement are not a guarantee for every clinic map or deployment. Authentication and site authorization responses will be specified with IAM before real data is exposed.
 
 ### Current provisional endpoint
 

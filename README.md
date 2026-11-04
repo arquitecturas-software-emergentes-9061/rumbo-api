@@ -52,7 +52,8 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
   con filtro de accesibilidad y exclusión de aristas que cruzan paredes.
 - `POST /api/v1/navigations/route` sigue como endpoint provisional sobre datos `demo`.
   `GET /api/v1/sites/{siteId}/routes?from={nodeId}&to={nodeId}` consulta la versión
-  publicada con A* cuando se habilita expresamente en el perfil `postgres`.
+  publicada con A* cuando se habilita expresamente en el perfil `postgres`. La respuesta
+  ordena nodos y enlaces e identifica los tramos entre pisos en `verticalSections[]`.
 - Contratos REST y Spring MockMvc; dominio sin dependencias Spring.
 - Datos de ejemplo disponibles **solo con perfil `demo`**. La publicación de `planning`
   requiere PostgreSQL y permanece desactivada hasta habilitarla para pruebas controladas.

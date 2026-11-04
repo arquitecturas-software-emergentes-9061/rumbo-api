@@ -6,6 +6,12 @@ import java.util.UUID;
 
 /** Persistence boundary for draft indoor maps, independent of JPA and SQL. */
 public interface IndoorMapRepository {
+  /** Serializes lifecycle changes for an existing map of the requested site. */
+  boolean lockMapForUpdate(UUID siteId, UUID mapId);
+
+  /** Checks for an editable version while the owning map is locked. */
+  boolean hasDraft(UUID mapId);
+
   /** Saves the complete draft version as one unit. */
   void saveDraft(IndoorMap map);
 

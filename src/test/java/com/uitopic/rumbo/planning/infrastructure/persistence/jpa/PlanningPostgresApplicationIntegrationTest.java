@@ -6,7 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
 import com.uitopic.rumbo.planning.interfaces.rest.IndoorMapsController;
 import com.uitopic.rumbo.planning.interfaces.rest.IndoorMapGraphController;
-import com.uitopic.rumbo.navigation.interfaces.DirectoryController;
+import com.uitopic.rumbo.navigation.interfaces.rest.DirectoryController;
+import com.uitopic.rumbo.navigation.interfaces.rest.PublishedRoutesController;
 import org.springframework.context.ApplicationContext;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.junit.jupiter.api.Test;
@@ -17,8 +18,13 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-/** Ensures the PostgreSQL profile boots with Planning persistence enabled. */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+/** Ensures PostgreSQL persistence boots and feature flags can hide controlled APIs. */
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE, properties = {
+    "rumbo.planning.editing.enabled=false",
+    "rumbo.planning.publication.enabled=false",
+    "rumbo.navigation.directory.enabled=false",
+    "rumbo.navigation.routes.enabled=false"
+})
 @ActiveProfiles("postgres")
 @EnabledIfEnvironmentVariable(named = "RUMBO_TEST_DB_URL", matches = ".+")
 class PlanningPostgresApplicationIntegrationTest {
@@ -38,12 +44,14 @@ class PlanningPostgresApplicationIntegrationTest {
   }
 
   @Test
-  void publicationEndpointRequiresExplicitEnablement() {
+  void featureFlagsCanDisableHttpEndpoints() {
     assertThrows(NoSuchBeanDefinitionException.class,
         () -> context.getBean(IndoorMapsController.class));
     assertThrows(NoSuchBeanDefinitionException.class,
         () -> context.getBean(IndoorMapGraphController.class));
     assertThrows(NoSuchBeanDefinitionException.class,
         () -> context.getBean(DirectoryController.class));
+    assertThrows(NoSuchBeanDefinitionException.class,
+        () -> context.getBean(PublishedRoutesController.class));
   }
 }

@@ -9,6 +9,24 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: rumbo_test
+          POSTGRES_USER: rumbo_test
+          POSTGRES_PASSWORD: rumbo_test_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rumbo_test -d rumbo_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      RUMBO_TEST_DB_URL: jdbc:postgresql://localhost:5432/rumbo_test
+      RUMBO_TEST_DB_USER: rumbo_test
+      RUMBO_TEST_DB_PASSWORD: rumbo_test_only
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4

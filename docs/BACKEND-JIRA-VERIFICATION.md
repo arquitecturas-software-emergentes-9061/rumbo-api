@@ -1,10 +1,11 @@
 # Backend deliverables owned by Jahaziel — Jira PR project
 
-This is the integration checkpoint for the eight assigned subtasks.
-The implementation is split across PR #6–#11 and the integration PR #12.
-Source branch: `feature/integration-planning-spatial-core`, started at
-`develop`, preserving the other contributor's
-`feature/planning-coordinate-system` as an unchanged source of code.
+This file records evidence for the eight subtasks assigned to Jahaziel on
+`develop`. The local integration with Gabriela's `feature/planning-coordinate-system`
+keeps the Planning and Navigation implementations from Gabriela where her work items
+overlap, while retaining the separate IAM, Positioning, Analytics, calibration, and
+SVG functionality from `develop`. Historical PR numbers below identify the source
+work; the merged code must be verified again as a whole.
 
 | Jira | Evidence in code | Test |
 |---|---|---|
@@ -14,21 +15,21 @@ Source branch: `feature/integration-planning-spatial-core`, started at
 | PR-159 | Room/corridor/service labels and editable categories | `SvgRoomTopologyProposalServiceTest` |
 | PR-192 | `BeaconInventoryService` query by floor and spatial coordinates | `BeaconControllerIntegrationTest` |
 | PR-194 | Duplicate checks, invalid-floor/outside-plan rejection and authorization | `BeaconControllerIntegrationTest` |
-| PR-224 | Weighted multi-floor A* on published Planning graph; unreachable and directed paths | `AStarRouteCalculationDomainServiceTest`, `PublishedRouteControllerIntegrationTest` |
-| PR-229 | Actual GET published route with generated OpenAPI parameters and sample response | `PublishedRouteControllerIntegrationTest` |
+| PR-224 | Weighted multi-floor A* on published Planning graph; unreachable and directed paths | Gabriela's `AStarRouteCalculationDomainServiceTest`, `PublishedRoutesControllerIntegrationTest` |
+| PR-229 | Actual GET published route with generated OpenAPI parameters and sample response | Gabriela's `PublishedRoutesControllerIntegrationTest`; `NavigationOpenApiContractTest` covers the demo POST |
 
 ## Known limitations outside these backend tickets
 
 - The SVG topology parser requires vector sources with meaningful annotations
   for conservative door links. Unannotated raster extraction is not implemented.
-- The Planning published graph has no verified `accessible` or obstacle metadata.
-  Accessible-only queries are explicitly rejected (422); no false assurance.
+- The Planning graph has declared accessibility states but no verified obstacle
+  clearance. `accessibleOnly` uses only explicitly accessible links.
 - Real site/clinic authorization currently follows IAM account ownership and is not
   a multi-admin organization membership model.
 - The map-generation workflow requires a frontend editor review before data is
   transformed from SVG proposal to Planning draft.
 
 Never mark unexercised acceptance criteria as validated simply because a PR was merged.
-Tests from the original Planning branch guarded by external RUMBO_TEST_DB_URL remain
-skipped in CI; separate Testcontainers tests exercise the published route,
-scale and beacon integration.
+The original Planning branch's PostgreSQL tests require `RUMBO_TEST_DB_URL`; they
+must run against an isolated database before integration is considered verified.
+Testcontainers tests separately exercise IAM, scale, beacon, and analytics flows.

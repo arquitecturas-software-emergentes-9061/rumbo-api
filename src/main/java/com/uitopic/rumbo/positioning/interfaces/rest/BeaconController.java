@@ -3,7 +3,7 @@ package com.uitopic.rumbo.positioning.interfaces.rest;
 import com.uitopic.rumbo.iam.interfaces.security.AuthenticatedPrincipal;
 import com.uitopic.rumbo.positioning.application.BeaconInventoryService;
 import com.uitopic.rumbo.positioning.domain.Beacon;
-import com.uitopic.rumbo.shared.interfaces.rest.openapi.OpenApiConfiguration;
+import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configuration.OpenApiConfiguration;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;

@@ -13,7 +13,7 @@ import com.uitopic.rumbo.iam.interfaces.rest.resources.SessionResponse;
 import com.uitopic.rumbo.iam.interfaces.rest.resources.UserAccountResponse;
 import com.uitopic.rumbo.iam.interfaces.rest.transform.IamResourceAssembler;
 import com.uitopic.rumbo.iam.interfaces.security.AuthenticatedPrincipal;
-import com.uitopic.rumbo.shared.interfaces.rest.openapi.OpenApiConfiguration;
+import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configuration.OpenApiConfiguration;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;

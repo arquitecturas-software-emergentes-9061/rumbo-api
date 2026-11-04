@@ -4,7 +4,7 @@ import com.uitopic.rumbo.iam.interfaces.security.AuthenticatedPrincipal;
 import com.uitopic.rumbo.planning.calibration.application.ScaleReferenceService;
 import com.uitopic.rumbo.planning.calibration.domain.ScaleReference;
 import com.uitopic.rumbo.shared.interfaces.rest.ProblemDetails;
-import com.uitopic.rumbo.shared.interfaces.rest.openapi.OpenApiConfiguration;
+import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configuration.OpenApiConfiguration;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;

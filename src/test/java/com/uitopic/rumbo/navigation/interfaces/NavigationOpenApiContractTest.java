@@ -29,7 +29,7 @@ class NavigationOpenApiContractTest {
     JsonNode api = mapper.readTree(response);
     JsonNode route = api.at("/paths/~1api~1v1~1navigations~1route/post");
     assertFalse(route.isMissingNode(), "Documented route must exist");
-    assertTrue(route.at("/requestBody/content/application~1json/examples").isObject());
+    assertTrue(route.at("/requestBody/content/application~1json/examples").isObject(), route.toPrettyString());
     assertTrue(route.at("/responses/200/content/application~1json/examples").isObject());
     assertFalse(route.at("/responses/422").isMissingNode());
     assertFalse(route.at("/responses/400").isMissingNode());

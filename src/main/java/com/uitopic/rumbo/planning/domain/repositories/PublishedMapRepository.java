@@ -12,4 +12,7 @@ public interface PublishedMapRepository {
 
   /** Searches indexed entries belonging to a site's current published version. */
   List<PublishedMapSnapshot.Destination> searchDestinations(UUID siteId, String term);
+
+  /** Distinguishes a published node of another site from an unknown node. */
+  boolean existsCurrentNodeOutsideSite(UUID nodeId, UUID siteId);
 }

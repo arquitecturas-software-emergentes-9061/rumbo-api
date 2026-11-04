@@ -13,6 +13,9 @@ public interface PlanningPublishedMapFacade {
   /** Finds medical entries in the current published version of one site. */
   List<DestinationData> searchCurrentDestinations(UUID siteId, String term);
 
+  /** Reports whether an unavailable node belongs to another currently published site. */
+  boolean existsCurrentNodeOutsideSite(UUID nodeId, UUID siteId);
+
   /** Spatial data exported without Planning aggregates or persistence entities. */
   record PublishedMapData(UUID siteId, UUID mapId, UUID modelVersionId,
                           List<PlanData> plans, List<NodeData> nodes,
@@ -39,7 +42,16 @@ public interface PlanningPublishedMapFacade {
   /** Weighted published connection with independent physical distance. */
   record ConnectionData(UUID id, UUID sourceNodeId, UUID targetNodeId,
                         String kind, double distanceMeters, double weight,
-                        double verticalPenalty, boolean bidirectional) {}
+                        double verticalPenalty, String accessibility,
+                        boolean bidirectional) {
+    /** Preserves callers without a mobility classification. */
+    public ConnectionData(UUID id, UUID sourceNodeId, UUID targetNodeId,
+                          String kind, double distanceMeters, double weight,
+                          double verticalPenalty, boolean bidirectional) {
+      this(id, sourceNodeId, targetNodeId, kind, distanceMeters, weight,
+          verticalPenalty, "UNKNOWN", bidirectional);
+    }
+  }
 
   /** Versioned medical entry exported without Planning entities. */
   record DestinationData(UUID id, UUID modelVersionId, UUID nodeId, UUID floorId,

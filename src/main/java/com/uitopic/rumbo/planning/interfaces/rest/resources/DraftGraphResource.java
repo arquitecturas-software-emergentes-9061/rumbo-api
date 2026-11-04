@@ -2,6 +2,7 @@ package com.uitopic.rumbo.planning.interfaces.rest.resources;
 
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapVersionStatus;
@@ -32,7 +33,7 @@ public record DraftGraphResource(UUID siteId, UUID mapId, UUID modelVersionId,
         map.connections().stream().map(connection -> new ConnectionResource(connection.id(),
             connection.sourceNodeId(), connection.targetNodeId(), connection.type(),
             connection.distanceMeters(), connection.weight(), connection.verticalPenalty(),
-            connection.bidirectional())).toList(),
+            connection.accessibility(), connection.bidirectional())).toList(),
         map.destinations().stream().map(destination -> new DestinationResource(destination.id(),
             destination.nodeId(), destination.type(), destination.name(),
             destination.specialty())).toList());
@@ -50,6 +51,7 @@ public record DraftGraphResource(UUID siteId, UUID mapId, UUID modelVersionId,
   public record ConnectionResource(UUID id, UUID sourceNodeId, UUID targetNodeId,
                                    ConnectionType type, double distanceMeters,
                                    double weight, double verticalPenalty,
+                                   ConnectionAccessibility accessibility,
                                    boolean bidirectional) {}
 
   /** Editable medical entry and its destination node reference. */

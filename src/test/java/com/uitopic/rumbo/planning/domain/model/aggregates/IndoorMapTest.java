@@ -8,6 +8,7 @@ import com.uitopic.rumbo.planning.domain.exceptions.MapPublicationRejectedExcept
 import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
 import com.uitopic.rumbo.planning.domain.model.entities.MapNode;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.*;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +24,42 @@ class IndoorMapTest {
   void registerPlan() {
     map.addPlan(space);
     map.setScale(new MapScale(floorId, planVersionId, 0.25));
+  }
+
+  @Test
+  void copiesPublishedGraphIntoAnIndependentDraftVersion() {
+    UUID accessId = UUID.randomUUID();
+    UUID destinationId = UUID.randomUUID();
+    UUID connectionId = UUID.randomUUID();
+    UUID entryId = UUID.randomUUID();
+    PublishedMapSnapshot source = new PublishedMapSnapshot(map.siteId(), map.id(), versionId,
+        List.of(new PublishedMapSnapshot.Plan(floorId, planVersionId, 100, 100, 0.25)),
+        List.of(new PublishedMapSnapshot.Node(accessId, floorId, planVersionId, 1, 1, NodeType.ACCESS),
+            new PublishedMapSnapshot.Node(destinationId, floorId, planVersionId, 2, 1,
+                NodeType.DESTINATION)),
+        List.of(new PublishedMapSnapshot.Connection(connectionId, accessId, destinationId,
+            ConnectionType.CORRIDOR, 0.25, 4, 0, ConnectionAccessibility.ACCESSIBLE, true)),
+        List.of(new PublishedMapSnapshot.Destination(entryId, versionId, destinationId,
+            floorId, DirectoryEntryType.SERVICE, "Farmacia", null)));
+    UUID nextVersionId = UUID.randomUUID();
+
+    IndoorMap draft = IndoorMap.draftFromPublished(source, nextVersionId);
+
+    assertEquals(MapVersionStatus.DRAFT, draft.status());
+    assertEquals(nextVersionId, draft.modelVersionId());
+    assertEquals(source.mapId(), draft.id());
+    assertEquals(source.siteId(), draft.siteId());
+    assertEquals(source.plans().getFirst().planVersionId(), draft.plans().getFirst().planVersionId());
+    assertEquals(0.25, draft.scales().getFirst().metersPerUnit());
+    assertEquals(accessId, draft.nodes().getFirst().id());
+    assertEquals(nextVersionId, draft.nodes().getFirst().modelVersionId());
+    assertEquals(ConnectionAccessibility.ACCESSIBLE, draft.connections().getFirst().accessibility());
+    assertEquals(nextVersionId, draft.connections().getFirst().modelVersionId());
+    assertEquals(entryId, draft.destinations().getFirst().id());
+    assertEquals(nextVersionId, draft.destinations().getFirst().modelVersionId());
+    assertTrue(draft.validateForPublication().isValid());
+    assertThrows(IllegalArgumentException.class,
+        () -> IndoorMap.draftFromPublished(source, versionId));
   }
 
   @Test

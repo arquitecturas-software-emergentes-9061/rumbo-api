@@ -17,6 +17,7 @@ public final class ProblemDetails {
     ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
     problem.setTitle(status.getReasonPhrase());
     problem.setProperty("code", code);
+    problem.setProperty("message", detail);
     problem.setProperty("timestamp", Instant.now());
     return problem;
   }

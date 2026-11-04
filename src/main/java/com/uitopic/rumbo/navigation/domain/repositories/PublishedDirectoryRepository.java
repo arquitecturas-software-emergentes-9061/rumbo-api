@@ -1,6 +1,6 @@
 package com.uitopic.rumbo.navigation.domain.repositories;
 
-import com.uitopic.rumbo.navigation.domain.DirectoryEntry;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.DirectoryEntry;
 import java.util.List;
 import java.util.UUID;
 

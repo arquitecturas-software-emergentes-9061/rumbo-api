@@ -4,8 +4,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
+import com.uitopic.rumbo.shared.infrastructure.security.SiteOwnerGuard;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
 import com.uitopic.rumbo.planning.domain.model.entities.MapNode;
@@ -16,6 +19,7 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.SpatialCoordinate;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -25,12 +29,15 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /** HTTP and PostgreSQL checks for atomic map publication. */
 @SpringBootTest(properties = "rumbo.planning.publication.enabled=true")
 @AutoConfigureMockMvc
 @ActiveProfiles("postgres")
 @EnabledIfEnvironmentVariable(named = "RUMBO_TEST_DB_URL", matches = ".+")
+@WithMockUser(roles = "CLINIC_ADMIN")
 class IndoorMapsControllerIntegrationTest {
   @DynamicPropertySource
   static void databaseProperties(DynamicPropertyRegistry properties) {
@@ -42,6 +49,11 @@ class IndoorMapsControllerIntegrationTest {
   @Autowired MockMvc mvc;
   @Autowired IndoorMapRepository store;
   @Autowired JdbcTemplate jdbc;
+  @MockitoBean SiteOwnerGuard siteOwnerGuard;
+
+  @BeforeEach void allowFixtureSites() {
+    when(siteOwnerGuard.isOwner(any(), any())).thenReturn(true);
+  }
 
   @Test
   void publishesValidVersionArchivesPreviousAndRejectsRepeat() throws Exception {

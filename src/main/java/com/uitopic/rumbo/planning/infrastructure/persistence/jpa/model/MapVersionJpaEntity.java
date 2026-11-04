@@ -23,17 +23,30 @@ public class MapVersionJpaEntity {
   @Enumerated(EnumType.STRING)
   private MapVersionStatus status;
 
+  @Column(name = "edit_revision", nullable = false)
+  private long editRevision;
+
   protected MapVersionJpaEntity() {}
 
   public MapVersionJpaEntity(UUID id, UUID mapId, MapVersionStatus status) {
+    this(id, mapId, status, 0);
+  }
+
+  public MapVersionJpaEntity(UUID id, UUID mapId, MapVersionStatus status,
+                             long editRevision) {
     this.id = id;
     this.mapId = mapId;
     this.status = status;
+    this.editRevision = editRevision;
   }
 
   public UUID id() { return id; }
   public UUID mapId() { return mapId; }
   public MapVersionStatus status() { return status; }
+  public long editRevision() { return editRevision; }
+
+  /** Records a complete draft replacement under the version-row lock. */
+  public void advanceEditRevision() { editRevision = Math.addExact(editRevision, 1); }
 
   /** Updates stored state after the domain has approved the transition. */
   public void changeStatus(MapVersionStatus status) { this.status = status; }

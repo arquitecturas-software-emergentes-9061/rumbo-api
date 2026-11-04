@@ -17,7 +17,10 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapVersionStatus;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.SpatialCoordinate;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.PublishedMapSnapshot;
+import com.uitopic.rumbo.shared.domain.model.aggregates.AbstractDomainAggregateRoot;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,10 +39,11 @@ import java.util.UUID;
  * It controls draft edits and the transition to an immutable published graph;
  * persistence and version history are coordinated outside the domain.
  */
-public final class IndoorMap {
+public final class IndoorMap extends AbstractDomainAggregateRoot<UUID> {
   private final UUID id;
   private final UUID siteId;
   private final MapVersion version;
+  private long editRevision;
   private final Map<UUID, PlanCoordinateSpace> plans = new LinkedHashMap<>();
   private final Map<UUID, MapScale> scales = new LinkedHashMap<>();
   private final Map<UUID, MapNode> nodes = new LinkedHashMap<>();
@@ -48,15 +52,64 @@ public final class IndoorMap {
 
   /** Starts an empty draft graph for one site and model version. */
   public IndoorMap(UUID id, UUID siteId, UUID modelVersionId) {
+    this(id, siteId, modelVersionId, 0);
+  }
+
+  /** Reconstitutes a draft at its persisted edit revision. */
+  public IndoorMap(UUID id, UUID siteId, UUID modelVersionId, long editRevision) {
     this.id = Objects.requireNonNull(id, "id is required");
     this.siteId = Objects.requireNonNull(siteId, "siteId is required");
     this.version = new MapVersion(modelVersionId, MapVersionStatus.DRAFT);
+    if (editRevision < 0) throw new IllegalArgumentException("editRevision must be nonnegative");
+    this.editRevision = editRevision;
   }
 
-  public UUID id() { return id; }
+  /**
+   * Creates an independent draft from a published graph while retaining stable element IDs.
+   * Every copied element is rebound to the new model version and checked by this aggregate.
+   */
+  public static IndoorMap draftFromPublished(PublishedMapSnapshot source, UUID newVersionId) {
+    Objects.requireNonNull(source, "source is required");
+    Objects.requireNonNull(newVersionId, "newVersionId is required");
+    if (newVersionId.equals(source.modelVersionId())) {
+      throw new IllegalArgumentException("New draft needs a different model version ID");
+    }
+    IndoorMap draft = new IndoorMap(source.mapId(), source.siteId(), newVersionId);
+    for (PublishedMapSnapshot.Plan plan : source.plans()) {
+      draft.addPlan(new PlanCoordinateSpace(plan.floorId(), plan.planVersionId(),
+          plan.widthUnits(), plan.heightUnits()));
+      draft.setScale(new MapScale(plan.floorId(), plan.planVersionId(), plan.metersPerUnit()));
+    }
+    for (PublishedMapSnapshot.Node node : source.nodes()) {
+      draft.addNode(node.id(), node.floorId(), node.planVersionId(),
+          node.x(), node.y(), node.type());
+    }
+    for (PublishedMapSnapshot.Connection connection : source.connections()) {
+      draft.addConnection(connection.id(), connection.sourceNodeId(),
+          connection.targetNodeId(), connection.type(), connection.distanceMeters(),
+          connection.weight(), connection.verticalPenalty(), connection.accessibility(),
+          connection.bidirectional());
+    }
+    for (PublishedMapSnapshot.Destination destination : source.destinations()) {
+      draft.addDestination(destination.id(), destination.nodeId(), destination.type(),
+          destination.name(), destination.specialty());
+    }
+    GraphValidationResult validation = draft.validateForPublication();
+    if (!validation.isValid()) throw new MapPublicationRejectedException(validation);
+    return draft;
+  }
+
+  @Override public UUID id() { return id; }
   public UUID siteId() { return siteId; }
   public UUID modelVersionId() { return version.id(); }
   public MapVersionStatus status() { return version.status(); }
+  public long editRevision() { return editRevision; }
+
+  /** Advances the draft revision after its previous value has been checked for a save. */
+  public void advanceEditRevision() {
+    requireDraft();
+    editRevision = Math.addExact(editRevision, 1);
+  }
 
   /** Read-only snapshot of the plan coordinate spaces used by this draft. */
   public List<PlanCoordinateSpace> plans() { return List.copyOf(plans.values()); }
@@ -225,18 +278,28 @@ public final class IndoorMap {
   /** Adds a weighted editor connection, reporting invalid metrics at its ID. */
   public void addConnection(UUID connectionId, UUID sourceNodeId, UUID targetNodeId,
                             ConnectionType type, double distanceMeters, double weight,
-                            double verticalPenalty, boolean bidirectional) {
+                            double verticalPenalty, ConnectionAccessibility accessibility,
+                            boolean bidirectional) {
     requireDraft();
     MapConnection connection;
     try {
       connection = new MapConnection(connectionId, modelVersionId(), sourceNodeId,
-          targetNodeId, type, distanceMeters, weight, verticalPenalty, bidirectional);
+          targetNodeId, type, distanceMeters, weight, verticalPenalty, accessibility,
+          bidirectional);
     } catch (IllegalArgumentException | NullPointerException error) {
       reject(GraphIssueCode.INVALID_CONNECTION_DATA, GraphElementType.CONNECTION, connectionId,
           "Connection endpoints, type, distance, or weight are invalid");
       return;
     }
     addConnection(connection);
+  }
+
+  /** Adds a connection whose accessibility has not yet been classified. */
+  public void addConnection(UUID connectionId, UUID sourceNodeId, UUID targetNodeId,
+                            ConnectionType type, double distanceMeters, double weight,
+                            double verticalPenalty, boolean bidirectional) {
+    addConnection(connectionId, sourceNodeId, targetNodeId, type, distanceMeters, weight,
+        verticalPenalty, ConnectionAccessibility.UNKNOWN, bidirectional);
   }
 
   /** Adds a legacy editor connection with no separate vertical penalty. */

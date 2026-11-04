@@ -9,7 +9,7 @@ import com.uitopic.rumbo.analytics.domain.model.valueobjects.NavigationMetrics;
 import com.uitopic.rumbo.analytics.interfaces.rest.resources.NavigationSummaryResponse;
 import com.uitopic.rumbo.analytics.interfaces.rest.resources.NavigationSummaryResponse.DestinationUsageResponse;
 import com.uitopic.rumbo.analytics.interfaces.rest.resources.RecordNavigationEventsRequest;
-import com.uitopic.rumbo.shared.interfaces.rest.openapi.OpenApiConfiguration;
+import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configuration.OpenApiConfiguration;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;

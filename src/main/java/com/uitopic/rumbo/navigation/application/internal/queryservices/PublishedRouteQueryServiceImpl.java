@@ -1,13 +1,19 @@
 package com.uitopic.rumbo.navigation.application.internal.queryservices;
 
-import com.uitopic.rumbo.navigation.domain.AStarRouteCalculationDomainService;
-import com.uitopic.rumbo.navigation.domain.CalculatedRoute;
-import com.uitopic.rumbo.navigation.domain.PublishedSpatialGraphRepository;
+import com.uitopic.rumbo.navigation.domain.services.AStarRouteCalculationDomainService;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.CalculatedRoute;
+import com.uitopic.rumbo.navigation.domain.repositories.PublishedSpatialGraphRepository;
 import com.uitopic.rumbo.navigation.domain.services.PublishedRouteQueryService;
+import com.uitopic.rumbo.navigation.domain.exceptions.InvalidPublishedGraphException;
+import com.uitopic.rumbo.navigation.domain.exceptions.RouteNodeOutsideSiteException;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.PublishedSpatialGraph;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /** Resolves one published graph before asking the domain calculator for a path. */
 @Service
@@ -23,8 +29,35 @@ public class PublishedRouteQueryServiceImpl implements PublishedRouteQueryServic
   }
 
   @Override
-  public Optional<CalculatedRoute> calculate(UUID siteId, UUID fromNodeId, UUID toNodeId) {
-    return graphs.findCurrentBySite(siteId)
-        .flatMap(graph -> calculator.calculate(graph, fromNodeId, toNodeId));
+  @Transactional(readOnly = true)
+  public Optional<CalculatedRoute> calculate(UUID siteId, UUID fromNodeId, UUID toNodeId,
+                                             boolean accessibleOnly) {
+    PublishedSpatialGraph graph;
+    try {
+      graph = graphs.findCurrentBySite(siteId).orElse(null);
+    } catch (IllegalArgumentException | IllegalStateException error) {
+      throw new InvalidPublishedGraphException(error);
+    }
+    if (graph == null) return Optional.empty();
+    if (!graph.siteId().equals(siteId)) {
+      throw new InvalidPublishedGraphException(
+          new IllegalArgumentException("Published graph belongs to another site"));
+    }
+    Set<UUID> nodeIds = graph.nodes().stream()
+        .map(PublishedSpatialGraph.Node::id).collect(Collectors.toSet());
+    if (!nodeIds.contains(fromNodeId) || !nodeIds.contains(toNodeId)) {
+      if ((!nodeIds.contains(fromNodeId)
+          && graphs.existsCurrentNodeOutsideSite(fromNodeId, siteId))
+          || (!nodeIds.contains(toNodeId)
+          && graphs.existsCurrentNodeOutsideSite(toNodeId, siteId))) {
+        throw new RouteNodeOutsideSiteException();
+      }
+      return Optional.empty();
+    }
+    try {
+      return calculator.calculate(graph, fromNodeId, toNodeId, accessibleOnly);
+    } catch (IllegalArgumentException | IllegalStateException error) {
+      throw new InvalidPublishedGraphException(error);
+    }
   }
 }

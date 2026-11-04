@@ -30,7 +30,15 @@ public record PublishedMapSnapshot(UUID siteId, UUID mapId, UUID modelVersionId,
   public record Connection(UUID id, UUID sourceNodeId, UUID targetNodeId,
                            ConnectionType type, double distanceMeters,
                            double weight, double verticalPenalty,
-                           boolean bidirectional) {}
+                           ConnectionAccessibility accessibility, boolean bidirectional) {
+    /** Preserves older callers without a mobility classification. */
+    public Connection(UUID id, UUID sourceNodeId, UUID targetNodeId,
+                      ConnectionType type, double distanceMeters, double weight,
+                      double verticalPenalty, boolean bidirectional) {
+      this(id, sourceNodeId, targetNodeId, type, distanceMeters, weight,
+          verticalPenalty, ConnectionAccessibility.UNKNOWN, bidirectional);
+    }
+  }
 
   /** Medical entry attached to a node in this published version. */
   public record Destination(UUID id, UUID modelVersionId, UUID nodeId, UUID floorId,

@@ -1,7 +1,7 @@
 package com.uitopic.rumbo.planning.interpreter;
 
 import com.uitopic.rumbo.shared.interfaces.rest.ProblemDetails;
-import com.uitopic.rumbo.shared.interfaces.rest.openapi.OpenApiConfiguration;
+import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configuration.OpenApiConfiguration;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;

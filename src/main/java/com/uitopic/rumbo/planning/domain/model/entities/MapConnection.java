@@ -1,6 +1,7 @@
 package com.uitopic.rumbo.planning.domain.model.entities;
 
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -19,17 +20,20 @@ public final class MapConnection {
   private final double distanceMeters;
   private final double weight;
   private final double verticalPenalty;
+  private final ConnectionAccessibility accessibility;
   private final boolean bidirectional;
 
   /** Creates one connection with separate physical distance and routing weight. */
   public MapConnection(UUID id, UUID modelVersionId, UUID sourceNodeId, UUID targetNodeId,
                        ConnectionType type, double distanceMeters, double weight,
-                       double verticalPenalty, boolean bidirectional) {
+                       double verticalPenalty, ConnectionAccessibility accessibility,
+                       boolean bidirectional) {
     this.id = Objects.requireNonNull(id, "id is required");
     this.modelVersionId = Objects.requireNonNull(modelVersionId, "modelVersionId is required");
     this.sourceNodeId = Objects.requireNonNull(sourceNodeId, "sourceNodeId is required");
     this.targetNodeId = Objects.requireNonNull(targetNodeId, "targetNodeId is required");
     this.type = Objects.requireNonNull(type, "type is required");
+    this.accessibility = Objects.requireNonNull(accessibility, "accessibility is required");
     if (sourceNodeId.equals(targetNodeId)) {
       throw new IllegalArgumentException("Connection endpoints must differ");
     }
@@ -43,6 +47,14 @@ public final class MapConnection {
     this.weight = weight;
     this.verticalPenalty = verticalPenalty;
     this.bidirectional = bidirectional;
+  }
+
+  /** Preserves callers that have not classified mobility yet. */
+  public MapConnection(UUID id, UUID modelVersionId, UUID sourceNodeId, UUID targetNodeId,
+                       ConnectionType type, double distanceMeters, double weight,
+                       double verticalPenalty, boolean bidirectional) {
+    this(id, modelVersionId, sourceNodeId, targetNodeId, type, distanceMeters, weight,
+        verticalPenalty, ConnectionAccessibility.UNKNOWN, bidirectional);
   }
 
   /** Creates a legacy link without a separate vertical penalty. */
@@ -61,6 +73,7 @@ public final class MapConnection {
   public double distanceMeters() { return distanceMeters; }
   public double weight() { return weight; }
   public double verticalPenalty() { return verticalPenalty; }
+  public ConnectionAccessibility accessibility() { return accessibility; }
   public boolean bidirectional() { return bidirectional; }
 
   @Override

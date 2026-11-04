@@ -14,6 +14,11 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        # Telemetry arrives in batches (TS-30): send the inserts together instead of one round trip each.
+        jdbc.batch_size: 50
+        order_inserts: true
   flyway:
     locations: classpath:db/migration
   data:
@@ -30,6 +35,9 @@ spring:
     problemdetails:
       enabled: true
 rumbo:
+  analytics:
+    # Dashboard summaries; events of a site invalidate its entries at once, this only bounds stale reads.
+    metrics-cache-ttl: 5m
   planning:
     editing:
       enabled: ${RUMBO_PLANNING_EDITING_ENABLED:false}

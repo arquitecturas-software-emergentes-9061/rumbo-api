@@ -1,6 +1,6 @@
 package com.uitopic.rumbo.navigation.interfaces.rest;
 
-import com.uitopic.rumbo.navigation.interfaces.rest.resources.DirectoryError;
+import com.uitopic.rumbo.navigation.interfaces.rest.resources.DirectoryErrorResource;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -13,8 +13,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 public class DirectoryExceptionHandler {
   @ExceptionHandler({IllegalArgumentException.class,
       MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
-  public ResponseEntity<DirectoryError> invalidRequest(Exception error) {
-    return ResponseEntity.badRequest().body(new DirectoryError("INVALID_REQUEST",
+  public ResponseEntity<DirectoryErrorResource> invalidRequest(Exception error) {
+    return ResponseEntity.badRequest().body(new DirectoryErrorResource("INVALID_REQUEST",
         "A valid siteId and a non-empty q of at most 150 characters are required"));
   }
 

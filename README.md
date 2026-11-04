@@ -17,6 +17,9 @@ Backend académico oficial **preparado localmente**, pendiente de publicarse en 
   Redis ya se usa para sesiones y caché de métricas; RabbitMQ sigue pendiente. Véase
   [ADR 001](docs/decisions/001-architecture-and-contract.md) y
   [ADR 002](docs/decisions/002-site-map-and-floor-ownership.md).
+- `planning` gestiona sedes, inventario BLE, referencias de escala y vistas previas
+  SVG. Sus casos de uso acceden a PostgreSQL por puertos de repositorio; IAM
+  consulta la propiedad de sede mediante una fachada pública de Planning.
 - `planning` es dueño del modelo indoor y publica versiones identificables. `navigation`
   ya lee el núcleo espacial **PUBLISHED** y busca destinos médicos persistidos mediante
   puertos propios y adaptadores ACL. Las conexiones publicadas incluyen un estado de

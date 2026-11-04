@@ -10,6 +10,6 @@ The parser:
 
 Limitations:
 - Segments are candidates, not confirmed walls. Labels are heuristic, not medical directory truth. No doorway detection, OCR of raster PNG/JPEG/PDF, layout inference, accessibility or graph topology.
-- Coordinates are SVG plan units, **not** meters; the Planning coordinate/scale BC must confirm them.
+- Coordinates are SVG plan units, **not** meters; Planning's scale reference must confirm them.
 - Clients must display candidates in the editor and explicitly review/correct nodes, walls, room categories and connectivity before any publication.
-- This module is deliberately independent of the ongoing `feature/planning-coordinate-system` branch and can later provide source suggestions for its graph editor.
+- The REST adapter calls a Planning query service; the SVG parser stays in Planning infrastructure. Reviewed candidates can be converted into draft graph edits by the client.

@@ -9,7 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
-import com.uitopic.rumbo.shared.infrastructure.security.SiteOwnerGuard;
+import com.uitopic.rumbo.iam.infrastructure.security.SiteOwnerGuard;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;

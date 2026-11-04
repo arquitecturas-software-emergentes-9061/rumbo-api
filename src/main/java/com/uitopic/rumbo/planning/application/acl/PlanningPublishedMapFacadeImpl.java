@@ -30,6 +30,11 @@ public class PlanningPublishedMapFacadeImpl implements PlanningPublishedMapFacad
         .map(this::toDestinationData).toList();
   }
 
+  @Override
+  public boolean existsCurrentNodeOutsideSite(UUID nodeId, UUID siteId) {
+    return repository.existsCurrentNodeOutsideSite(nodeId, siteId);
+  }
+
   private PublishedMapData toData(PublishedMapSnapshot source) {
     return new PublishedMapData(source.siteId(), source.mapId(), source.modelVersionId(),
         source.plans().stream().map(plan -> new PlanData(plan.floorId(),
@@ -40,7 +45,7 @@ public class PlanningPublishedMapFacadeImpl implements PlanningPublishedMapFacad
         source.connections().stream().map(link -> new ConnectionData(link.id(),
             link.sourceNodeId(), link.targetNodeId(), link.type().name(),
             link.distanceMeters(), link.weight(), link.verticalPenalty(),
-            link.bidirectional())).toList(),
+            link.accessibility().name(), link.bidirectional())).toList(),
         source.destinations().stream().map(this::toDestinationData).toList());
   }
 

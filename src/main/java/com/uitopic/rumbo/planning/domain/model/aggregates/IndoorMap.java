@@ -17,6 +17,7 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapVersionStatus;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.SpatialCoordinate;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -40,6 +41,7 @@ public final class IndoorMap {
   private final UUID id;
   private final UUID siteId;
   private final MapVersion version;
+  private long editRevision;
   private final Map<UUID, PlanCoordinateSpace> plans = new LinkedHashMap<>();
   private final Map<UUID, MapScale> scales = new LinkedHashMap<>();
   private final Map<UUID, MapNode> nodes = new LinkedHashMap<>();
@@ -48,15 +50,29 @@ public final class IndoorMap {
 
   /** Starts an empty draft graph for one site and model version. */
   public IndoorMap(UUID id, UUID siteId, UUID modelVersionId) {
+    this(id, siteId, modelVersionId, 0);
+  }
+
+  /** Reconstitutes a draft at its persisted edit revision. */
+  public IndoorMap(UUID id, UUID siteId, UUID modelVersionId, long editRevision) {
     this.id = Objects.requireNonNull(id, "id is required");
     this.siteId = Objects.requireNonNull(siteId, "siteId is required");
     this.version = new MapVersion(modelVersionId, MapVersionStatus.DRAFT);
+    if (editRevision < 0) throw new IllegalArgumentException("editRevision must be nonnegative");
+    this.editRevision = editRevision;
   }
 
   public UUID id() { return id; }
   public UUID siteId() { return siteId; }
   public UUID modelVersionId() { return version.id(); }
   public MapVersionStatus status() { return version.status(); }
+  public long editRevision() { return editRevision; }
+
+  /** Advances the draft revision after its previous value has been checked for a save. */
+  public void advanceEditRevision() {
+    requireDraft();
+    editRevision = Math.addExact(editRevision, 1);
+  }
 
   /** Read-only snapshot of the plan coordinate spaces used by this draft. */
   public List<PlanCoordinateSpace> plans() { return List.copyOf(plans.values()); }
@@ -225,18 +241,28 @@ public final class IndoorMap {
   /** Adds a weighted editor connection, reporting invalid metrics at its ID. */
   public void addConnection(UUID connectionId, UUID sourceNodeId, UUID targetNodeId,
                             ConnectionType type, double distanceMeters, double weight,
-                            double verticalPenalty, boolean bidirectional) {
+                            double verticalPenalty, ConnectionAccessibility accessibility,
+                            boolean bidirectional) {
     requireDraft();
     MapConnection connection;
     try {
       connection = new MapConnection(connectionId, modelVersionId(), sourceNodeId,
-          targetNodeId, type, distanceMeters, weight, verticalPenalty, bidirectional);
+          targetNodeId, type, distanceMeters, weight, verticalPenalty, accessibility,
+          bidirectional);
     } catch (IllegalArgumentException | NullPointerException error) {
       reject(GraphIssueCode.INVALID_CONNECTION_DATA, GraphElementType.CONNECTION, connectionId,
           "Connection endpoints, type, distance, or weight are invalid");
       return;
     }
     addConnection(connection);
+  }
+
+  /** Adds a connection whose accessibility has not yet been classified. */
+  public void addConnection(UUID connectionId, UUID sourceNodeId, UUID targetNodeId,
+                            ConnectionType type, double distanceMeters, double weight,
+                            double verticalPenalty, boolean bidirectional) {
+    addConnection(connectionId, sourceNodeId, targetNodeId, type, distanceMeters, weight,
+        verticalPenalty, ConnectionAccessibility.UNKNOWN, bidirectional);
   }
 
   /** Adds a legacy editor connection with no separate vertical penalty. */

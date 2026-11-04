@@ -2,6 +2,7 @@ package com.uitopic.rumbo.planning.interfaces.rest.resources;
 
 import com.uitopic.rumbo.planning.domain.model.commands.ReplaceDraftGraphCommand;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
 import jakarta.validation.Valid;
@@ -13,27 +14,18 @@ import java.util.UUID;
 public record GraphUpdateResource(
     @NotNull List<@NotNull @Valid NodeInputResource> nodes,
     @NotNull List<@NotNull @Valid ConnectionInputResource> connections,
-    List<@NotNull @Valid DestinationInputResource> destinations) {
-
-  public GraphUpdateResource {
-    if (destinations == null) destinations = List.of();
-  }
-
-  /** Preserves requests that replace only nodes and connections. */
-  public GraphUpdateResource(List<NodeInputResource> nodes,
-                             List<ConnectionInputResource> connections) {
-    this(nodes, connections, List.of());
-  }
+    @NotNull List<@NotNull @Valid DestinationInputResource> destinations) {
 
   /** Converts validated REST input to a Planning command. */
-  public ReplaceDraftGraphCommand toCommand(UUID siteId, UUID mapId, UUID modelVersionId) {
-    return new ReplaceDraftGraphCommand(siteId, mapId, modelVersionId,
+  public ReplaceDraftGraphCommand toCommand(UUID siteId, UUID mapId, UUID modelVersionId,
+                                            long expectedRevision) {
+    return new ReplaceDraftGraphCommand(siteId, mapId, modelVersionId, expectedRevision,
         nodes.stream().map(node -> new ReplaceDraftGraphCommand.NodeInput(
             node.id(), node.floorId(), node.planVersionId(), node.x(), node.y(), node.type())).toList(),
         connections.stream().map(connection -> new ReplaceDraftGraphCommand.ConnectionInput(
             connection.id(), connection.sourceNodeId(), connection.targetNodeId(), connection.type(),
             connection.distanceMeters(), connection.weight(), connection.verticalPenalty(),
-            connection.bidirectional())).toList(),
+            connection.accessibility(), connection.bidirectional())).toList(),
         destinations.stream().map(destination -> new ReplaceDraftGraphCommand.DestinationInput(
             destination.id(), destination.nodeId(), destination.type(),
             destination.name(), destination.specialty())).toList());
@@ -48,16 +40,27 @@ public record GraphUpdateResource(
   public record ConnectionInputResource(@NotNull UUID id, @NotNull UUID sourceNodeId,
                                         @NotNull UUID targetNodeId, @NotNull ConnectionType type,
                                         @NotNull Double distanceMeters, @NotNull Double weight,
-                                        Double verticalPenalty, @NotNull Boolean bidirectional) {
+                                        Double verticalPenalty, ConnectionAccessibility accessibility,
+                                        @NotNull Boolean bidirectional) {
     public ConnectionInputResource {
       if (verticalPenalty == null) verticalPenalty = 0.0;
+      if (accessibility == null) accessibility = ConnectionAccessibility.UNKNOWN;
+    }
+
+    /** Preserves callers without an explicit accessibility classification. */
+    public ConnectionInputResource(UUID id, UUID sourceNodeId, UUID targetNodeId,
+                                   ConnectionType type, Double distanceMeters, Double weight,
+                                   Double verticalPenalty, Boolean bidirectional) {
+      this(id, sourceNodeId, targetNodeId, type, distanceMeters, weight, verticalPenalty,
+          ConnectionAccessibility.UNKNOWN, bidirectional);
     }
 
     /** Preserves requests without an explicit vertical penalty. */
     public ConnectionInputResource(UUID id, UUID sourceNodeId, UUID targetNodeId,
                                    ConnectionType type, Double distanceMeters, Double weight,
                                    Boolean bidirectional) {
-      this(id, sourceNodeId, targetNodeId, type, distanceMeters, weight, 0.0, bidirectional);
+      this(id, sourceNodeId, targetNodeId, type, distanceMeters, weight, 0.0,
+          ConnectionAccessibility.UNKNOWN, bidirectional);
     }
   }
 

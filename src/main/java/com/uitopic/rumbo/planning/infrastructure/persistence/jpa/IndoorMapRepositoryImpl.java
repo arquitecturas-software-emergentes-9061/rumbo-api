@@ -3,12 +3,14 @@ package com.uitopic.rumbo.planning.infrastructure.persistence.jpa;
 import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapVersionStateException;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
+import com.uitopic.rumbo.planning.domain.exceptions.DraftGraphRevisionConflictException;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
 import com.uitopic.rumbo.planning.domain.model.entities.MapDestination;
 import com.uitopic.rumbo.planning.domain.model.entities.MapNode;
 import com.uitopic.rumbo.planning.domain.model.entities.MapVersion;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphElementType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphIssue;
@@ -69,12 +71,20 @@ public class IndoorMapRepositoryImpl implements IndoorMapRepository {
     MapVersionJpaEntity version = entityManager.find(MapVersionJpaEntity.class,
         map.modelVersionId(), LockModeType.PESSIMISTIC_WRITE);
     if (version == null) {
+      if (map.editRevision() != 0) throw new DraftGraphRevisionConflictException();
       entityManager.persist(new MapVersionJpaEntity(map.modelVersionId(), map.id(), MapVersionStatus.DRAFT));
       entityManager.flush();
     } else if (!version.mapId().equals(map.id())) {
       throw new IllegalArgumentException("Model version belongs to another map");
     } else if (version.status() != MapVersionStatus.DRAFT) {
       throw new InvalidMapVersionStateException(version.status());
+    } else {
+      if (version.editRevision() != map.editRevision()) {
+        throw new DraftGraphRevisionConflictException();
+      }
+      map.advanceEditRevision();
+      version.advanceEditRevision();
+      entityManager.flush();
     }
 
     for (PlanCoordinateSpace space : map.plans()) {
@@ -122,7 +132,8 @@ public class IndoorMapRepositoryImpl implements IndoorMapRepository {
       entityManager.persist(new MapConnectionJpaEntity(
           new VersionedElementId(connection.id(), versionId), connection.sourceNodeId(),
           connection.targetNodeId(), connection.type().name(), connection.distanceMeters(),
-          connection.weight(), connection.verticalPenalty(), connection.bidirectional()));
+          connection.weight(), connection.verticalPenalty(), connection.accessibility().name(),
+          connection.bidirectional()));
     }
     entityManager.flush();
     for (MapDestination destination : map.destinations()) {
@@ -190,7 +201,8 @@ public class IndoorMapRepositoryImpl implements IndoorMapRepository {
       if (lock) throw new InvalidMapVersionStateException(version.status());
       return Optional.empty();
     }
-    IndoorMap map = new IndoorMap(root.id(), root.siteId(), version.id());
+    IndoorMap map = new IndoorMap(root.id(), root.siteId(), version.id(),
+        version.editRevision());
     var planRows = entityManager.createQuery("select p from PlanCoordinateSpaceJpaEntity p "
         + "where p.id.modelVersionId = :versionId order by p.id.elementId", PlanCoordinateSpaceJpaEntity.class)
         .setParameter("versionId", modelVersionId).getResultList();
@@ -244,7 +256,8 @@ public class IndoorMapRepositoryImpl implements IndoorMapRepository {
       try {
         map.addConnection(new MapConnection(row.id().elementId(), modelVersionId,
             row.sourceNodeId(), row.targetNodeId(), ConnectionType.valueOf(row.connectionType()),
-            row.distanceMeters(), row.weight(), row.verticalPenalty(), row.bidirectional()));
+            row.distanceMeters(), row.weight(), row.verticalPenalty(),
+            ConnectionAccessibility.valueOf(row.accessibilityStatus()), row.bidirectional()));
       } catch (InvalidMapGraphException error) {
         throw error;
       } catch (IllegalArgumentException error) {

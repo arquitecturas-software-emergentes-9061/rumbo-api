@@ -3,6 +3,7 @@ package com.uitopic.rumbo.planning.infrastructure.persistence.jpa;
 import com.uitopic.rumbo.planning.domain.repositories.PublishedMapRepository;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PublishedMapSnapshot;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapVersionStatus;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
@@ -67,6 +68,7 @@ public class PublishedMapRepositoryImpl implements PublishedMapRepository {
         .stream().map(row -> new PublishedMapSnapshot.Connection(row.id().elementId(),
             row.sourceNodeId(), row.targetNodeId(), ConnectionType.valueOf(row.connectionType()),
             row.distanceMeters(), row.weight(), row.verticalPenalty(),
+            ConnectionAccessibility.valueOf(row.accessibilityStatus()),
             row.bidirectional())).toList();
     Map<UUID, PublishedMapSnapshot.Node> nodesById = nodes.stream()
         .collect(Collectors.toMap(PublishedMapSnapshot.Node::id, Function.identity()));
@@ -106,5 +108,18 @@ public class PublishedMapRepositoryImpl implements PublishedMapRepository {
           (String) row[5], (String) row[6]));
     }
     return List.copyOf(found);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public boolean existsCurrentNodeOutsideSite(UUID nodeId, UUID siteId) {
+    String sql = "SELECT EXISTS (SELECT 1 FROM map_nodes n "
+        + "JOIN map_versions v ON v.id = n.model_version_id "
+        + "JOIN indoor_maps m ON m.id = v.map_id "
+        + "WHERE n.id = :nodeId AND v.status = 'PUBLISHED' "
+        + "AND m.site_id <> :siteId)";
+    return Boolean.TRUE.equals(entityManager.createNativeQuery(sql)
+        .setParameter("nodeId", nodeId).setParameter("siteId", siteId)
+        .getSingleResult());
   }
 }

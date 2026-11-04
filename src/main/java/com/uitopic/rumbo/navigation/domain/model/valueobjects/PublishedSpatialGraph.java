@@ -27,7 +27,19 @@ public record PublishedSpatialGraph(UUID siteId, UUID mapId, UUID modelVersionId
   /** Persisted connection with separate distance and cost. */
   public record Link(UUID id, UUID sourceNodeId, UUID targetNodeId,
                      LinkKind kind, double distanceMeters, double weight,
-                     double verticalPenalty, boolean bidirectional) {}
+                     double verticalPenalty, Accessibility accessibility,
+                     boolean bidirectional) {
+    /** Preserves unclassified published links. */
+    public Link(UUID id, UUID sourceNodeId, UUID targetNodeId,
+                LinkKind kind, double distanceMeters, double weight,
+                double verticalPenalty, boolean bidirectional) {
+      this(id, sourceNodeId, targetNodeId, kind, distanceMeters, weight,
+          verticalPenalty, Accessibility.UNKNOWN, bidirectional);
+    }
+  }
+
+  /** Mobility classification translated from the Planning published contract. */
+  public enum Accessibility { UNKNOWN, ACCESSIBLE, INACCESSIBLE }
 
   /** Semantic role used by Navigation without importing Planning entities. */
   public enum NodeRole { INTERSECTION, ACCESS, DESTINATION, VERTICAL_LINK, REFERENCE }

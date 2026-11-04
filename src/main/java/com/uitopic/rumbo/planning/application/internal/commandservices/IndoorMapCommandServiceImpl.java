@@ -1,6 +1,7 @@
 package com.uitopic.rumbo.planning.application.internal.commandservices;
 
 import com.uitopic.rumbo.planning.application.internal.exceptions.MapVersionNotFoundException;
+import com.uitopic.rumbo.planning.domain.exceptions.DraftGraphRevisionConflictException;
 import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.commands.PublishMapVersionCommand;
@@ -37,8 +38,12 @@ public class IndoorMapCommandServiceImpl implements IndoorMapCommandService {
     IndoorMap current = repository.findDraftForUpdate(command.mapId(), command.modelVersionId())
         .orElseThrow(MapVersionNotFoundException::new);
     if (!current.siteId().equals(command.siteId())) throw new MapVersionNotFoundException();
+    if (current.editRevision() != command.expectedRevision()) {
+      throw new DraftGraphRevisionConflictException();
+    }
 
-    IndoorMap replacement = new IndoorMap(current.id(), current.siteId(), current.modelVersionId());
+    IndoorMap replacement = new IndoorMap(current.id(), current.siteId(),
+        current.modelVersionId(), current.editRevision());
     current.plans().forEach(replacement::addPlan);
     current.scales().forEach(replacement::setScale);
     command.nodes().forEach(node -> replacement.addNode(node.id(), node.floorId(),
@@ -46,7 +51,7 @@ public class IndoorMapCommandServiceImpl implements IndoorMapCommandService {
     command.connections().forEach(connection -> replacement.addConnection(connection.id(),
         connection.sourceNodeId(), connection.targetNodeId(), connection.type(),
         connection.distanceMeters(), connection.weight(), connection.verticalPenalty(),
-        connection.bidirectional()));
+        connection.accessibility(), connection.bidirectional()));
     command.destinations().forEach(destination -> replacement.addDestination(destination.id(),
         destination.nodeId(), destination.type(), destination.name(), destination.specialty()));
     repository.saveDraft(replacement);

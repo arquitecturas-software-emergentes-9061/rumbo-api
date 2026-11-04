@@ -139,6 +139,12 @@ The endpoint is enabled by default for loopback-only local review; the feature f
 
 ## Shared rules
 
+- HTTP error bodies always contain `code` and `message`. Planning graph validation
+  additionally includes `issues[]` with element-specific details. Shared HTTP failures
+  use `INVALID_REQUEST` (400), `RESOURCE_NOT_FOUND` (404), `METHOD_NOT_ALLOWED`
+  (405), or `UNSUPPORTED_MEDIA_TYPE` (415); bounded contexts keep their own
+  error codes for domain failures. The provisional demo route uses
+  `INVALID_DEMO_ROUTE` (422) instead of its former `error` field.
 - `navigation` only reads `PUBLISHED` models and never changes `planning` drafts or resources.
 - An accessibility preference must not be bypassed to fabricate a route.
 - Cross-floor links must be explicit vertical connectors in the published graph.

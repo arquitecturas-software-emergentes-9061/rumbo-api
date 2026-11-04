@@ -5,6 +5,7 @@ import com.uitopic.rumbo.planning.domain.services.IndoorMapCommandService;
 import com.uitopic.rumbo.planning.interfaces.rest.resources.MapVersionResource;
 import com.uitopic.rumbo.planning.interfaces.rest.resources.MapVersionStatusPatchResource;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** REST entry point for publishing Planning map versions. */
 @RestController
+@Tag(name = "Indoor maps")
 @Profile("postgres")
 @ConditionalOnProperty(name = "rumbo.planning.publication.enabled", havingValue = "true")
 @RequestMapping("/api/v1/sites/{siteId}/maps")

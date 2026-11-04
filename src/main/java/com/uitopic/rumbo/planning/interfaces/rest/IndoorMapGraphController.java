@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Controlled REST entry point for reading and replacing an existing draft graph. */
 @RestController
+@Tag(name = "Indoor map graph")
 @Profile("postgres")
 @ConditionalOnProperty(name = "rumbo.planning.editing.enabled", havingValue = "true")
 @RequestMapping("/api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}/graph")

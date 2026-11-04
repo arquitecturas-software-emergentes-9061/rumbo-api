@@ -84,6 +84,34 @@ class AStarRouteCalculationDomainServiceTest {
   }
 
   @Test
+  void accessibleOnlyRequiresConfirmedLinksAndKeepsTheCheapestAllowedRoute() {
+    UUID floor = UUID.randomUUID();
+    UUID plan = UUID.randomUUID();
+    var start = node(floor, plan, 0);
+    var middle = node(floor, plan, 5);
+    var goal = node(floor, plan, 10);
+    var unknown = link(start, goal, PublishedSpatialGraph.LinkKind.CORRIDOR,
+        10, 1, 0, false);
+    var first = new PublishedSpatialGraph.Link(UUID.randomUUID(), start.id(), middle.id(),
+        PublishedSpatialGraph.LinkKind.CORRIDOR, 6, 2, 0,
+        PublishedSpatialGraph.Accessibility.ACCESSIBLE, false);
+    var second = new PublishedSpatialGraph.Link(UUID.randomUUID(), middle.id(), goal.id(),
+        PublishedSpatialGraph.LinkKind.CORRIDOR, 6, 2, 0,
+        PublishedSpatialGraph.Accessibility.ACCESSIBLE, false);
+    var graph = graph(List.of(space(floor, plan)), List.of(start, middle, goal),
+        List.of(unknown, first, second));
+
+    assertEquals(1, calculator.calculate(graph, start.id(), goal.id(), false)
+        .orElseThrow().totalCost());
+    var accessible = calculator.calculate(graph, start.id(), goal.id(), true).orElseThrow();
+    assertEquals(4, accessible.totalCost());
+    assertEquals(List.of(first.id(), second.id()),
+        accessible.legs().stream().map(CalculatedRoute.Leg::linkId).toList());
+    assertTrue(accessible.legs().stream().allMatch(leg ->
+        leg.accessibility() == PublishedSpatialGraph.Accessibility.ACCESSIBLE));
+  }
+
+  @Test
   void rejectsMissingNodesAndInvalidPublishedConnections() {
     UUID floor = UUID.randomUUID();
     UUID plan = UUID.randomUUID();

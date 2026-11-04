@@ -1,10 +1,12 @@
 package com.uitopic.rumbo.planning.interfaces.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,6 +15,7 @@ import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
 import com.uitopic.rumbo.planning.domain.model.entities.MapNode;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
@@ -21,6 +24,9 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.SpatialCoordinate;
 import com.uitopic.rumbo.planning.interfaces.rest.resources.GraphUpdateResource;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,17 +71,20 @@ class IndoorMapGraphControllerIntegrationTest {
         new GraphUpdateResource.NodeInputResource(destinationId, floorId, planVersionId,
             20.0, 6.0, NodeType.DESTINATION)),
         List.of(new GraphUpdateResource.ConnectionInputResource(connectionId, accessId,
-            destinationId, ConnectionType.CORRIDOR, 3.75, 5.0, true)));
+            destinationId, ConnectionType.CORRIDOR, 3.75, 5.0, true)), List.of());
 
-    mvc.perform(put(url(map)).contentType("application/json")
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"").contentType("application/json")
         .content(json.writeValueAsString(update)))
         .andExpect(status().isOk())
+        .andExpect(header().string("ETag", "\"rev-1\""))
         .andExpect(jsonPath("$.status").value("DRAFT"))
         .andExpect(jsonPath("$.plans[0].metersPerUnit").value(0.25))
         .andExpect(jsonPath("$.connections[0].verticalPenalty").value(0.0))
+        .andExpect(jsonPath("$.connections[0].accessibility").value("UNKNOWN"))
         .andExpect(jsonPath("$.connections[0].id").value(connectionId.toString()));
 
     mvc.perform(get(url(map))).andExpect(status().isOk())
+        .andExpect(header().string("ETag", "\"rev-1\""))
         .andExpect(jsonPath("$.nodes.length()").value(2))
         .andExpect(jsonPath("$.connections[0].weight").value(5.0));
     IndoorMap reloaded = store.findDraft(map.id(), map.modelVersionId()).orElseThrow();
@@ -99,13 +108,134 @@ class IndoorMapGraphControllerIntegrationTest {
         List.of(new GraphUpdateResource.DestinationInputResource(entryId, destinationNodeId,
             DirectoryEntryType.DOCTOR, "Dra. Núñez", "Cardiología")));
 
-    mvc.perform(put(url(map)).contentType("application/json")
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"").contentType("application/json")
         .content(json.writeValueAsString(update)))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.destinations[0].id").value(entryId.toString()))
         .andExpect(jsonPath("$.destinations[0].type").value("DOCTOR"));
     mvc.perform(get(url(map))).andExpect(status().isOk())
         .andExpect(jsonPath("$.destinations[0].nodeId").value(destinationNodeId.toString()));
+  }
+
+  @Test
+  void omittedDestinationsCannotDeleteExistingEntriesButExplicitEmptyListCan() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    UUID destinationNodeId = map.nodes().getLast().id();
+    GraphUpdateResource withDestination = new GraphUpdateResource(nodeInputs(map),
+        connectionInputs(map), List.of(new GraphUpdateResource.DestinationInputResource(
+            UUID.randomUUID(), destinationNodeId, DirectoryEntryType.SERVICE, "Farmacia", null)));
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"")
+        .contentType("application/json").content(json.writeValueAsString(withDestination)))
+        .andExpect(status().isOk())
+        .andExpect(header().string("ETag", "\"rev-1\""));
+
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-1\"")
+        .contentType("application/json")
+        .content("{\"nodes\":[],\"connections\":[]}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    mvc.perform(get(url(map))).andExpect(status().isOk())
+        .andExpect(header().string("ETag", "\"rev-1\""))
+        .andExpect(jsonPath("$.destinations[0].name").value("Farmacia"));
+
+    GraphUpdateResource clearDestinations = new GraphUpdateResource(nodeInputs(map),
+        connectionInputs(map), List.of());
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-1\"")
+        .contentType("application/json").content(json.writeValueAsString(clearDestinations)))
+        .andExpect(status().isOk())
+        .andExpect(header().string("ETag", "\"rev-2\""))
+        .andExpect(jsonPath("$.destinations.length()").value(0));
+  }
+
+  @Test
+  void requiresCurrentGraphEtagBeforeReplacing() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    GraphUpdateResource update = new GraphUpdateResource(nodeInputs(map),
+        connectionInputs(map), List.of());
+    String body = json.writeValueAsString(update);
+    mvc.perform(get(url(map))).andExpect(status().isOk())
+        .andExpect(header().string("ETag", "\"rev-0\""));
+    mvc.perform(put(url(map)).contentType("application/json").content(body))
+        .andExpect(status().is(428))
+        .andExpect(jsonPath("$.code").value("PRECONDITION_REQUIRED"));
+    mvc.perform(put(url(map)).header("If-Match", "0")
+        .contentType("application/json").content(body))
+        .andExpect(status().isBadRequest());
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"")
+        .contentType("application/json").content(body))
+        .andExpect(status().isOk())
+        .andExpect(header().string("ETag", "\"rev-1\""));
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"")
+        .contentType("application/json").content(body))
+        .andExpect(status().isPreconditionFailed())
+        .andExpect(jsonPath("$.code").value("STALE_DRAFT_GRAPH"));
+    mvc.perform(get(url(map))).andExpect(status().isOk())
+        .andExpect(header().string("ETag", "\"rev-1\""))
+        .andExpect(jsonPath("$.connections.length()").value(1));
+  }
+
+  @Test
+  void simultaneousEditorsCannotOverwriteEachOther() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    var access = nodeInputs(map).getFirst();
+    var destination = nodeInputs(map).getLast();
+    String firstBody = json.writeValueAsString(new GraphUpdateResource(List.of(
+        new GraphUpdateResource.NodeInputResource(access.id(), access.floorId(),
+            access.planVersionId(), 5.0, access.y(), access.type()), destination),
+        connectionInputs(map), List.of()));
+    String secondBody = json.writeValueAsString(new GraphUpdateResource(List.of(
+        new GraphUpdateResource.NodeInputResource(access.id(), access.floorId(),
+            access.planVersionId(), 6.0, access.y(), access.type()), destination),
+        connectionInputs(map), List.of()));
+    CountDownLatch start = new CountDownLatch(1);
+    try (var workers = Executors.newFixedThreadPool(2)) {
+      var first = workers.submit(() -> {
+        start.await();
+        return mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"")
+            .contentType("application/json").content(firstBody))
+            .andReturn().getResponse().getStatus();
+      });
+      var second = workers.submit(() -> {
+        start.await();
+        return mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"")
+            .contentType("application/json").content(secondBody))
+            .andReturn().getResponse().getStatus();
+      });
+      start.countDown();
+      List<Integer> statuses = List.of(first.get(10, TimeUnit.SECONDS),
+          second.get(10, TimeUnit.SECONDS)).stream().sorted().toList();
+      assertEquals(List.of(200, 412), statuses);
+    }
+    IndoorMap reloaded = store.findDraft(map.id(), map.modelVersionId()).orElseThrow();
+    assertEquals(1, reloaded.editRevision());
+    double x = reloaded.nodes().stream().filter(node -> node.id().equals(access.id()))
+        .findFirst().orElseThrow().position().x();
+    assertTrue(x == 5.0 || x == 6.0);
+  }
+
+  @Test
+  void persistsExplicitAccessibilityAndDefaultsOlderRequestsToUnknown() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    var connection = map.connections().getFirst();
+    GraphUpdateResource update = new GraphUpdateResource(nodeInputs(map), List.of(
+        new GraphUpdateResource.ConnectionInputResource(connection.id(),
+            connection.sourceNodeId(), connection.targetNodeId(), connection.type(),
+            connection.distanceMeters(), connection.weight(), 0.0,
+            ConnectionAccessibility.ACCESSIBLE, connection.bidirectional())), List.of());
+
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"").contentType("application/json")
+        .content(json.writeValueAsString(update)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.connections[0].accessibility").value("ACCESSIBLE"));
+    mvc.perform(get(url(map))).andExpect(status().isOk())
+        .andExpect(jsonPath("$.connections[0].accessibility").value("ACCESSIBLE"));
+    assertEquals(ConnectionAccessibility.ACCESSIBLE,
+        store.findDraft(map.id(), map.modelVersionId()).orElseThrow()
+            .connections().getFirst().accessibility());
   }
 
   @Test
@@ -117,7 +247,7 @@ class IndoorMapGraphControllerIntegrationTest {
         List.of(new GraphUpdateResource.DestinationInputResource(entryId, UUID.randomUUID(),
             DirectoryEntryType.SERVICE, "Farmacia", null)));
 
-    mvc.perform(put(url(map)).contentType("application/json")
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"").contentType("application/json")
         .content(json.writeValueAsString(update)))
         .andExpect(status().isUnprocessableEntity())
         .andExpect(jsonPath("$.issues[0].elementType").value("DESTINATION"))
@@ -136,9 +266,9 @@ class IndoorMapGraphControllerIntegrationTest {
     GraphUpdateResource update = new GraphUpdateResource(nodeInputs(map), List.of(
         new GraphUpdateResource.ConnectionInputResource(connectionId,
             map.nodes().getFirst().id(), unknownNodeId, ConnectionType.CORRIDOR,
-            1.0, 2.0, true)));
+            1.0, 2.0, true)), List.of());
 
-    mvc.perform(put(url(map)).contentType("application/json")
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"").contentType("application/json")
         .content(json.writeValueAsString(update)))
         .andExpect(status().isUnprocessableEntity())
         .andExpect(jsonPath("$.code").value("INVALID_MAP_GRAPH"))
@@ -157,9 +287,9 @@ class IndoorMapGraphControllerIntegrationTest {
         new GraphUpdateResource.ConnectionInputResource(connection.id(),
             connection.sourceNodeId(), connection.targetNodeId(), connection.type(),
             connection.distanceMeters(), connection.weight(), 3.0,
-            connection.bidirectional())));
+            connection.bidirectional())), List.of());
 
-    mvc.perform(put(url(map)).contentType("application/json")
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"").contentType("application/json")
         .content(json.writeValueAsString(update)))
         .andExpect(status().isUnprocessableEntity())
         .andExpect(jsonPath("$.issues[0].code").value("INVALID_CONNECTION_DATA"))
@@ -176,9 +306,9 @@ class IndoorMapGraphControllerIntegrationTest {
     GraphUpdateResource update = new GraphUpdateResource(List.of(
         new GraphUpdateResource.NodeInputResource(original.id(), original.floorId(),
             original.planVersionId(), 1000.0, original.y(), original.type()),
-        nodeInputs(map).get(1)), List.of());
+        nodeInputs(map).get(1)), List.of(), List.of());
 
-    mvc.perform(put(url(map)).contentType("application/json")
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"").contentType("application/json")
         .content(json.writeValueAsString(update)))
         .andExpect(status().isUnprocessableEntity())
         .andExpect(jsonPath("$.issues[0].code").value("INVALID_NODE_DATA"))
@@ -192,13 +322,15 @@ class IndoorMapGraphControllerIntegrationTest {
   void rejectsWrongSiteMalformedBodyAndEditsAfterPublication() throws Exception {
     IndoorMap map = draft();
     store.saveDraft(map);
-    GraphUpdateResource update = new GraphUpdateResource(nodeInputs(map), connectionInputs(map));
+    GraphUpdateResource update = new GraphUpdateResource(nodeInputs(map),
+        connectionInputs(map), List.of());
     mvc.perform(get(url(UUID.randomUUID(), map.id(), map.modelVersionId())))
         .andExpect(status().isNotFound());
     mvc.perform(put(url(UUID.randomUUID(), map.id(), map.modelVersionId()))
+        .header("If-Match", "\"rev-0\"")
         .contentType("application/json").content(json.writeValueAsString(update)))
         .andExpect(status().isNotFound());
-    mvc.perform(put(url(map)).contentType("application/json")
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"").contentType("application/json")
         .content("{\"nodes\":[],\"connections\":[{}]}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
@@ -206,7 +338,7 @@ class IndoorMapGraphControllerIntegrationTest {
         .contentType("application/merge-patch+json")
         .content("{\"status\":\"PUBLISHED\"}"))
         .andExpect(status().isOk());
-    mvc.perform(put(url(map)).contentType("application/json")
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"").contentType("application/json")
         .content(json.writeValueAsString(update)))
         .andExpect(status().isConflict())
         .andExpect(jsonPath("$.code").value("MAP_VERSION_STATE_CONFLICT"));

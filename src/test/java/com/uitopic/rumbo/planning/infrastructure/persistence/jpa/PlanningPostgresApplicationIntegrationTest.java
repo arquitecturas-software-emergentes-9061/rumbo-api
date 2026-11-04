@@ -7,6 +7,7 @@ import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
 import com.uitopic.rumbo.planning.interfaces.rest.IndoorMapsController;
 import com.uitopic.rumbo.planning.interfaces.rest.IndoorMapGraphController;
 import com.uitopic.rumbo.navigation.interfaces.rest.DirectoryController;
+import com.uitopic.rumbo.navigation.interfaces.rest.PublishedRoutesController;
 import org.springframework.context.ApplicationContext;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.junit.jupiter.api.Test;
@@ -45,5 +46,7 @@ class PlanningPostgresApplicationIntegrationTest {
         () -> context.getBean(IndoorMapGraphController.class));
     assertThrows(NoSuchBeanDefinitionException.class,
         () -> context.getBean(DirectoryController.class));
+    assertThrows(NoSuchBeanDefinitionException.class,
+        () -> context.getBean(PublishedRoutesController.class));
   }
 }

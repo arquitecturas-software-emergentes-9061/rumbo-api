@@ -47,6 +47,8 @@ rumbo:
     session:
       access-token-lifetime: 15m
       refresh-token-lifetime: 7d
+    password-recovery:
+      token-lifetime: 30m
     cors:
       allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}
 server:

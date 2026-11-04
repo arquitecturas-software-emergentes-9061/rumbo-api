@@ -1,6 +1,8 @@
 package com.uitopic.rumbo.iam.domain.model.aggregates;
 
+import com.uitopic.rumbo.iam.domain.model.events.PasswordResetRequestedEvent;
 import com.uitopic.rumbo.iam.domain.model.events.UserAccountLockedEvent;
+import com.uitopic.rumbo.iam.domain.model.events.UserPasswordChangedEvent;
 import com.uitopic.rumbo.iam.domain.model.events.UserRegisteredEvent;
 import com.uitopic.rumbo.iam.domain.model.valueobjects.AccountStatus;
 import com.uitopic.rumbo.iam.domain.model.valueobjects.EmailAddress;
@@ -104,6 +106,35 @@ public class UserAccount {
     if (failedLoginAttempts == 0 && status == AccountStatus.ACTIVE) return;
     clearLock();
     updatedAt = now;
+  }
+
+  /** A disabled account cannot recover itself: only an administrator can enable it again. */
+  public boolean canRecoverPassword() { return !isDisabled(); }
+
+  /**
+   * Records that the owner asked for a recovery link. The raw token travels only in the event, for the email.
+   *
+   * @throws IllegalStateException if the account is disabled
+   */
+  public void requestPasswordReset(String resetToken, Instant expiresAt, Instant now) {
+    if (!canRecoverPassword()) throw new IllegalStateException("A disabled account cannot recover its password");
+    if (resetToken == null || resetToken.isBlank()) throw new IllegalArgumentException("resetToken is required");
+    if (!expiresAt.isAfter(now)) throw new IllegalArgumentException("expiresAt must be in the future");
+    domainEvents.add(new PasswordResetRequestedEvent(id, email.value(), resetToken, expiresAt, now));
+  }
+
+  /**
+   * Replaces the password. Whoever proves to own the account (current password or recovery link) also gets rid of a
+   * lock caused by failed attempts, which are usually the reason to recover it.
+   *
+   * @throws IllegalStateException if the account is disabled
+   */
+  public void changePassword(PasswordHash newPasswordHash, Instant now) {
+    if (isDisabled()) throw new IllegalStateException("A disabled account cannot change its password");
+    passwordHash = Objects.requireNonNull(newPasswordHash, "newPasswordHash is required");
+    clearLock();
+    updatedAt = now;
+    domainEvents.add(new UserPasswordChangedEvent(id, now));
   }
 
   private void clearLock() {

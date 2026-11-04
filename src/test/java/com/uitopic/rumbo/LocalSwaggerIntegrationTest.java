@@ -40,8 +40,11 @@ class LocalSwaggerIntegrationTest {
 
   @Test
   void allSevenOperationsAreDocumentedAndLocalExamplesRespond() throws Exception {
-    JsonNode paths = json.readTree(mvc.perform(get("/v3/api-docs"))
-        .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).path("paths");
+    JsonNode spec = json.readTree(mvc.perform(get("/v3/api-docs"))
+        .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+    assertEquals("Rumbo API", spec.path("info").path("title").asText());
+    assertEquals("0.1.0", spec.path("info").path("version").asText());
+    JsonNode paths = spec.path("paths");
     String graph = "/api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}/graph";
     assertTrue(paths.path(graph).has("get"));
     assertTrue(paths.path(graph).has("put"));

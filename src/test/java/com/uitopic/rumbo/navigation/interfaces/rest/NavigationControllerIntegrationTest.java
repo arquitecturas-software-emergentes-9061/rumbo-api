@@ -35,7 +35,8 @@ class NavigationControllerIntegrationTest {
   @Test void rejectsMalformedSiteIdentifier() throws Exception {
     mvc.perform(get("/api/v1/navigations/destinations").param("siteId", "invalid"))
         .andExpect(status().isBadRequest())
-        .andExpect(jsonPath("$.error").value("Invalid or missing request field"));
+        .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+        .andExpect(jsonPath("$.message").value("Invalid or missing request field"));
   }
 
   @Test void rejectsRouteThroughInaccessibleDemoLink() throws Exception {
@@ -49,6 +50,15 @@ class NavigationControllerIntegrationTest {
            "accessibleOnly":true}
           """))
         .andExpect(status().isUnprocessableEntity())
-        .andExpect(jsonPath("$.error").exists());
+        .andExpect(jsonPath("$.code").value("INVALID_DEMO_ROUTE"))
+        .andExpect(jsonPath("$.message").exists());
+  }
+
+  @Test void sharedHandlerFormatsUnsupportedMediaType() throws Exception {
+    mvc.perform(post("/api/v1/navigations/route").contentType(MediaType.TEXT_PLAIN)
+        .content("invalid"))
+        .andExpect(status().isUnsupportedMediaType())
+        .andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"))
+        .andExpect(jsonPath("$.message").exists());
   }
 }

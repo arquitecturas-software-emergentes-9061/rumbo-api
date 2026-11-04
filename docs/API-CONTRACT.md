@@ -3,7 +3,7 @@
 Status: implemented contracts are marked with their enablement conditions; remaining requirements are identified below. See [ADR 001](decisions/001-architecture-and-contract.md) for the domain and route decisions, [ADR 004](decisions/004-local-default-api-visibility.md) for the local startup policy, and [ADR 005](decisions/005-successor-draft-versions.md) for successor map versions.
 
 Normal local startup defaults to the `postgres,local` profiles, enables the four HTTP
-feature flags, and registers operations from Planning, Navigation, IAM, Positioning,
+feature flags, and registers operations from Planning, Navigation, IAM,
 and Analytics in Swagger. The two provisional
 operations are tagged **Demo navigation**. The server binds to loopback and seeds
 separate draft and published example sites after Flyway migration. PostgreSQL and
@@ -170,7 +170,7 @@ The endpoint is enabled by default for loopback-only local review; the feature f
 
 ## Shared rules
 
-- HTTP error bodies contain `code` and `message`; IAM, Positioning and Analytics also
+- HTTP error bodies contain `code` and `message`; IAM, Planning beacon inventory and Analytics also
   return RFC 7807 `detail` with the same text. Planning graph validation
   additionally includes `issues[]` with element-specific details. Shared HTTP failures
   use `INVALID_REQUEST` (400), `RESOURCE_NOT_FOUND` (404), `METHOD_NOT_ALLOWED`

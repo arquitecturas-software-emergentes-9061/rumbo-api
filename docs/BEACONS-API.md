@@ -1,6 +1,9 @@
-# BLE inventory — Positioning bounded context
+# BLE inventory — Planning bounded context
 
-The service stores registered beacon references in PostgreSQL. It does **not**
+Planning owns sites, floor plans, and the registered beacon inventory. The service
+stores beacon references in PostgreSQL. The existing `positioning_beacons` table
+name is retained for migration compatibility; it does not define a bounded context.
+It does **not**
 scan real radios, claim RSSI measurements, or calibrate hardware.
 
 All endpoints need an IAM JWT and `CLINIC_ADMIN` role. Accounts own sites

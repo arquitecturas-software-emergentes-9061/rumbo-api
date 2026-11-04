@@ -89,7 +89,7 @@ class SiteAuthorizationIntegrationTest {
   void anAdministratorOfAnotherSiteCannotReadOrChangeIt() throws Exception {
     mvc.perform(as(otherAdmin, graph())).andExpect(status().isForbidden());
     mvc.perform(as(otherAdmin, publish())).andExpect(status().isForbidden());
-    // Positioning and calibration answer 404 so a foreign site cannot even be confirmed to exist.
+    // Beacon inventory and calibration answer 404 so a foreign site cannot even be confirmed to exist.
     mvc.perform(as(otherAdmin, beacons())).andExpect(status().isNotFound());
     mvc.perform(as(otherAdmin, registerBeacon())).andExpect(status().isNotFound());
     mvc.perform(as(otherAdmin, calibration())).andExpect(status().isNotFound());

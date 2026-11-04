@@ -13,7 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.uitopic.rumbo.shared.infrastructure.security.SiteOwnerGuard;
+import com.uitopic.rumbo.iam.infrastructure.security.SiteOwnerGuard;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;

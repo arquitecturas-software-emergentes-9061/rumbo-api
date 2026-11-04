@@ -8,7 +8,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
-import com.uitopic.rumbo.shared.infrastructure.security.SiteOwnerGuard;
+import com.uitopic.rumbo.iam.infrastructure.security.SiteOwnerGuard;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.entities.MapConnection;
 import com.uitopic.rumbo.planning.domain.model.entities.MapNode;

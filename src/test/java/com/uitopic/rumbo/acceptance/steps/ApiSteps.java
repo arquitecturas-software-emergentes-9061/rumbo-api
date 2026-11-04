@@ -31,23 +31,24 @@ public class ApiSteps {
 
   @When("I send a GET request to {string}")
   public void get(String path) {
-    context.send(context.client().get().uri(path));
+    context.send(context.client().get().uri(context.resolve(path)));
   }
 
   @When("I send a POST request to {string} with body:")
   public void post(String path, String body) {
-    context.send(context.client().post().uri(path).contentType(MediaType.APPLICATION_JSON).body(body));
+    context.send(context.client().post().uri(context.resolve(path)).contentType(MediaType.APPLICATION_JSON)
+      .body(body));
   }
 
   @When("I send an authenticated POST request to {string} with body:")
   public void authenticatedPost(String path, String body) {
-    context.send(context.client().post().uri(path).contentType(MediaType.APPLICATION_JSON)
+    context.send(context.client().post().uri(context.resolve(path)).contentType(MediaType.APPLICATION_JSON)
       .header(HttpHeaders.AUTHORIZATION, "Bearer " + context.accessToken()).body(body));
   }
 
   @When("I send an authenticated GET request to {string}")
   public void authenticatedGet(String path) {
-    context.send(context.client().get().uri(path)
+    context.send(context.client().get().uri(context.resolve(path))
       .header(HttpHeaders.AUTHORIZATION, "Bearer " + context.accessToken()));
   }
 
@@ -66,6 +67,19 @@ public class ApiSteps {
   public void fieldPresent(String pointer) throws Exception {
     JsonNode json = mapper.readTree(context.body());
     assertThat(json.at(pointer).isMissingNode() || json.at(pointer).isNull()).as(context.body()).isFalse();
+  }
+
+  @Then("I remember the response field {string} as {string}")
+  public void rememberField(String pointer, String key) throws Exception {
+    JsonNode value = mapper.readTree(context.body()).at(pointer);
+    assertThat(value.isMissingNode()).as(context.body()).isFalse();
+    context.remember(key, value.asText());
+  }
+
+  @Then("the response body is an empty list")
+  public void emptyList() throws Exception {
+    JsonNode json = mapper.readTree(context.body());
+    assertThat(json.isArray() && json.isEmpty()).as(context.body()).isTrue();
   }
 
   @Then("the response does not contain {string}")

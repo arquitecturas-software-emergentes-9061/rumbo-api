@@ -1,6 +1,12 @@
 # Rumbo API — Planning and Navigation contract
 
-Status: implemented contracts are marked with their enablement conditions; remaining requirements are identified below. See [ADR 001](decisions/001-architecture-and-contract.md) for the decisions behind this contract.
+Status: implemented contracts are marked with their enablement conditions; remaining requirements are identified below. See [ADR 001](decisions/001-architecture-and-contract.md) for the domain and route decisions and [ADR 004](decisions/004-local-default-api-visibility.md) for the local startup policy.
+
+Normal local startup defaults to the `postgres,local` profiles, enables the four HTTP
+feature flags, and registers all seven operations in Swagger. The two provisional
+operations are tagged **Demo navigation**. The server binds to loopback and seeds
+separate draft and published example sites after Flyway migration. PostgreSQL and
+private connection variables are required. See the README for startup commands and IDs.
 
 ## Published indoor model — spatial core and destinations implemented
 
@@ -10,7 +16,7 @@ The spatial core now also carries each connection's accessibility status: `UNKNO
 
 - Obstacles needed to validate traversable connections.
 
-Obstacles are **not yet persisted in the published spatial core**. A connection marked `ACCESSIBLE` records an explicit editor assertion, not independently validated obstacle clearance. Directory metadata does not establish that a route is accessible. The PostgreSQL navigation route endpoint exists behind a disabled-by-default flag for controlled local use; site authorization and obstacle validation are still required before exposing it to users. The existing `demo` route endpoint remains separate.
+Obstacles are **not yet persisted in the published spatial core**. A connection marked `ACCESSIBLE` records an explicit editor assertion, not independently validated obstacle clearance. Directory metadata does not establish that a route is accessible. The PostgreSQL navigation route endpoint is enabled for local loopback review; site authorization and obstacle validation are still required before exposing it to users. The existing `demo` route endpoint remains separate.
 
 ### Coordinate convention for Planning
 
@@ -20,13 +26,13 @@ A confirmed `MapScale` is tied to `floorId` and `planVersionId` and expresses `m
 
 `navigation` reads never return drafts. Publishing a new version is atomic: a rejected draft leaves the previous published version available. Authorization of the consumer and site is required before serving real models; it is not implemented yet.
 
-## Draft graph editing — implemented with explicit local enablement
+## Draft graph editing — implemented for local review
 
 `GET /api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}/graph`
 
 `PUT /api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}/graph`
 
-Both operations address an **existing DRAFT** version; they do not create a map, version, floor plan, or scale. The `GET` response contains `siteId`, `mapId`, `modelVersionId`, `status`, `plans[]` with coordinate bounds and optional `metersPerUnit`, `nodes[]`, `connections[]`, and `destinations[]`. `PUT` replaces nodes, connections, and directory destinations atomically, preserving registered plans and confirmed scales. The request must explicitly contain all three collections: `nodes`, `connections`, and `destinations`. An empty array intentionally clears that collection; an omitted collection is a `400` and cannot silently delete stored data. Each directory entry has `id`, `nodeId`, `type` (`DOCTOR`, `SPECIALTY`, or `SERVICE`), `name`, and optional `specialty`. Its node must exist in that version with type `DESTINATION`. A connection may include `verticalPenalty`, a nonnegative routing cost added to `weight` when it crosses floors; omission means `0`, and a nonzero value on a same-floor connection is rejected. `accessibility` is optional (`UNKNOWN`, `ACCESSIBLE`, or `INACCESSIBLE`), defaults to `UNKNOWN`, and is returned by `GET`. An empty collection is allowed while editing; publication still requires a valid navigable graph. The endpoint requires the `postgres` profile and `RUMBO_PLANNING_EDITING_ENABLED=true`, and is disabled by default until site authorization exists.
+Both operations address an **existing DRAFT** version; they do not create a map, version, floor plan, or scale. The `GET` response contains `siteId`, `mapId`, `modelVersionId`, `status`, `plans[]` with coordinate bounds and optional `metersPerUnit`, `nodes[]`, `connections[]`, and `destinations[]`. `PUT` replaces nodes, connections, and directory destinations atomically, preserving registered plans and confirmed scales. The request must explicitly contain all three collections: `nodes`, `connections`, and `destinations`. An empty array intentionally clears that collection; an omitted collection is a `400` and cannot silently delete stored data. Each directory entry has `id`, `nodeId`, `type` (`DOCTOR`, `SPECIALTY`, or `SERVICE`), `name`, and optional `specialty`. Its node must exist in that version with type `DESTINATION`. A connection may include `verticalPenalty`, a nonnegative routing cost added to `weight` when it crosses floors; omission means `0`, and a nonzero value on a same-floor connection is rejected. `accessibility` is optional (`UNKNOWN`, `ACCESSIBLE`, or `INACCESSIBLE`), defaults to `UNKNOWN`, and is returned by `GET`. An empty collection is allowed while editing; publication still requires a valid navigable graph. The endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.planning.editing.enabled` can disable it.
 
 Example `PUT` body (`verticalPenalty`, `accessibility`, and each destination's `specialty` are optional):
 
@@ -58,11 +64,11 @@ Example `PUT` body (`verticalPenalty`, `accessibility`, and each destination's `
 
 Regenerating a graph is a separate future US-09/US-10 proposal workflow. This `PUT` does not infer which new room corresponds to an existing destination; the client must include the approved destination entries. See [ADR 003](decisions/003-draft-graph-editing-and-regeneration.md).
 
-## Map version publication — implemented with explicit local enablement
+## Map version publication — implemented for local review
 
 `PATCH /api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}`
 
-Request media type: `application/merge-patch+json`; body: `{"status":"PUBLISHED"}`. All three path IDs are required UUIDs. The endpoint is active only with the `postgres` profile and `RUMBO_PLANNING_PUBLICATION_ENABLED=true`; keep it disabled outside controlled local testing until site authorization is implemented.
+Request media type: `application/merge-patch+json`; body: `{"status":"PUBLISHED"}`. All three path IDs are required UUIDs. The endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.planning.publication.enabled` can disable it. Do not expose it outside controlled local testing until site authorization is implemented.
 
 - `200 OK`: `siteId`, `mapId`, `modelVersionId`, `status: "PUBLISHED"`. The previous published version, if any, becomes `ARCHIVED` in the same transaction.
 - `400 Bad Request`: malformed ID or JSON, or a status other than `PUBLISHED`.
@@ -78,7 +84,7 @@ Publication currently requires a confirmed scale for every plan, at least one ac
 
 `siteId` is required; `query` is optional and `accessibleOnly` defaults to `false`. The current endpoint searches name, specialty and category without case or accent sensitivity and returns destinations for the requested site. Its current source is the `demo` repository, not a persisted published model.
 
-## Published medical directory — implemented with explicit local enablement
+## Published medical directory — implemented for local review
 
 `GET /api/v1/sites/{siteId}/directory-entries?q={term}`
 
@@ -87,9 +93,9 @@ Publication currently requires a confirmed scale for every plan, at least one ac
 - `200 OK`: an array of `{id, siteId, modelVersionId, floorId, nodeId, type, name, specialty}`; an unmatched term returns `[]`.
 - `400 Bad Request`: missing or malformed `siteId`, or missing, blank, or overlong `q`; body `{code: "INVALID_REQUEST", message: "..."}`.
 
-This endpoint requires the `postgres` profile and `RUMBO_NAVIGATION_DIRECTORY_ENABLED=true`. It is disabled by default until site authorization is implemented. This directory does not claim route accessibility or replace the separate `demo` destination endpoint. The Sprint Backlog's global `q`-only URL was scoped under the site resource because the current backend has no authenticated site context. The path identifies the site's directory collection; `q` filters its entries.
+This endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.navigation.directory.enabled` can disable it. Site authorization is still required before external exposure. This directory does not claim route accessibility or replace the separate `demo` destination endpoint. The Sprint Backlog's global `q`-only URL was scoped under the site resource because the current backend has no authenticated site context. The path identifies the site's directory collection; `q` filters its entries.
 
-## Published route calculation — implemented with explicit local enablement
+## Published route calculation — implemented for local review
 
 The TS-12 calculator reads only the current published graph through the `navigation` repository port. A* minimizes the sum of each traversed connection's persisted `weight + verticalPenalty`, follows one-way links, and returns no route when the goal is unreachable. On a single floor-plan coordinate system it scales Euclidean distance by the minimum observed cost per geometric meter across links, giving a lower bound on remaining cost. For mixed floors or plans, it uses a zero heuristic. With `accessibleOnly=true`, it traverses only links explicitly marked `ACCESSIBLE`; `UNKNOWN` and `INACCESSIBLE` are excluded. Obstacles are not modeled yet, so an `ACCESSIBLE` status alone cannot prove physical clearance.
 
@@ -125,7 +131,7 @@ Example `200` response:
 }
 ```
 
-The endpoint requires the `postgres` profile and `RUMBO_NAVIGATION_ROUTES_ENABLED=true`; it is **disabled by default** until IAM site authorization and obstacle validation exist. The Sprint Backlog shows a global `/api/v1/routes?from&to`; the team accepted the site-scoped path in ADR 001 because the current backend has no authenticated site context. The TS-13 latency test uses a published synthetic grid of 300 nodes and 565 links, 10 warm-ups and 30 timed MockMvc requests through PostgreSQL 16. In the local `clean verify` run of 2026-11-04, p95 was 16 ms and the maximum was 17 ms. MockMvc includes controller, application, JPA, database and serialization but omits network transit. This fixture and local measurement are not a guarantee for every clinic map or deployment. Authentication and site authorization responses will be specified with IAM before real data is exposed.
+The endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.navigation.routes.enabled` can disable it. IAM site authorization and obstacle validation are required before external exposure. The Sprint Backlog shows a global `/api/v1/routes?from&to`; the team accepted the site-scoped path in ADR 001 because the current backend has no authenticated site context. The TS-13 latency test uses a published synthetic grid of 300 nodes and 565 links, 10 warm-ups and 30 timed MockMvc requests through PostgreSQL 16. In the local `clean verify` run of 2026-11-04, p95 was 16 ms and the maximum was 17 ms. MockMvc includes controller, application, JPA, database and serialization but omits network transit. This fixture and local measurement are not a guarantee for every clinic map or deployment. Authentication and site authorization responses will be specified with IAM before real data is exposed.
 
 ### Current provisional endpoint
 

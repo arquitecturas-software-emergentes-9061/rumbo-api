@@ -32,21 +32,20 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
 - `planning` ya contiene coordenadas, escala, nodos, conexiones y un agregado de borrador
   `IndoorMap` con validación de referencias, duplicados y conectividad. Flyway y el adaptador
   JPA guardan y recuperan borradores completos en PostgreSQL. La publicación transaccional
-  y su endpoint `PATCH` están implementados con habilitación explícita. `GET` y `PUT` permiten
-  consultar y reemplazar nodos, conexiones y destinos de un borrador existente, también con
-  habilitación explícita. El `PUT` exige las tres colecciones y el `If-Match` devuelto como
+  y su endpoint `PATCH` están implementados. `GET` y `PUT` permiten consultar y reemplazar
+  nodos, conexiones y destinos de un borrador existente. El `PUT` exige las tres colecciones y el `If-Match` devuelto como
   `ETag` por el `GET`, para evitar borrados por omisión y sobrescrituras entre editores.
   El núcleo espacial publicado ya se consulta desde `navigation` sin exponer
-  borradores. El GET de rutas publicadas se activa por separado para pruebas controladas.
+  borradores. Los endpoints se muestran en el arranque local predeterminado.
 - El directorio médico de `planning` guarda entradas de médicos, especialidades y servicios
   vinculadas a nodos destino de una versión. La búsqueda indexada de `navigation` solo devuelve
-  entradas de la versión publicada vigente de una sede; su endpoint requiere habilitación
-  explícita mientras falta autorización por sede.
+  entradas de la versión publicada vigente de una sede. La API escucha solo en la máquina
+  local mientras falta autorización por sede.
 - Las conexiones verticales guardan una penalización de costo separada del peso y la distancia
   física. Cada conexión guarda `UNKNOWN`, `ACCESSIBLE` o `INACCESSIBLE` (por defecto `UNKNOWN`).
   `navigation` calcula rutas A* sobre el grafo publicado y respeta pesos, penalizaciones,
-  dirección y el filtro `accessibleOnly`. El `GET` de rutas PostgreSQL existe con habilitación
-  explícita para pruebas controladas; faltan autorización por sede y validación de obstáculos.
+  dirección y el filtro `accessibleOnly`. El `GET` de rutas PostgreSQL está disponible para
+  pruebas locales; faltan autorización por sede y validación de obstáculos.
 - Rama `main` y `develop`: base de Spring Boot, CI y convenciones.
 - Rama `feat/navigation-destination-routing`: primer incremento de `navigation`.
 - `PR-214`: directorio y búsqueda acento-insensible de destinos por nombre/especialidad/tipo.
@@ -54,41 +53,76 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
   con filtro de accesibilidad y exclusión de aristas que cruzan paredes.
 - `POST /api/v1/navigations/route` sigue como endpoint provisional sobre datos `demo`.
   `GET /api/v1/sites/{siteId}/routes?from={nodeId}&to={nodeId}` consulta la versión
-  publicada con A* cuando se habilita expresamente en el perfil `postgres`. La respuesta
+  publicada con A* en el arranque predeterminado. La respuesta
   ordena nodos y enlaces e identifica los tramos entre pisos en `verticalSections[]`.
 - Contratos REST y Spring MockMvc; dominio sin dependencias Spring.
-- Datos de ejemplo disponibles **solo con perfil `demo`**. La publicación de `planning`
-  requiere PostgreSQL y permanece desactivada hasta habilitarla para pruebas controladas.
+- El arranque predeterminado usa `postgres,local`: muestra los dos endpoints con datos fijos
+  y cinco endpoints PostgreSQL, y crea ejemplos persistidos de un borrador y una versión
+  publicada. La aplicación requiere PostgreSQL para arrancar.
   Tampoco hay subida de planos ni BLE reales. No
   declarar PR-214 terminado hasta integrar app cliente.
 
 ## Ejecutar tras instalar JDK 21 y Maven
+La configuración Spring compartida está en un único
+[`application.properties`](src/main/resources/application.properties), sin secciones por
+perfil. Los perfiles predeterminados son `postgres,local`; no hace falta llenar **Active
+profiles** en IntelliJ. Si una configuración anterior indica `demo`, quítalo para usar
+los perfiles predeterminados. Las credenciales se proporcionan por variables de entorno.
+
 ```sh
 mvn clean verify
-mvn spring-boot:run -Dspring-boot.run.profiles=demo
 ```
-El perfil `demo` no requiere PostgreSQL. La prueba de persistencia se activa con
+La prueba de persistencia se activa con
 `RUMBO_TEST_DB_URL`, `RUMBO_TEST_DB_USER` y `RUMBO_TEST_DB_PASSWORD` apuntando a una base
-PostgreSQL 16 de prueba; CI la ejecuta con un servicio temporal. Para una conexión de la
-aplicación con el perfil `postgres`, se usan `RUMBO_DB_URL`, `RUMBO_DB_USER` y
-`RUMBO_DB_PASSWORD`. Para probar localmente la publicación, activar también
-`RUMBO_PLANNING_PUBLICATION_ENABLED=true`; para probar la edición, activar
-`RUMBO_PLANNING_EDITING_ENABLED=true`. No exponer esos endpoints sin autorización por sede.
-La búsqueda del directorio publicado requiere `RUMBO_NAVIGATION_DIRECTORY_ENABLED=true`
-con el perfil `postgres`; permanece desactivada por defecto por la misma razón.
-La ruta publicada requiere `RUMBO_NAVIGATION_ROUTES_ENABLED=true` con `postgres`; también
-permanece desactivada por defecto. `accessibleOnly=true` excluye conexiones sin accesibilidad
-confirmada. Su uso productivo espera autorización por sede y reglas de obstáculos.
+PostgreSQL 16 de prueba; CI la ejecuta con un servicio temporal. Para arrancar la aplicación
+se usan `RUMBO_DB_URL`, `RUMBO_DB_USER` y `RUMBO_DB_PASSWORD`. Los cuatro endpoints
+controlados por banderas están activos por defecto y el servidor escucha solo en
+`127.0.0.1`. `accessibleOnly=true` excluye conexiones sin accesibilidad confirmada.
+El uso productivo espera autorización por sede y reglas de obstáculos.
 Véase [Contrato API](docs/API-CONTRACT.md) para métodos, cuerpos y errores.
 
-Endpoints implementados de ejemplo (perfil `demo`):
+Endpoints provisionales de ejemplo, visibles junto con los de PostgreSQL:
 ```sh
 curl -s 'http://localhost:8080/api/v1/navigations/destinations?siteId=00000000-0000-4000-8000-000000000001&query=cardiologia'
 curl -s -X POST http://localhost:8080/api/v1/navigations/route \
   -H 'Content-Type: application/json' -d '{"siteId":"00000000-0000-4000-8000-000000000001","startFloorId":"00000000-0000-4000-8000-000000000002","startNodeId":"00000000-0000-4000-8000-000000000010","destinationFloorId":"00000000-0000-4000-8000-000000000002","destinationNodeId":"00000000-0000-4000-8000-000000000011","accessibleOnly":true}'
 ```
-Swagger UI (demo): `http://localhost:8080/swagger-ui/index.html`.
+Swagger UI: `http://localhost:8080/swagger-ui/index.html`.
 Health check: `http://localhost:8080/actuator/health`.
+
+### Arrancar los siete endpoints en Swagger (PowerShell)
+
+El arranque predeterminado activa los cinco endpoints PostgreSQL y conserva los dos
+provisionales etiquetados **Demo navigation**. Solo escucha en `127.0.0.1`; no contiene
+credenciales. Se necesita Docker
+con PostgreSQL 16 y una contraseña privada elegida por cada desarrollador:
+
+```powershell
+$env:RUMBO_DB_USER = "rumbo_local"
+$env:RUMBO_DB_PASSWORD = Read-Host -MaskInput "Contraseña local de PostgreSQL"
+$env:RUMBO_DB_URL = "jdbc:postgresql://localhost:15432/rumbo_local"
+docker compose -f compose.local.yml up -d --wait
+mvn spring-boot:run
+```
+
+Abrir `http://localhost:8080/swagger-ui/index.html`. Flyway crea el esquema al arrancar.
+El perfil local añade una vez un mapa publicado y un borrador, sin reemplazar las ediciones
+posteriores. Los identificadores para **Try it out** son:
+
+| Prueba | Identificadores y parámetros |
+|---|---|
+| Ruta publicada | `siteId=10000000-0000-4000-8000-000000000001`, `from=10000000-0000-4000-8000-000000000006`, `to=10000000-0000-4000-8000-000000000007` |
+| Directorio publicado | El mismo `siteId`, `q=cardio` |
+| Leer o editar borrador | `siteId=20000000-0000-4000-8000-000000000001`, `mapId=20000000-0000-4000-8000-000000000002`, `versionId=20000000-0000-4000-8000-000000000003` |
+| Publicar borrador | Los mismos tres IDs, cuerpo `{"status":"PUBLISHED"}` y `Content-Type: application/merge-patch+json` |
+| Endpoints Demo | Usar los IDs del ejemplo `demo` anterior; no consultan PostgreSQL |
+
+Para el `PUT`, leer primero el borrador y enviar su `ETag` en `If-Match`; el cuerpo debe
+contener `nodes`, `connections` y `destinations` completos. Publicar el borrador de ejemplo
+lo convierte en `PUBLISHED`, por lo que su `GET`/`PUT` de borrador dejará de funcionar.
+Detener la base cuando termines con `docker compose -f compose.local.yml down`; el volumen
+conserva los datos y la contraseña elegida en el primer inicio. Usa esa misma contraseña
+al reiniciar. No subir contraseñas ni archivos `.env` al repositorio.
 
 ## Flujo de contribución en el repositorio oficial
 Las ramas `main` y `develop` contienen el núcleo del API. Las nuevas funcionalidades se
@@ -101,6 +135,8 @@ El código de esta rama todavía no es una release ni está fusionado a `develop
   frontera `planning`/`navigation`, A* y ruta REST objetivo.
 - [ADR 003](docs/decisions/003-draft-graph-editing-and-regeneration.md): guardado
   completo del borrador, `If-Match` y reconciliación pendiente con `US-09`.
+- [ADR 004](docs/decisions/004-local-default-api-visibility.md): los siete endpoints
+  visibles en el arranque local predeterminado, limitado a `127.0.0.1`.
 - [Contrato API](docs/API-CONTRACT.md): contratos implementados, habilitación y requisitos
   pendientes para modelos, destinos y rutas.
 - Pendientes: autorización por sede, detalle de publicación de planos y seguridad,

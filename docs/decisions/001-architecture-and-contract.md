@@ -1,6 +1,9 @@
 # ADR 001 — Persistencia, modelo publicado y rutas
 
 Estado: aceptada; persistencia, publicación controlada, A* y ruta GET habilitable implementados.
+La habilitación predeterminada para demostración local se revisó en
+[ADR 004](004-local-default-api-visibility.md); los párrafos de habilitación de esta ADR
+describen la decisión anterior.
 
 ## Contexto
 

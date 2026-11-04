@@ -1,6 +1,6 @@
 package com.uitopic.rumbo.navigation.infrastructure.acl;
 
-import com.uitopic.rumbo.navigation.domain.DirectoryEntry;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.DirectoryEntry;
 import com.uitopic.rumbo.navigation.domain.repositories.PublishedDirectoryRepository;
 import com.uitopic.rumbo.planning.interfaces.acl.PlanningPublishedMapFacade;
 import java.util.List;

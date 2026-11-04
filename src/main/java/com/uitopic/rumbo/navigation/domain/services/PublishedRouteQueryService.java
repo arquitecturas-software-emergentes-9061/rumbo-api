@@ -1,6 +1,6 @@
 package com.uitopic.rumbo.navigation.domain.services;
 
-import com.uitopic.rumbo.navigation.domain.CalculatedRoute;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.CalculatedRoute;
 import java.util.Optional;
 import java.util.UUID;
 

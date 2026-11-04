@@ -7,6 +7,11 @@ Backend académico oficial **preparado localmente**, pendiente de publicarse en 
 - Java 21 / Spring Boot 3.5.6 / REST + OpenAPI.
 - Domain-Driven Design; cada bounded context con capas `domain`, `application`,
   `interfaces` (plural: `interface` es una palabra reservada Java) e `infrastructure`.
+- `navigation` organiza sus modelos y consultas en `domain/model`, puertos en
+  `domain/repositories` y `domain/services`, casos de uso en
+  `application/internal/queryservices`, HTTP en `interfaces/rest` y adaptadores
+  de lectura en `infrastructure/acl`. El perfil `demo` tiene un adaptador propio
+  en `infrastructure/demo`.
 - PostgreSQL es la persistencia principal elegida y ya guarda borradores y versiones
   publicadas de `planning`.
   Redis y RabbitMQ se incorporarán cuando una tarea concreta los requiera; véase

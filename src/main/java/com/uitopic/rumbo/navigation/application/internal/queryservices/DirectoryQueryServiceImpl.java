@@ -1,6 +1,6 @@
 package com.uitopic.rumbo.navigation.application.internal.queryservices;
 
-import com.uitopic.rumbo.navigation.domain.DirectoryEntry;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.DirectoryEntry;
 import com.uitopic.rumbo.navigation.domain.repositories.PublishedDirectoryRepository;
 import com.uitopic.rumbo.navigation.domain.services.DirectoryQueryService;
 import java.util.List;

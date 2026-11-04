@@ -1,7 +1,7 @@
 package com.uitopic.rumbo.navigation.infrastructure.acl;
 
-import com.uitopic.rumbo.navigation.domain.PublishedSpatialGraph;
-import com.uitopic.rumbo.navigation.domain.PublishedSpatialGraphRepository;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.PublishedSpatialGraph;
+import com.uitopic.rumbo.navigation.domain.repositories.PublishedSpatialGraphRepository;
 import com.uitopic.rumbo.planning.interfaces.acl.PlanningPublishedMapFacade;
 import java.util.Optional;
 import java.util.UUID;

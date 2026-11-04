@@ -1,8 +1,8 @@
 package com.uitopic.rumbo.navigation.application.internal.queryservices;
 
-import com.uitopic.rumbo.navigation.domain.AStarRouteCalculationDomainService;
-import com.uitopic.rumbo.navigation.domain.CalculatedRoute;
-import com.uitopic.rumbo.navigation.domain.PublishedSpatialGraphRepository;
+import com.uitopic.rumbo.navigation.domain.services.AStarRouteCalculationDomainService;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.CalculatedRoute;
+import com.uitopic.rumbo.navigation.domain.repositories.PublishedSpatialGraphRepository;
 import com.uitopic.rumbo.navigation.domain.services.PublishedRouteQueryService;
 import java.util.Optional;
 import java.util.UUID;

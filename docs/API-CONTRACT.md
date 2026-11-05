@@ -168,6 +168,32 @@ The endpoint is enabled by default for loopback-only local review; the feature f
 
 `POST /api/v1/navigations/route` takes `siteId`, origin and destination floor/node IDs, and `accessibleOnly` in a JSON body. It uses Dijkstra over `demo` data and returns `totalDistanceMeters`, `nodes[]` and `links[]`; validation errors map to `422`. This endpoint remains provisional and separate from the published PostgreSQL route API. No compatibility requirement is assumed for clients that have not yet been integrated.
 
+## Clinic, site and floor administration (US-06 / PR-101)
+
+All operations require a `CLINIC_ADMIN` JWT. The authenticated account supplies
+the ownership scope. Clients cannot choose the owner or link another account's clinic.
+
+| Method and path | Request | Success |
+| --- | --- | --- |
+| GET `/api/v1/clinics/me` | — | 200 with the clinic profile, or 404 before registration |
+| PUT `/api/v1/clinics/me` | `name`, `code`, `contactEmail`, optional `phone` | 200 with the saved profile and its stable ID |
+| GET `/api/v1/sites` | — | 200 with the account's sites |
+| POST `/api/v1/sites` | `name`, optional `address` and `allowDuplicateAddress` | 201 with the site |
+| PUT `/api/v1/sites/{siteId}` | Same fields as POST | 200 with the updated site |
+| GET `/api/v1/sites/{siteId}/floors` | — | 200 with registered floors ordered by level |
+| POST `/api/v1/sites/{siteId}/floors` | Integer `number`, `name`, optional `description` | 201 with the floor and its server-generated ID |
+
+The site response contains `id`, `name`, `address` and `clinicId`. The API retains
+support for name-only site requests. Registering a clinic links previously
+registered sites owned by that same account. Spatial floor ownership remains in
+`planning_floor_sites`; the administrative floor stores the number and name
+for that floor ID. Existing map floor identities remain valid.
+
+An address matching another site in the same account returns 409
+`SITE_ADDRESS_EXISTS` unless explicitly acknowledged. Duplicate floor levels
+return 409 `FLOOR_NUMBER_EXISTS`. Invalid fields return 400, unauthenticated
+requests return 401, other roles return 403, and foreign or missing sites return 404.
+
 ## Shared rules
 
 - HTTP error bodies contain `code` and `message`; IAM, Planning beacon inventory and Analytics also

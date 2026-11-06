@@ -7,4 +7,6 @@ import java.util.UUID;
 public interface IndoorMapQueryService {
   /** Returns an existing draft graph that belongs to the requested site. */
   IndoorMap getDraft(UUID siteId, UUID mapId, UUID modelVersionId);
+
+  IndoorMap getSiteDraft(UUID siteId);
 }

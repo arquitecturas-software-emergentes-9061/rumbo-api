@@ -150,6 +150,11 @@ an initial map or floor plan, and it does not reconcile generated rooms with des
 
 ## Draft graph editing — implemented for local review
 
+`GET /api/v1/sites/{siteId}/maps/draft/graph` discovers the single current draft for
+an owned site. It returns the same graph snapshot and ETag as a version-specific GET.
+An owned site without a draft receives `404`. Subsequent writes use the map and version
+IDs from this response and retain the existing `If-Match` requirement.
+
 `GET /api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}/graph`
 
 `PUT /api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}/graph`

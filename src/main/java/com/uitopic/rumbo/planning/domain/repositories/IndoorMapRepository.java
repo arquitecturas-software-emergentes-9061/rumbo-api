@@ -18,6 +18,9 @@ public interface IndoorMapRepository {
   /** Loads a draft version and all of its plans, nodes, and connections. */
   Optional<IndoorMap> findDraft(UUID mapId, UUID modelVersionId);
 
+  /** Finds the single current draft of an existing site, if it has one. */
+  Optional<IndoorMap> findDraftBySite(UUID siteId);
+
   /** Locks and loads the draft so an edit or publication sees one coherent graph. */
   Optional<IndoorMap> findDraftForUpdate(UUID mapId, UUID modelVersionId);
 

@@ -171,6 +171,18 @@ public class IndoorMapRepositoryImpl implements IndoorMapRepository {
   }
 
   @Override
+  @Transactional(readOnly = true)
+  public Optional<IndoorMap> findDraftBySite(UUID siteId) {
+    return entityManager.createQuery("""
+        select version from MapVersionJpaEntity version, IndoorMapJpaEntity root
+        where version.mapId = root.id and root.siteId = :siteId and version.status = :status
+        """, MapVersionJpaEntity.class)
+      .setParameter("siteId", siteId).setParameter("status", MapVersionStatus.DRAFT)
+      .getResultList().stream().findFirst()
+      .flatMap(version -> loadDraft(version.mapId(), version.id(), false));
+  }
+
+  @Override
   @Transactional(propagation = Propagation.MANDATORY)
   public Optional<IndoorMap> findDraftForUpdate(UUID mapId, UUID modelVersionId) {
     return loadDraft(mapId, modelVersionId, true);

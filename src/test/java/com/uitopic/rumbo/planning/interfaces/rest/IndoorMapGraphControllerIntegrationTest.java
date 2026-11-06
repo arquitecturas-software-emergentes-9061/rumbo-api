@@ -69,6 +69,22 @@ class IndoorMapGraphControllerIntegrationTest {
   }
 
   @Test
+  void discoversOnlyTheOwnedSitesCurrentDraftAndItsRevision() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    String discovery = "/api/v1/sites/" + map.siteId() + "/maps/draft/graph";
+    mvc.perform(get(discovery)).andExpect(status().isOk())
+      .andExpect(header().string("ETag", "\"rev-0\""))
+      .andExpect(jsonPath("$.mapId").value(map.id().toString()))
+      .andExpect(jsonPath("$.modelVersionId").value(map.modelVersionId().toString()))
+      .andExpect(jsonPath("$.nodes.length()").value(map.nodes().size()));
+    mvc.perform(get("/api/v1/sites/" + UUID.randomUUID() + "/maps/draft/graph"))
+      .andExpect(status().isNotFound());
+    when(siteOwnerGuard.isOwner(any(), any())).thenReturn(false);
+    mvc.perform(get(discovery)).andExpect(status().isForbidden());
+  }
+
+  @Test
   void readsAndReplacesGraphWithoutLosingPlanOrScale() throws Exception {
     IndoorMap map = draft();
     store.saveDraft(map);

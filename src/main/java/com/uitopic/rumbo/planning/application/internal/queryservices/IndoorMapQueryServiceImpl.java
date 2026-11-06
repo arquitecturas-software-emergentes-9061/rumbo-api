@@ -28,4 +28,10 @@ public class IndoorMapQueryServiceImpl implements IndoorMapQueryService {
     if (!map.siteId().equals(siteId)) throw new MapVersionNotFoundException();
     return map;
   }
+
+  @Override
+  @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+  public IndoorMap getSiteDraft(UUID siteId) {
+    return repository.findDraftBySite(siteId).orElseThrow(MapVersionNotFoundException::new);
+  }
 }

@@ -4,6 +4,10 @@ import com.uitopic.rumbo.planning.domain.model.entities.FloorPlanVersion;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.FloorPlanFile;
 import com.uitopic.rumbo.planning.domain.repositories.FloorPlanVersionRepository;
 import java.sql.Timestamp;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -43,6 +47,26 @@ public class FloorPlanVersionRepositoryImpl implements FloorPlanVersionRepositor
   }
 
   @Override
+  public Optional<List<FloorPlanVersion>> findVersions(UUID siteId, UUID floorId) {
+    return jdbc.query("""
+      SELECT v.id, v.version_number, v.file_name, v.media_type, octet_length(v.file_bytes) AS size_bytes,
+        v.created_at
+      FROM planning_floor_sites f
+      LEFT JOIN planning_floor_plan_file_versions v ON v.floor_id = f.floor_id
+      WHERE f.site_id = ? AND f.floor_id = ?
+      ORDER BY v.version_number DESC
+      """, rs -> {
+        if (!rs.next()) return Optional.empty();
+        var versions = new ArrayList<FloorPlanVersion>();
+        do {
+          UUID id = rs.getObject("id", UUID.class);
+          if (id != null) versions.add(version(rs, id, siteId, floorId, rs.getLong("size_bytes")));
+        } while (rs.next());
+        return Optional.of(List.copyOf(versions));
+      }, siteId, floorId);
+  }
+
+  @Override
   public Optional<Original> findOriginal(UUID siteId, UUID floorId, UUID versionId) {
     return jdbc.query("""
       SELECT v.version_number, v.file_name, v.media_type, v.file_bytes, v.created_at
@@ -51,10 +75,15 @@ public class FloorPlanVersionRepositoryImpl implements FloorPlanVersionRepositor
       WHERE f.site_id = ? AND v.floor_id = ? AND v.id = ?
       """, (rs, row) -> {
         byte[] bytes = rs.getBytes("file_bytes");
-        var format = FloorPlanFile.Format.fromMediaType(rs.getString("media_type"));
-        var file = new FloorPlanFile(rs.getString("file_name"), format, bytes.length);
-        return new Original(new FloorPlanVersion(versionId, siteId, floorId,
-          rs.getInt("version_number"), file, rs.getTimestamp("created_at").toInstant()), bytes);
+        return new Original(version(rs, versionId, siteId, floorId, bytes.length), bytes);
       }, siteId, floorId, versionId).stream().findFirst();
+  }
+
+  private static FloorPlanVersion version(ResultSet rs, UUID id, UUID siteId, UUID floorId,
+      long sizeBytes) throws SQLException {
+    var format = FloorPlanFile.Format.fromMediaType(rs.getString("media_type"));
+    var file = new FloorPlanFile(rs.getString("file_name"), format, sizeBytes);
+    return new FloorPlanVersion(id, siteId, floorId, rs.getInt("version_number"), file,
+      rs.getTimestamp("created_at").toInstant());
   }
 }

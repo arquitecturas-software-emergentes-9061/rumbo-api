@@ -8,6 +8,7 @@ import com.uitopic.rumbo.planning.domain.repositories.FloorPlanVersionRepository
 import com.uitopic.rumbo.planning.domain.repositories.SiteRepository;
 import java.time.Clock;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +42,12 @@ public class FloorPlanVersionService {
   }
 
   @Transactional(readOnly = true)
+  public List<FloorPlanVersion> list(UUID actorId, UUID siteId, UUID floorId) {
+    if (!sites.isOwnedBy(siteId, actorId)) throw new SiteNotFound();
+    return versions.findVersions(siteId, floorId).orElseThrow(FloorNotFound::new);
+  }
+
+  @Transactional(readOnly = true)
   public Original original(UUID actorId, UUID siteId, UUID floorId, UUID versionId) {
     requireOwner(actorId, siteId);
     return versions.findOriginal(siteId, floorId, versionId).orElseThrow(NotFound::new);
@@ -51,4 +58,6 @@ public class FloorPlanVersionService {
   }
 
   public static final class NotFound extends RuntimeException {}
+  public static final class SiteNotFound extends RuntimeException {}
+  public static final class FloorNotFound extends RuntimeException {}
 }

@@ -69,8 +69,18 @@ distinct consecutive numbers. Each accepted upload creates a new version.
 
 Returns **200** with the stored bytes, original media type and attachment filename.
 The response is private and non-cacheable. The same role and ownership rules apply.
-An unknown or out-of-scope version returns **404**. Listing a floor's metadata and version
-history belongs to TS-21 / PR-123.
+An unknown or out-of-scope version returns **404**.
+
+### List original file versions (TS-21 / PR-123)
+
+`GET /api/v1/sites/{siteId}/floors/{floorId}/plans`
+
+Returns **200** with an array of the same metadata as the upload response, sorted by
+version descending. The first item is the current original. A registered floor without
+uploads returns `[]`. File bytes are retrieved only through the version download endpoint.
+A missing or foreign site returns **404** with `SITE_NOT_FOUND`. A missing floor or a
+floor outside the owned site returns **404** with `FLOOR_NOT_FOUND`. The same role and
+authentication requirements apply.
 
 ### Storage and rollout
 

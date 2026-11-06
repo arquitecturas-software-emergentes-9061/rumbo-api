@@ -3,6 +3,7 @@ package com.uitopic.rumbo.planning.interfaces.rest;
 import com.uitopic.rumbo.iam.interfaces.security.AuthenticatedPrincipal;
 import com.uitopic.rumbo.planning.application.internal.FloorPlanVersionService;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidFloorPlanFile;
+import com.uitopic.rumbo.planning.domain.model.entities.FloorPlanVersion;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.FloorPlanFile;
 import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configuration.OpenApiConfiguration;
 import com.uitopic.rumbo.shared.interfaces.rest.ProblemDetails;
@@ -16,6 +17,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
@@ -51,7 +53,27 @@ public class FloorPlanVersionsController {
   }
 
   public record VersionResponse(UUID id, UUID siteId, UUID floorId, int version, String fileName,
-                                String mediaType, long sizeBytes, Instant createdAt) {}
+                                String mediaType, long sizeBytes, Instant createdAt) {
+    static VersionResponse from(FloorPlanVersion version) {
+      var file = version.file();
+      return new VersionResponse(version.id(), version.siteId(), version.floorId(), version.number(),
+        file.name(), file.format().mediaType(), file.sizeBytes(), version.createdAt());
+    }
+  }
+
+  @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+  @Operation(summary = "List plan metadata from newest to oldest",
+    description = "The first item is the current original. A registered floor with no plans returns an empty list.")
+  @ApiResponse(responseCode = "200", description = "Version metadata, newest first")
+  @ApiResponse(responseCode = "400", description = "Invalid site or floor identifier", content = @Content)
+  @ApiResponse(responseCode = "401", description = "Authentication required", content = @Content)
+  @ApiResponse(responseCode = "403", description = "Administrative role required", content = @Content)
+  @ApiResponse(responseCode = "404", description = "Site or floor not available to the administrator", content = @Content)
+  public ResponseEntity<List<VersionResponse>> list(@AuthenticationPrincipal AuthenticatedPrincipal user,
+      @PathVariable UUID siteId, @PathVariable UUID floorId) {
+    return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+      .body(service.list(user.userId(), siteId, floorId).stream().map(VersionResponse::from).toList());
+  }
 
   @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
   @Operation(summary = "Store an immutable original file as the next architectural plan version")
@@ -70,9 +92,7 @@ public class FloorPlanVersionsController {
     var saved = service.register(user.userId(), siteId, floorId, file.getOriginalFilename(),
       file.getContentType(), file.getBytes());
     var location = URI.create("/api/v1/sites/" + siteId + "/floors/" + floorId + "/plans/versions/" + saved.id());
-    return ResponseEntity.created(location).body(new VersionResponse(saved.id(), siteId, floorId,
-      saved.number(), saved.file().name(), saved.file().format().mediaType(), saved.file().sizeBytes(),
-      saved.createdAt()));
+    return ResponseEntity.created(location).body(VersionResponse.from(saved));
   }
 
   @GetMapping("/versions/{versionId}")
@@ -100,6 +120,16 @@ public class FloorPlanVersionsController {
 
   @RestControllerAdvice(assignableTypes = FloorPlanVersionsController.class)
   public static class Errors {
+    @ExceptionHandler(FloorPlanVersionService.SiteNotFound.class)
+    public ProblemDetail siteNotFound() {
+      return ProblemDetails.of(HttpStatus.NOT_FOUND, "SITE_NOT_FOUND", "Site not found");
+    }
+
+    @ExceptionHandler(FloorPlanVersionService.FloorNotFound.class)
+    public ProblemDetail floorNotFound() {
+      return ProblemDetails.of(HttpStatus.NOT_FOUND, "FLOOR_NOT_FOUND", "Floor not found in this site");
+    }
+
     @ExceptionHandler(FloorPlanVersionService.NotFound.class)
     public ProblemDetail notFound() {
       return ProblemDetails.of(HttpStatus.NOT_FOUND, "FLOOR_PLAN_NOT_FOUND", "Site, floor or plan version not found");

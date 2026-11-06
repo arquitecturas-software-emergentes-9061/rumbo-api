@@ -147,11 +147,42 @@ class FloorPlanVersionsIntegrationTest {
   }
 
   @Test
+  void listsMetadataNewestFirstAndDistinguishesEmptyUnknownAndUnauthorizedScopes() throws Exception {
+    String owner = token("CLINIC_ADMIN");
+    UUID site = site(owner), floor = registerFloor(site);
+    String path = path(site, floor);
+    mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+      .andExpect(status().isOk()).andExpect(content().json("[]"));
+    upload(owner, site, floor, "first.svg", SVG, svg(10));
+    var last = upload(owner, site, floor, "second.svg", SVG, svg(20));
+    String id = json.readTree(last.getResponse().getContentAsString()).path("id").asText();
+    mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(id))
+      .andExpect(jsonPath("$[0].version").value(2)).andExpect(jsonPath("$[1].version").value(1))
+      .andExpect(jsonPath("$[0].fileName").value("second.svg"))
+      .andExpect(jsonPath("$[0].sizeBytes").value(svg(20).length))
+      .andExpect(jsonPath("$[0].bytes").doesNotExist());
+    mvc.perform(get(path)).andExpect(status().isUnauthorized());
+    mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer(token("PATIENT"))))
+      .andExpect(status().isForbidden());
+    mvc.perform(get(path).header(HttpHeaders.AUTHORIZATION, bearer(token("CLINIC_ADMIN"))))
+      .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("SITE_NOT_FOUND"));
+    mvc.perform(get(path(UUID.randomUUID(), floor)).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+      .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("SITE_NOT_FOUND"));
+    mvc.perform(get(path(site, registerFloor(site(owner)))).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+      .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("FLOOR_NOT_FOUND"));
+    mvc.perform(get(path(site, UUID.randomUUID())).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+      .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("FLOOR_NOT_FOUND"));
+  }
+
+  @Test
   void exposesMultipartAndBinaryContractsInOpenApi() throws Exception {
     mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
       .andExpect(jsonPath("$.paths['" + PATH + "'].post.requestBody.content['multipart/form-data']"
         + ".schema.properties.file.format").value("binary"))
       .andExpect(jsonPath("$.paths['" + PATH + "'].post.responses['413']").exists())
+      .andExpect(jsonPath("$.paths['" + PATH + "'].get.responses['200'].content['application/json'].schema.type")
+        .value("array"))
       .andExpect(jsonPath("$.paths['" + PATH + "/versions/{versionId}'].get.responses['200']"
         + ".content['application/octet-stream'].schema.format").value("binary"));
   }

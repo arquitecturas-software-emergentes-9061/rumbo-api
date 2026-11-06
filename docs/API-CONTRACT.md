@@ -71,6 +71,11 @@ Returns **200** with the stored bytes, original media type and attachment filena
 The response is private and non-cacheable. The same role and ownership rules apply.
 An unknown or out-of-scope version returns **404**.
 
+For calibratable originals, the response exposes the `X-Plan-Width` and
+`X-Plan-Height` headers. They describe the top-left coordinate space used by
+calibration. Raster files use pixels, SVG uses its display dimensions, and PDF uses
+the rotated crop box in page units. The headers are available to allowed browser origins.
+
 ### List original file versions (TS-21 / PR-123)
 
 `GET /api/v1/sites/{siteId}/floors/{floorId}/plans`
@@ -81,6 +86,16 @@ uploads returns `[]`. File bytes are retrieved only through the version download
 A missing or foreign site returns **404** with `SITE_NOT_FOUND`. A missing floor or a
 floor outside the owned site returns **404** with `FLOOR_NOT_FOUND`. The same role and
 authentication requirements apply.
+
+### Calibrate an original file (US-07 / PR-111)
+
+`PUT /api/v1/sites/{siteId}/plan-calibrations/{planVersionId}` accepts the original file's
+version ID and the existing request fields `floorId`, `unit`, `measuredDistance`,
+`startX`, `startY`, `endX` and `endY`. Points must be distinct and inside that
+file's dimensions. The response includes `metersPerUnit`. The matching `GET` retrieves
+the saved measurement for that version or returns `CALIBRATION_NOT_FOUND`.
+The original file's calibration is independent of graph publication. Draft graph
+calibration keeps its existing behavior.
 
 ### Storage and rollout
 

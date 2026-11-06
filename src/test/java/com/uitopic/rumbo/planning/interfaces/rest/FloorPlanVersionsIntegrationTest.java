@@ -40,6 +40,45 @@ class FloorPlanVersionsIntegrationTest {
   @Autowired JdbcTemplate jdbc;
 
   @Test
+  void calibratesAnUploadedOriginalAndPersistsTheMeasurementByVersion() throws Exception {
+    String owner = token("CLINIC_ADMIN"), outsider = token("CLINIC_ADMIN");
+    UUID site = site(owner), floor = registerFloor(site);
+    byte[] bytes = """
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+          <path d="M 5 10 L 100 10"/>
+        </svg>
+        """.getBytes(StandardCharsets.UTF_8);
+    var upload = upload(owner, site, floor, "plano.svg", SVG, bytes);
+    String id = json.readTree(upload.getResponse().getContentAsString()).path("id").asText();
+    String url = "/api/v1/sites/" + site + "/plan-calibrations/" + id;
+    String request = """
+      {"floorId":"%s","unit":"METERS","measuredDistance":5,
+       "startX":10,"startY":10,"endX":110,"endY":10}
+      """.formatted(floor);
+    mvc.perform(get(upload.getResponse().getHeader(HttpHeaders.LOCATION))
+        .header(HttpHeaders.AUTHORIZATION, bearer(owner)).header(HttpHeaders.ORIGIN, "http://localhost:4200"))
+      .andExpect(status().isOk()).andExpect(content().bytes(bytes))
+      .andExpect(header().string("X-Plan-Width", "200.0"))
+      .andExpect(header().string("X-Plan-Height", "100.0"));
+    mvc.perform(get(url).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+      .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("CALIBRATION_NOT_FOUND"));
+    mvc.perform(put(url).header(HttpHeaders.AUTHORIZATION, bearer(outsider))
+        .contentType(MediaType.APPLICATION_JSON).content(request)).andExpect(status().isNotFound());
+    mvc.perform(put(url).header(HttpHeaders.AUTHORIZATION, bearer(owner))
+        .contentType(MediaType.APPLICATION_JSON).content(request.replace("110", "210")))
+      .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("INVALID_SCALE_REFERENCE"));
+    mvc.perform(put(url).header(HttpHeaders.AUTHORIZATION, bearer(owner))
+        .contentType(MediaType.APPLICATION_JSON).content(request))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.metersPerUnit").value(0.05));
+    mvc.perform(get(url).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.metersPerUnit").value(0.05))
+      .andExpect(jsonPath("$.planVersionId").value(id)).andExpect(jsonPath("$.endX").value(110));
+    mvc.perform(get(url).header(HttpHeaders.AUTHORIZATION, bearer(outsider))).andExpect(status().isNotFound());
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM indoor_maps WHERE site_id = ?", Integer.class, site))
+      .isZero();
+  }
+
+  @Test
   void storesEachOriginalUnchangedAndARejectedUploadDoesNotReplaceTheCurrentVersion() throws Exception {
     String owner = token("CLINIC_ADMIN");
     UUID site = site(owner);

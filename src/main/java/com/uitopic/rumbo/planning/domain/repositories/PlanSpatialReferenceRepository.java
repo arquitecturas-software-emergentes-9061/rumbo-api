@@ -7,5 +7,6 @@ import java.util.UUID;
 /** Reads plan ownership and geometry needed by calibration and beacon placement. */
 public interface PlanSpatialReferenceRepository {
   Optional<DraftPlanBounds> lockDraftPlan(UUID siteId, UUID floorId, UUID planVersionId);
+  boolean existsInGraph(UUID siteId, UUID planVersionId);
   boolean containsPoint(UUID siteId, UUID floorId, double xUnits, double yUnits);
 }

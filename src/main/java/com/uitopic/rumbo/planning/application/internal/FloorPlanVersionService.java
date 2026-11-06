@@ -3,6 +3,7 @@ package com.uitopic.rumbo.planning.application.internal;
 import com.uitopic.rumbo.planning.application.ports.FloorPlanContentValidator;
 import com.uitopic.rumbo.planning.domain.model.entities.FloorPlanVersion;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.FloorPlanFile;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.OriginalPlanBounds;
 import com.uitopic.rumbo.planning.domain.repositories.FloorPlanVersionRepository;
 import com.uitopic.rumbo.planning.domain.repositories.FloorPlanVersionRepository.Original;
 import com.uitopic.rumbo.planning.domain.repositories.SiteRepository;
@@ -51,6 +52,10 @@ public class FloorPlanVersionService {
   public Original original(UUID actorId, UUID siteId, UUID floorId, UUID versionId) {
     requireOwner(actorId, siteId);
     return versions.findOriginal(siteId, floorId, versionId).orElseThrow(NotFound::new);
+  }
+
+  public OriginalPlanBounds bounds(Original original) {
+    return validator.bounds(original.version().file().format(), original.bytes());
   }
 
   private void requireOwner(UUID actorId, UUID siteId) {

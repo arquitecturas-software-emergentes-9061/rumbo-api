@@ -8,6 +8,7 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.FloorPlanFile;
 import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configuration.OpenApiConfiguration;
 import com.uitopic.rumbo.shared.interfaces.rest.ProblemDetails;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -98,6 +99,10 @@ public class FloorPlanVersionsController {
   @GetMapping("/versions/{versionId}")
   @Operation(summary = "Download the unchanged original bytes of a specific plan version")
   @ApiResponse(responseCode = "200", description = "Original file, with its stored media type",
+    headers = {
+      @Header(name = "X-Plan-Width", description = "Calibration width in original plan units, when available"),
+      @Header(name = "X-Plan-Height", description = "Calibration height in original plan units, when available")
+    },
     content = @Content(mediaType = MediaType.APPLICATION_OCTET_STREAM_VALUE,
       schema = @Schema(type = "string", format = "binary")))
   @ApiResponse(responseCode = "401", description = "Authentication required", content = @Content)
@@ -107,15 +112,22 @@ public class FloorPlanVersionsController {
       @PathVariable UUID siteId, @PathVariable UUID floorId, @PathVariable UUID versionId) {
     var original = service.original(user.userId(), siteId, floorId, versionId);
     var file = original.version().file();
-    return ResponseEntity.ok()
+    var response = ResponseEntity.ok()
       .contentType(MediaType.parseMediaType(file.format().mediaType()))
       .contentLength(file.sizeBytes())
       .cacheControl(CacheControl.noStore())
       .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
         .filename(file.name(), StandardCharsets.UTF_8).build().toString())
       .header("Content-Security-Policy", "sandbox; default-src 'none'")
-      .header("X-Content-Type-Options", "nosniff")
-      .body(original.bytes());
+      .header("X-Content-Type-Options", "nosniff");
+    try {
+      var bounds = service.bounds(original);
+      response.header("X-Plan-Width", Double.toString(bounds.width()));
+      response.header("X-Plan-Height", Double.toString(bounds.height()));
+    } catch (InvalidFloorPlanFile ignored) {
+      // Older originals can remain downloadable even when their dimensions cannot be read.
+    }
+    return response.body(original.bytes());
   }
 
   @RestControllerAdvice(assignableTypes = FloorPlanVersionsController.class)

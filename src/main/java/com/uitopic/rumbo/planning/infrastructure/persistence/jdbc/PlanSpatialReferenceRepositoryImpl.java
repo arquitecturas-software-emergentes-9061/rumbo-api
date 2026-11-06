@@ -33,6 +33,18 @@ public class PlanSpatialReferenceRepositoryImpl implements PlanSpatialReferenceR
   }
 
   @Override
+  public boolean existsInGraph(UUID siteId, UUID planVersionId) {
+    return Boolean.TRUE.equals(jdbc.queryForObject("""
+        SELECT EXISTS (
+          SELECT 1 FROM plan_coordinate_spaces p
+          JOIN map_versions v ON v.id = p.model_version_id
+          JOIN indoor_maps m ON m.id = v.map_id
+          WHERE m.site_id = ? AND p.plan_version_id = ?
+        )
+        """, Boolean.class, siteId, planVersionId));
+  }
+
+  @Override
   public boolean containsPoint(UUID siteId, UUID floorId, double xUnits, double yUnits) {
     Integer count = jdbc.queryForObject("""
         SELECT count(*) FROM plan_coordinate_spaces p

@@ -2,6 +2,8 @@ package com.uitopic.rumbo.planning.interfaces.rest;
 
 import com.uitopic.rumbo.iam.interfaces.security.AuthenticatedPrincipal;
 import com.uitopic.rumbo.planning.application.internal.FloorPlanVersionService;
+import com.uitopic.rumbo.planning.application.internal.exceptions.InvalidSvgPlanException;
+import com.uitopic.rumbo.planning.application.internal.queryservices.OriginalPlanInterpretationQueryService;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidFloorPlanFile;
 import com.uitopic.rumbo.planning.domain.model.entities.FloorPlanVersion;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.FloorPlanFile;
@@ -48,9 +50,12 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 @PreAuthorize("hasRole('CLINIC_ADMIN')")
 public class FloorPlanVersionsController {
   private final FloorPlanVersionService service;
+  private final OriginalPlanInterpretationQueryService interpretations;
 
-  public FloorPlanVersionsController(FloorPlanVersionService service) {
+  public FloorPlanVersionsController(FloorPlanVersionService service,
+      OriginalPlanInterpretationQueryService interpretations) {
     this.service = service;
+    this.interpretations = interpretations;
   }
 
   public record VersionResponse(UUID id, UUID siteId, UUID floorId, int version, String fileName,
@@ -130,8 +135,28 @@ public class FloorPlanVersionsController {
     return response.body(original.bytes());
   }
 
+  @PostMapping("/versions/{versionId}/interpretation")
+  @Operation(summary = "Inspect one stored plan version and its physical scale",
+    description = "Builds SVG candidates in original coordinates or reports preview-only format capability. "
+      + "Returns the version's scale status. The operation leaves the stored graph unchanged.")
+  @ApiResponse(responseCode = "200", description = "Format capability, scale status and optional SVG candidates")
+  @ApiResponse(responseCode = "401", description = "Authentication required", content = @Content)
+  @ApiResponse(responseCode = "403", description = "Administrative role required", content = @Content)
+  @ApiResponse(responseCode = "404", description = "Site, floor or version not found", content = @Content)
+  @ApiResponse(responseCode = "422", description = "Original SVG cannot be interpreted", content = @Content)
+  public ResponseEntity<OriginalPlanInterpretationQueryService.Result> interpret(
+      @AuthenticationPrincipal AuthenticatedPrincipal user, @PathVariable UUID siteId,
+      @PathVariable UUID floorId, @PathVariable UUID versionId) {
+    return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+      .body(interpretations.inspect(user.userId(), siteId, floorId, versionId));
+  }
+
   @RestControllerAdvice(assignableTypes = FloorPlanVersionsController.class)
   public static class Errors {
+    @ExceptionHandler(InvalidSvgPlanException.class)
+    public ProblemDetail invalidSvg(InvalidSvgPlanException error) {
+      return ProblemDetails.of(HttpStatus.UNPROCESSABLE_ENTITY, "INVALID_SVG_PLAN", error.getMessage());
+    }
     @ExceptionHandler(FloorPlanVersionService.SiteNotFound.class)
     public ProblemDetail siteNotFound() {
       return ProblemDetails.of(HttpStatus.NOT_FOUND, "SITE_NOT_FOUND", "Site not found");

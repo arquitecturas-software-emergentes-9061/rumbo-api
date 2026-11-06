@@ -97,6 +97,20 @@ the saved measurement for that version or returns `CALIBRATION_NOT_FOUND`.
 The original file's calibration is independent of graph publication. Draft graph
 calibration keeps its existing behavior.
 
+### Inspect a stored plan (US-08 / PR-127)
+
+`POST /api/v1/sites/{siteId}/floors/{floorId}/plans/versions/{versionId}/interpretation`
+uses the original scoped to the administrator, site and floor. `SVG_CANDIDATES`
+includes candidate walls, annotated zones, doors and links in the original preview
+coordinate frame. `PREVIEW_ONLY` identifies PNG, JPEG and single-page PDF. The original
+remains available for viewing and calibration in either case.
+
+The result contains `CONFIRMED` with `metersPerUnit` only when that version and floor
+have a saved physical reference. `PROVISIONAL` keeps all dimensions in plan units.
+SVGs outside the interpreter's supported geometry return `422 INVALID_SVG_PLAN`.
+The response is a proposal for review. Graph writes use the separate revision-checked
+draft contract and require an explicit mapping between the proposal and a draft plan.
+
 ### Storage and rollout
 
 The original bytes and metadata commit together in PostgreSQL (`BYTEA`) with no external

@@ -30,7 +30,7 @@ public final class SvgRoomTopologyProposalService {
   public record CandidateNode(String id, String role, String label, double x, double y) {}
   public record CandidateLink(String id, String fromNodeId, String toNodeId,
                               String kind, double distanceUnits, boolean bidirectional) {}
-  public record Proposal(List<Zone> zones, List<Door> doors,
+  public record Proposal(SvgGeometryInterpreter.ViewBox viewBox, List<Zone> zones, List<Door> doors,
                          List<CandidateNode> nodes, List<CandidateLink> connections,
                          List<SvgGeometryInterpreter.Segment> wallCandidates,
                          List<String> warnings) {
@@ -44,8 +44,11 @@ public final class SvgRoomTopologyProposalService {
   private final SvgGeometryInterpreter base = new SvgGeometryInterpreter();
 
   public Proposal propose(String svg) {
-    var interpretation = base.interpret(svg); // Validates XML, transforms, size and geometry.
-    Document doc = SvgGeometryInterpreter.readXml(svg);
+    return propose(SvgGeometryInterpreter.readXml(svg));
+  }
+
+  Proposal propose(Document doc) {
+    var interpretation = base.interpret(doc); // Validates transforms and geometry.
     NodeList elements = doc.getDocumentElement().getElementsByTagName("*");
     var zones = new ArrayList<Zone>();
     var doors = new ArrayList<Door>();
@@ -114,7 +117,7 @@ public final class SvgRoomTopologyProposalService {
     if (!zones.isEmpty() && links.isEmpty())
       warnings.add("No hay conexiones verificables entre zonas; no inventar rutas por proximidad");
     warnings.add("Propuesta no publicada: revisar paredes, anchos de puertas, accesibilidad, escala y topología");
-    return new Proposal(zones, doors, nodes, links, interpretation.wallCandidates(), warnings);
+    return new Proposal(interpretation.viewBox(), zones, doors, nodes, links, interpretation.wallCandidates(), warnings);
   }
 
   private static String nearestLabel(List<SvgGeometryInterpreter.Label> labels,

@@ -40,6 +40,78 @@ class FloorPlanVersionsIntegrationTest {
   @Autowired JdbcTemplate jdbc;
 
   @Test
+  void inspectsTheExactOriginalAndAppliesItsOwnCalibrationFrame() throws Exception {
+    String owner = token("CLINIC_ADMIN"), outsider = token("CLINIC_ADMIN");
+    UUID site = site(owner), floor = registerFloor(site);
+    byte[] annotated = """
+      <svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="10 20 100 100">
+        <rect data-rumbo-role="room" x="10" y="20" width="50" height="100"/>
+        <rect data-rumbo-role="corridor" x="60" y="20" width="50" height="100"/>
+        <line data-rumbo-role="door" x1="60" x2="60" y1="35" y2="45"/>
+      </svg>
+      """.getBytes(StandardCharsets.UTF_8);
+    var saved = upload(owner, site, floor, "plano.svg", SVG, annotated);
+    var original = saved.getResponse().getHeader(HttpHeaders.LOCATION);
+    var endpoint = original + "/interpretation";
+    var id = json.readTree(saved.getResponse().getContentAsString()).path("id").asText();
+    mvc.perform(post(endpoint).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.versionId").value(id))
+      .andExpect(jsonPath("$.scaleStatus").value("PROVISIONAL"))
+      .andExpect(jsonPath("$.metersPerUnit").doesNotExist())
+      .andExpect(jsonPath("$.proposal.zones[0].x").value(100.0))
+      .andExpect(jsonPath("$.proposal.zones[0].y").value(0.0))
+      .andExpect(jsonPath("$.proposal.zones[0].width").value(100.0))
+      .andExpect(jsonPath("$.proposal.connections.length()").value(2));
+    String request = """
+      {"floorId":"%s","unit":"METERS","measuredDistance":5,
+       "startX":100,"startY":25,"endX":200,"endY":25}
+      """.formatted(floor);
+    mvc.perform(put("/api/v1/sites/" + site + "/plan-calibrations/" + id)
+        .header(HttpHeaders.AUTHORIZATION, bearer(owner)).contentType(MediaType.APPLICATION_JSON).content(request))
+      .andExpect(status().isOk());
+    mvc.perform(post(endpoint).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.scaleStatus").value("CONFIRMED"))
+      .andExpect(jsonPath("$.metersPerUnit").value(0.05));
+    mvc.perform(post(endpoint)).andExpect(status().isUnauthorized());
+    mvc.perform(post(endpoint).header(HttpHeaders.AUTHORIZATION, bearer(outsider)))
+      .andExpect(status().isNotFound());
+    mvc.perform(post(endpoint).header(HttpHeaders.AUTHORIZATION, bearer(token("PATIENT"))))
+      .andExpect(status().isForbidden());
+
+    var bytes = new java.io.ByteArrayOutputStream();
+    javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(10, 5,
+      java.awt.image.BufferedImage.TYPE_INT_RGB), "png", bytes);
+    var raster = upload(owner, site, floor, "plano.png", "image/png", bytes.toByteArray());
+    mvc.perform(post(raster.getResponse().getHeader(HttpHeaders.LOCATION) + "/interpretation")
+        .header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.processing").value("PREVIEW_ONLY"))
+      .andExpect(jsonPath("$.scaleStatus").value("PROVISIONAL"))
+      .andExpect(jsonPath("$.proposal").doesNotExist());
+    mvc.perform(post(endpoint).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.versionId").value(id))
+      .andExpect(jsonPath("$.scaleStatus").value("CONFIRMED"));
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM indoor_maps WHERE site_id = ?", Integer.class, site))
+      .isZero();
+  }
+
+  @Test
+  void reportsValidOriginalsThatCannotBeInterpretedAndPreservesTheirDownload() throws Exception {
+    String owner = token("CLINIC_ADMIN");
+    UUID site = site(owner), floor = registerFloor(site);
+    byte[] svg = """
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+        <g transform="translate(5, 5)"><line x1="0" y1="0" x2="10" y2="10"/></g>
+      </svg>
+      """.getBytes(StandardCharsets.UTF_8);
+    var saved = upload(owner, site, floor, "transformado.svg", SVG, svg);
+    String original = saved.getResponse().getHeader(HttpHeaders.LOCATION);
+    mvc.perform(post(original + "/interpretation").header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+      .andExpect(status().isUnprocessableEntity()).andExpect(jsonPath("$.code").value("INVALID_SVG_PLAN"));
+    mvc.perform(get(original).header(HttpHeaders.AUTHORIZATION, bearer(owner)))
+      .andExpect(status().isOk()).andExpect(content().bytes(svg));
+  }
+
+  @Test
   void calibratesAnUploadedOriginalAndPersistsTheMeasurementByVersion() throws Exception {
     String owner = token("CLINIC_ADMIN"), outsider = token("CLINIC_ADMIN");
     UUID site = site(owner), floor = registerFloor(site);

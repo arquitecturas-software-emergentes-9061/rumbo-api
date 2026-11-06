@@ -11,11 +11,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-/** JDBC inventory adapter; the database enforces unique identifiers per site. */
+/** JDBC inventory adapter; the database enforces globally unique identifiers. */
 @Repository
 public class BeaconRepositoryImpl implements BeaconRepository {
   private final JdbcTemplate jdbc;
@@ -29,18 +28,14 @@ public class BeaconRepositoryImpl implements BeaconRepository {
   @Override
   public Beacon create(Beacon beacon) {
     Timestamp now = Timestamp.from(Instant.now(clock));
-    try {
-      jdbc.update("""
-          INSERT INTO positioning_beacons
-              (id, site_id, floor_id, identifier, x, y, active, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, true, ?, ?)
-          """, beacon.id(), beacon.siteId(), beacon.floorId(), beacon.identifier(),
-          beacon.x(), beacon.y(), now, now);
-    } catch (DataIntegrityViolationException error) {
-      if (error.getMostSpecificCause() instanceof SQLException sql
-          && "23505".equals(sql.getSQLState())) throw new DuplicateBeaconIdentifierException();
-      throw error;
-    }
+    int inserted = jdbc.update("""
+        INSERT INTO positioning_beacons
+            (id, site_id, floor_id, identifier, x, y, active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, true, ?, ?)
+        ON CONFLICT ON CONSTRAINT uq_positioning_beacons_identifier DO NOTHING
+        """, beacon.id(), beacon.siteId(), beacon.floorId(), beacon.identifier(),
+        beacon.x(), beacon.y(), now, now);
+    if (inserted == 0) throw new DuplicateBeaconIdentifierException();
     return beacon;
   }
 

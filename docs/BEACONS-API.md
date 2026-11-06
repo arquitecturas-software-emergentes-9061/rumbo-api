@@ -22,8 +22,23 @@ Endpoints:
 - `PATCH /api/v1/sites/{siteId}/beacons/{id}/status` — activate/deactivate.
 
 The spatial reference uses plan coordinates, not GPS or meters. The identifier
-is normalized to lowercase and unique per site. Tests cover duplicate,
-wrong-account and nonexistent floor/point cases.
+is trimmed, normalized to lowercase and unique across all sites, including
+inactive inventory. A duplicate returns HTTP 409 with `BEACON_IDENTIFIER_EXISTS`.
+The response omits any details about the existing registration.
+
+Before deploying Flyway migration `202611061000` on a shared database, apply the
+required earlier migrations in version order. The migration checks normalized
+identifiers for collisions and aborts the transaction if any conflict exists.
+Review and resolve conflicts explicitly before retrying. To list candidate groups
+within the authorized database administration session, use:
+
+```sql
+SELECT lower(btrim(identifier, E' \t\r\n\f' || chr(11)) COLLATE "C") AS canonical_identifier,
+       count(*) AS registrations
+FROM positioning_beacons
+GROUP BY 1
+HAVING count(*) > 1;
+```
 
 Not included: BLE signal sampling, Android runtime permissions, beacon calibration,
 automatic retargeting after reimporting a floor plan, or institutional multi-admin

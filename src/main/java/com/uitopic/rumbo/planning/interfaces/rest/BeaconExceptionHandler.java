@@ -20,7 +20,7 @@ public class BeaconExceptionHandler {
 
   @ExceptionHandler(DuplicateBeaconIdentifierException.class)
   ProblemDetail duplicate(Exception ignored) {
-    return ProblemDetails.of(HttpStatus.CONFLICT, "BEACON_IDENTIFIER_EXISTS", "Beacon already registered in this site");
+    return ProblemDetails.of(HttpStatus.CONFLICT, "BEACON_IDENTIFIER_EXISTS", "Beacon identifier is already registered");
   }
 
   @ExceptionHandler(InvalidBeaconAnchorException.class)

@@ -137,6 +137,42 @@ class BeaconControllerIntegrationTest {
       .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(2)));
   }
 
+  @Test void rejectsCanonicalDuplicatesAcrossSitesAndKeepsInactiveIdentifiersReserved() throws Exception {
+    UUID owner = UUID.randomUUID(), secondOwner = UUID.randomUUID();
+    UUID firstSite = site(owner), secondSite = site(secondOwner);
+    UUID firstFloor = UUID.randomUUID(), secondFloor = UUID.randomUUID();
+    draft(firstSite, firstFloor);
+    draft(secondSite, secondFloor);
+    String firstUrl = "/api/v1/sites/" + firstSite + "/beacons";
+    String secondUrl = "/api/v1/sites/" + secondSite + "/beacons";
+    String identifier = "GLOBAL-" + UUID.randomUUID();
+    String firstInput = beaconInput(firstFloor, identifier);
+    String secondInput = beaconInput(secondFloor, "  " + identifier.toLowerCase(java.util.Locale.ROOT) + "  ");
+    var saved = mvc.perform(post(firstUrl).with(caller(owner, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON).content(firstInput))
+      .andExpect(status().isCreated()).andReturn();
+    String id = json.readTree(saved.getResponse().getContentAsString()).get("id").asText();
+    mvc.perform(patch(firstUrl + "/" + id + "/status").with(caller(owner, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON).content("{\"active\":false}"))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.active").value(false));
+    mvc.perform(post(secondUrl).with(caller(owner, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON).content(secondInput))
+      .andExpect(status().isNotFound());
+    mvc.perform(post(secondUrl).with(caller(secondOwner, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON).content(secondInput))
+      .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("BEACON_IDENTIFIER_EXISTS"))
+      .andExpect(jsonPath("$.detail").value("Beacon identifier is already registered"));
+    mvc.perform(get(secondUrl).with(caller(secondOwner, UserRole.CLINIC_ADMIN)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+    mvc.perform(get(firstUrl).with(caller(UUID.randomUUID(), UserRole.PATIENT)))
+      .andExpect(status().isForbidden());
+    mvc.perform(get(firstUrl)).andExpect(status().isUnauthorized());
+  }
+
+  private String beaconInput(UUID floor, String identifier) throws Exception {
+    return json.writeValueAsString(java.util.Map.of("floorId", floor, "identifier", identifier, "x", 5, "y", 6));
+  }
+
   @Test void rejectsInvalidCoordinatesAndUnknownBeaconWithoutLeakingSiteData() throws Exception {
     UUID admin = UUID.randomUUID(), siteId = site(admin), floor = UUID.randomUUID();
     String base = "/api/v1/sites/" + siteId + "/beacons";

@@ -5,6 +5,9 @@ import com.uitopic.rumbo.planning.domain.model.entities.Beacon;
 import com.uitopic.rumbo.planning.domain.services.BeaconCommandService;
 import com.uitopic.rumbo.planning.domain.services.BeaconQueryService;
 import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configuration.OpenApiConfiguration;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -49,6 +52,11 @@ public class BeaconsController {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
+  @Operation(summary = "Register a beacon with a platform-wide unique identifier")
+  @ApiResponse(responseCode = "201", description = "Beacon registered and active")
+  @ApiResponse(responseCode = "409", description = "BEACON_IDENTIFIER_EXISTS", content = @Content)
+  @ApiResponse(responseCode = "404", description = "Site not available to the administrator", content = @Content)
+  @ApiResponse(responseCode = "422", description = "Invalid identifier or spatial anchor", content = @Content)
   public Beacon register(@AuthenticationPrincipal AuthenticatedPrincipal principal,
                          @PathVariable UUID siteId, @Valid @RequestBody RegisterBeaconRequest request) {
     return commands.register(principal.userId(), siteId, request.floorId(),

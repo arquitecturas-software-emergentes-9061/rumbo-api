@@ -9,6 +9,10 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import java.util.UUID;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -36,13 +40,20 @@ public class SitesController {
   }
 
   /** Request to register a clinic site. */
-  public record CreateSiteRequest(@NotBlank String name) {}
+  public record CreateSiteRequest(@NotBlank @Size(min=2,max=120) String name,
+      @Size(max=200) String address, boolean allowDuplicateAddress) {}
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public Site create(@AuthenticationPrincipal AuthenticatedPrincipal principal,
                      @Valid @RequestBody CreateSiteRequest request) {
-    return commands.create(principal.userId(), request.name());
+    return commands.create(principal.userId(), request.name(), request.address(), request.allowDuplicateAddress());
+  }
+
+  @PutMapping("/{siteId}")
+  public Site update(@AuthenticationPrincipal AuthenticatedPrincipal principal, @PathVariable UUID siteId,
+                     @Valid @RequestBody CreateSiteRequest request) {
+    return commands.update(principal.userId(), siteId, request.name(), request.address(), request.allowDuplicateAddress());
   }
 
   @GetMapping

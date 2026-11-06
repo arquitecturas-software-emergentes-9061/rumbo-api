@@ -23,15 +23,24 @@ public class SiteRepositoryImpl implements SiteRepository {
 
   @Override
   public Site create(UUID ownerUserId, Site site) {
-    jdbc.update("INSERT INTO indoor_sites (id, owner_user_id, name, created_at) VALUES (?, ?, ?, ?)",
-        site.id(), ownerUserId, site.name(), Timestamp.from(Instant.now(clock)));
+    jdbc.update("INSERT INTO indoor_sites (id, owner_user_id, name, address, clinic_id, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        site.id(), ownerUserId, site.name(), site.address(), site.clinicId(), Timestamp.from(Instant.now(clock)));
     return site;
   }
 
   @Override
   public List<Site> findByOwner(UUID ownerUserId) {
-    return jdbc.query("SELECT id, name FROM indoor_sites WHERE owner_user_id = ? ORDER BY name, id",
-        (rs, index) -> new Site(rs.getObject("id", UUID.class), rs.getString("name")), ownerUserId);
+    return jdbc.query("SELECT id, name, address, clinic_id FROM indoor_sites WHERE owner_user_id = ? ORDER BY name, id",
+        (rs, index) -> new Site(rs.getObject("id", UUID.class), rs.getString("name"), rs.getString("address"),
+            rs.getObject("clinic_id", UUID.class)), ownerUserId);
+  }
+
+  @Override
+  public Site update(UUID ownerUserId, Site site) {
+    int changed = jdbc.update("UPDATE indoor_sites SET name=?, address=? WHERE id=? AND owner_user_id=?",
+        site.name(), site.address(), site.id(), ownerUserId);
+    if (changed != 1) throw new com.uitopic.rumbo.planning.application.internal.exceptions.PlanningSiteNotFoundException();
+    return site;
   }
 
   @Override

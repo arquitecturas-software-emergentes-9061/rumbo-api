@@ -10,5 +10,6 @@ public interface BeaconRepository {
   Beacon create(Beacon beacon);
   List<Beacon> findBySite(UUID siteId, UUID floorId);
   Optional<Beacon> findBySiteAndId(UUID siteId, UUID beaconId);
+  boolean update(Beacon beacon);
   boolean updateActive(UUID siteId, UUID beaconId, boolean active);
 }

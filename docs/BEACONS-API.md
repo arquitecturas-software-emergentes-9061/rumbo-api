@@ -17,6 +17,13 @@ Endpoints:
   `{"floorId":"<uuid>","identifier":"AA:BB:CC:DD","x":10.5,"y":7}`.
   The coordinates must be within a DRAFT or PUBLISHED plan of that site/floor;
   invalid references return 422 `INVALID_SPATIAL_ANCHOR`.
+  Optional metadata: `name`, `proximityUuid` + `major` + `minor` (0-65535, all three together),
+  `txPowerDbm` (-120..0). `identifier` is optional when the UUID/major/minor triplet is sent
+  and is then derived as `uuid:major:minor`. `x`/`y` are optional: a beacon without them is
+  registered **unplaced and inactive**, and an unplaced beacon cannot be activated (422
+  `INVALID_BEACON`). The triplet is unique per site (409 `BEACON_IDENTIFIER_EXISTS`).
+- `PUT /api/v1/sites/{siteId}/beacons/{id}` — replaces the editable fields with the same
+  body. Removing the position deactivates the beacon.
 - `GET /api/v1/sites/{siteId}/beacons?floorId=<uuid>` — inventory by floor.
 - `GET /api/v1/sites/{siteId}/beacons/{id}` — one beacon.
 - `PATCH /api/v1/sites/{siteId}/beacons/{id}/status` — activate/deactivate.

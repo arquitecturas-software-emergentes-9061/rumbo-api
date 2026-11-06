@@ -8,6 +8,7 @@ import org.xml.sax.InputSource;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.StringReader;
+import java.io.ByteArrayInputStream;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
@@ -43,10 +44,10 @@ public final class SvgGeometryInterpreter {
   }
 
   public Interpretation interpret(String source) {
-    if (source == null || source.isBlank() || source.length() > MAX_SVG_CHARS) {
-      throw new InvalidSvg("SVG vacío o mayor que 1 MB");
-    }
-    Document doc = readXml(source);
+    return interpret(readXml(source));
+  }
+
+  Interpretation interpret(Document doc) {
     Element root = doc.getDocumentElement();
     if (root == null || !"svg".equals(localName(root))) throw new InvalidSvg("El documento debe tener una raíz SVG");
     var walls = new ArrayList<Segment>();
@@ -88,6 +89,20 @@ public final class SvgGeometryInterpreter {
   }
 
   static Document readXml(String source) {
+    if (source == null || source.isBlank() || source.length() > MAX_SVG_CHARS) {
+      throw new InvalidSvg("SVG vacío o mayor que 1 MB");
+    }
+    return readXml(new InputSource(new StringReader(source)));
+  }
+
+  static Document readXml(byte[] source) {
+    if (source.length == 0 || source.length > MAX_SVG_CHARS) {
+      throw new InvalidSvg("La interpretación admite archivos SVG de hasta 1 MB");
+    }
+    return readXml(new InputSource(new ByteArrayInputStream(source)));
+  }
+
+  private static Document readXml(InputSource source) {
     try {
       DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
       factory.setNamespaceAware(true);
@@ -99,7 +114,7 @@ public final class SvgGeometryInterpreter {
       factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
       factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
       factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
-      return factory.newDocumentBuilder().parse(new InputSource(new StringReader(source)));
+      return factory.newDocumentBuilder().parse(source);
     } catch (Exception e) {
       throw new InvalidSvg("SVG XML inválido o contiene entidades no permitidas");
     }

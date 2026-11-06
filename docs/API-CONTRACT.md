@@ -30,6 +30,97 @@ A confirmed `MapScale` is tied to `floorId` and `planVersionId` and expresses `m
 
 `navigation` reads never return drafts. Publishing a new version is atomic: a rejected draft leaves the previous published version available. IAM currently authorizes a site through its owning account; membership-based authorization is not implemented yet.
 
+## Architectural floor-plan files (TS-02 / PR-106)
+
+Planning keeps one sequence of immutable original files per registered floor. The highest
+number is the latest uploaded file. Uploading an original does not create or change a
+`DRAFT`, `PUBLISHED` or `ARCHIVED` indoor graph, a coordinate space or a calibration.
+
+### Register an original
+
+`POST /api/v1/sites/{siteId}/floors/{floorId}/plans`
+
+Send `multipart/form-data` with one part named `file`. An authenticated `CLINIC_ADMIN`
+must own the site. The floor must already belong to that site in Planning's canonical
+floor registry. The API never registers an unknown floor as a side effect of uploading.
+
+- **201 Created** with `Location: /api/v1/sites/{siteId}/floors/{floorId}/plans/versions/{versionId}`
+  and JSON fields `id`, `siteId`, `floorId`, `version`, `fileName`, `mediaType`, `sizeBytes` and `createdAt`.
+- **400 Bad Request** for malformed IDs, missing part (`PLAN_FILE_REQUIRED`), empty file
+  (`PLAN_EMPTY_FILE`) or unsafe file name (`PLAN_INVALID_NAME`).
+- **401 / 403** for missing credentials or an account without the administrative role.
+- **404 Not Found** (`FLOOR_PLAN_NOT_FOUND`) for an absent or foreign site or a floor outside that site.
+- **413 Payload Too Large** (`PLAN_FILE_TOO_LARGE`) above 25 MiB per file or the 26 MiB
+  multipart request limit.
+- **415 Unsupported Media Type** for an unsupported extension, a conflicting declared media type
+  (`PLAN_UNSUPPORTED_TYPE`) or a request that is not multipart.
+- **422 Unprocessable Entity** (`PLAN_INVALID_CONTENT`) for unreadable or invalid contents.
+
+Accepted originals are single-page unencrypted **PDF**, standalone **SVG** with an SVG
+root and no DOCTYPE, **PNG**, and **JPG/JPEG**. Raster dimensions must be at most
+8192 × 8192. The extension and declared media type must agree when the client supplies a
+specific type. The backend always validates the actual file contents. A rejected upload
+leaves all stored versions unchanged. Concurrent uploads to the same floor receive
+distinct consecutive numbers. Each accepted upload creates a new version.
+
+### Recover one specific original
+
+`GET /api/v1/sites/{siteId}/floors/{floorId}/plans/versions/{versionId}`
+
+Returns **200** with the stored bytes, original media type and attachment filename.
+The response is private and non-cacheable. The same role and ownership rules apply.
+An unknown or out-of-scope version returns **404**.
+
+For calibratable originals, the response exposes the `X-Plan-Width` and
+`X-Plan-Height` headers. They describe the top-left coordinate space used by
+calibration. Raster files use pixels, SVG uses its display dimensions, and PDF uses
+the rotated crop box in page units. The headers are available to allowed browser origins.
+
+### List original file versions (TS-21 / PR-123)
+
+`GET /api/v1/sites/{siteId}/floors/{floorId}/plans`
+
+Returns **200** with an array of the same metadata as the upload response, sorted by
+version descending. The first item is the current original. A registered floor without
+uploads returns `[]`. File bytes are retrieved only through the version download endpoint.
+A missing or foreign site returns **404** with `SITE_NOT_FOUND`. A missing floor or a
+floor outside the owned site returns **404** with `FLOOR_NOT_FOUND`. The same role and
+authentication requirements apply.
+
+### Calibrate an original file (US-07 / PR-111)
+
+`PUT /api/v1/sites/{siteId}/plan-calibrations/{planVersionId}` accepts the original file's
+version ID and the existing request fields `floorId`, `unit`, `measuredDistance`,
+`startX`, `startY`, `endX` and `endY`. Points must be distinct and inside that
+file's dimensions. The response includes `metersPerUnit`. The matching `GET` retrieves
+the saved measurement for that version or returns `CALIBRATION_NOT_FOUND`.
+The original file's calibration is independent of graph publication. Draft graph
+calibration keeps its existing behavior.
+
+### Inspect a stored plan (US-08 / PR-127)
+
+`POST /api/v1/sites/{siteId}/floors/{floorId}/plans/versions/{versionId}/interpretation`
+uses the original scoped to the administrator, site and floor. `SVG_CANDIDATES`
+includes candidate walls, annotated zones, doors and links in the original preview
+coordinate frame. `PREVIEW_ONLY` identifies PNG, JPEG and single-page PDF. The original
+remains available for viewing and calibration in either case.
+
+The result contains `CONFIRMED` with `metersPerUnit` only when that version and floor
+have a saved physical reference. `PROVISIONAL` keeps all dimensions in plan units.
+SVGs outside the interpreter's supported geometry return `422 INVALID_SVG_PLAN`.
+The response is a proposal for review. Graph writes use the separate revision-checked
+draft contract and require an explicit mapping between the proposal and a draft plan.
+
+### Storage and rollout
+
+The original bytes and metadata commit together in PostgreSQL (`BYTEA`) with no external
+storage service. The size cap bounds each upload and the existing floor registry provides
+the site association. When PR-101 is deployed, its floor registration uses that same
+registry and the site's clinic relationship applies without a second ownership table.
+Deploy PR-101's migration `202611051700` before PR-106's `202611051800` on shared
+databases so Flyway applies both in order. PDFBox validates PDF structure and page count
+without rendering or extracting embedded files.
+
 ## Successor map version — implemented for local review
 
 `POST /api/v1/sites/{siteId}/maps/{mapId}/versions`

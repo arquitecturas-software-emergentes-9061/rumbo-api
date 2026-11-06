@@ -35,7 +35,20 @@ public class ScaleReferenceRepositoryImpl implements ScaleReferenceRepository {
 
   @Override
   public Optional<ScaleReference> upsert(ScaleReference reference, UUID modelVersionId) {
-    var saved = jdbc.query("""
+    var saved = upsertOriginal(reference);
+    if (saved.isEmpty()) return saved;
+    int changed = jdbc.update("""
+        UPDATE plan_coordinate_spaces SET meters_per_unit = ?
+        WHERE plan_version_id = ? AND model_version_id = ? AND floor_id = ?
+        """, reference.metersPerUnit(), reference.planVersionId(), modelVersionId,
+        reference.floorId());
+    if (changed != 1) throw new ScaleReferenceNotFoundException();
+    return saved;
+  }
+
+  @Override
+  public Optional<ScaleReference> upsertOriginal(ScaleReference reference) {
+    return jdbc.query("""
         INSERT INTO planning_scale_reference_measurements
           (site_id, floor_id, plan_version_id, physical_unit, measured_distance,
            start_x, start_y, end_x, end_y, meters_per_unit, updated_at)
@@ -54,15 +67,7 @@ public class ScaleReferenceRepositoryImpl implements ScaleReferenceRepository {
         reference.siteId(), reference.floorId(), reference.planVersionId(),
         reference.unit().name(), reference.measuredDistance(), reference.startX(),
         reference.startY(), reference.endX(), reference.endY(), reference.metersPerUnit(),
-        Timestamp.from(Instant.now(clock)));
-    if (saved.isEmpty()) return Optional.empty();
-    int changed = jdbc.update("""
-        UPDATE plan_coordinate_spaces SET meters_per_unit = ?
-        WHERE plan_version_id = ? AND model_version_id = ? AND floor_id = ?
-        """, reference.metersPerUnit(), reference.planVersionId(), modelVersionId,
-        reference.floorId());
-    if (changed != 1) throw new ScaleReferenceNotFoundException();
-    return Optional.of(saved.getFirst());
+        Timestamp.from(Instant.now(clock))).stream().findFirst();
   }
 
   @Override

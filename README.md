@@ -63,8 +63,9 @@ Solo fusionar feature → develop después de pasar CI/Maven/tests/revisión; re
 - El arranque predeterminado usa `postgres,local`: muestra los endpoints de `planning`,
   `navigation`, IAM, beacons y analytics en Swagger. También crea ejemplos persistidos de
   un borrador y una versión publicada. La aplicación requiere PostgreSQL y Redis.
-  Tampoco hay subida de planos ni BLE reales. No
-  declarar PR-214 terminado hasta integrar app cliente.
+  Planning puede registrar y recuperar versiones de archivos originales por piso.
+  El escaneo BLE desde dispositivos queda fuera de la API. No declarar PR-214 terminado
+  hasta integrar app cliente.
 
 ## Ejecutar tras instalar JDK 21 y Maven
 La configuración Spring compartida está en un único

@@ -8,5 +8,6 @@ import java.util.UUID;
 public interface ScaleReferenceRepository {
   boolean existsOnDifferentFloor(UUID siteId, UUID planVersionId, UUID floorId);
   Optional<ScaleReference> upsert(ScaleReference reference, UUID modelVersionId);
+  Optional<ScaleReference> upsertOriginal(ScaleReference reference);
   Optional<ScaleReference> find(UUID siteId, UUID planVersionId);
 }

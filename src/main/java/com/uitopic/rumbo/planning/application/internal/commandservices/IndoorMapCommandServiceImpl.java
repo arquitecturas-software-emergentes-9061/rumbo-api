@@ -1,12 +1,23 @@
 package com.uitopic.rumbo.planning.application.internal.commandservices;
 
+import com.uitopic.rumbo.planning.application.internal.exceptions.FirstDraftPlanNotFoundException;
+import com.uitopic.rumbo.planning.application.internal.exceptions.InvalidFirstDraftRequestException;
 import com.uitopic.rumbo.planning.application.internal.exceptions.MapVersionNotFoundException;
+import com.uitopic.rumbo.planning.application.internal.exceptions.SiteMapAlreadyExistsException;
+import com.uitopic.rumbo.planning.application.ports.FloorPlanContentValidator;
 import com.uitopic.rumbo.planning.application.internal.exceptions.DraftMapVersionAlreadyExistsException;
 import com.uitopic.rumbo.planning.application.internal.exceptions.PublishedMapVersionChangedException;
 import com.uitopic.rumbo.planning.application.internal.exceptions.InvalidPublishedMapVersionException;
 import com.uitopic.rumbo.planning.domain.exceptions.DraftGraphRevisionConflictException;
 import com.uitopic.rumbo.planning.domain.exceptions.InvalidPublishedMapDataException;
+import com.uitopic.rumbo.planning.domain.model.commands.CreateFirstDraftMapCommand;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.OriginalPlanBounds;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.ScaleReference;
+import com.uitopic.rumbo.planning.domain.repositories.FloorPlanVersionRepository;
 import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
+import com.uitopic.rumbo.planning.domain.repositories.ScaleReferenceRepository;
 import com.uitopic.rumbo.planning.domain.repositories.PublishedMapRepository;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
 import com.uitopic.rumbo.planning.domain.model.commands.PublishMapVersionCommand;
@@ -14,7 +25,9 @@ import com.uitopic.rumbo.planning.domain.model.commands.CreateDraftMapVersionCom
 import com.uitopic.rumbo.planning.domain.model.commands.ReplaceDraftGraphCommand;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PublishedMapSnapshot;
 import com.uitopic.rumbo.planning.domain.services.IndoorMapCommandService;
+import java.util.HashSet;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,11 +38,59 @@ import org.springframework.transaction.annotation.Transactional;
 public class IndoorMapCommandServiceImpl implements IndoorMapCommandService {
   private final IndoorMapRepository repository;
   private final PublishedMapRepository published;
+  private final FloorPlanVersionRepository planVersions;
+  private final FloorPlanContentValidator planContent;
+  private final ScaleReferenceRepository scaleReferences;
 
   public IndoorMapCommandServiceImpl(IndoorMapRepository repository,
-                                     PublishedMapRepository published) {
+                                     PublishedMapRepository published,
+                                     FloorPlanVersionRepository planVersions,
+                                     FloorPlanContentValidator planContent,
+                                     ScaleReferenceRepository scaleReferences) {
     this.repository = repository;
     this.published = published;
+    this.planVersions = planVersions;
+    this.planContent = planContent;
+    this.scaleReferences = scaleReferences;
+  }
+
+  @Override
+  @Transactional
+  public IndoorMap handle(CreateFirstDraftMapCommand command) {
+    if (command.plans().isEmpty()) {
+      throw new InvalidFirstDraftRequestException("At least one floor-plan version is required");
+    }
+    var floors = new HashSet<UUID>();
+    var versions = new HashSet<UUID>();
+    for (var plan : command.plans()) {
+      if (!floors.add(plan.floorId()) || !versions.add(plan.planVersionId())) {
+        throw new InvalidFirstDraftRequestException("Each floor and plan version can appear only once");
+      }
+    }
+    if (repository.findDraftBySite(command.siteId()).isPresent()) {
+      throw new DraftMapVersionAlreadyExistsException();
+    }
+    if (repository.siteHasMap(command.siteId())) throw new SiteMapAlreadyExistsException();
+
+    IndoorMap draft = new IndoorMap(UUID.randomUUID(), command.siteId(), UUID.randomUUID());
+    for (var plan : command.plans()) {
+      var original = planVersions.findOriginal(command.siteId(), plan.floorId(), plan.planVersionId())
+          .orElseThrow(FirstDraftPlanNotFoundException::new);
+      OriginalPlanBounds bounds = planContent.bounds(original.version().file().format(), original.bytes());
+      draft.addPlan(new PlanCoordinateSpace(plan.floorId(), plan.planVersionId(), bounds.width(), bounds.height()));
+      scaleReferences.find(command.siteId(), plan.planVersionId())
+          .filter(reference -> reference.floorId().equals(plan.floorId()))
+          .map(ScaleReference::metersPerUnit)
+          .ifPresent(metersPerUnit -> draft.setScale(
+              new MapScale(plan.floorId(), plan.planVersionId(), metersPerUnit)));
+    }
+    try {
+      repository.saveDraft(draft);
+    } catch (DataIntegrityViolationException concurrent) {
+      // Another request created the site's map between the check above and this insert.
+      throw new SiteMapAlreadyExistsException();
+    }
+    return draft;
   }
 
   @Override

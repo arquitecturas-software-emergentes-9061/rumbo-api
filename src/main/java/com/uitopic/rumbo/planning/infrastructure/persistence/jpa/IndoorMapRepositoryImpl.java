@@ -65,6 +65,13 @@ public class IndoorMapRepositoryImpl implements IndoorMapRepository {
   }
 
   @Override
+  @Transactional(readOnly = true)
+  public boolean siteHasMap(UUID siteId) {
+    return !entityManager.createQuery("select r.id from IndoorMapJpaEntity r where r.siteId = :siteId", UUID.class)
+        .setParameter("siteId", siteId).setMaxResults(1).getResultList().isEmpty();
+  }
+
+  @Override
   @Transactional(propagation = Propagation.MANDATORY)
   public boolean hasDraft(UUID mapId) {
     return !entityManager.createQuery("select v.id from MapVersionJpaEntity v "

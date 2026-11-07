@@ -4,6 +4,7 @@ import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configurati
 import com.uitopic.rumbo.planning.domain.model.commands.CreateDraftMapVersionCommand;
 import com.uitopic.rumbo.planning.domain.model.commands.PublishMapVersionCommand;
 import com.uitopic.rumbo.planning.domain.services.IndoorMapCommandService;
+import com.uitopic.rumbo.planning.interfaces.rest.resources.CreateFirstDraftResource;
 import com.uitopic.rumbo.planning.interfaces.rest.resources.CreateMapVersionResource;
 import com.uitopic.rumbo.planning.interfaces.rest.resources.DraftGraphResource;
 import com.uitopic.rumbo.planning.interfaces.rest.resources.MapVersionResource;
@@ -40,6 +41,27 @@ public class IndoorMapsController {
 
   public IndoorMapsController(IndoorMapCommandService commands) {
     this.commands = commands;
+  }
+
+  /** Starts a site's first draft from its stored floor plans, so a new site can be edited and saved. */
+  @Operation(summary = "Create the first draft of a site that has no indoor map",
+      description = "Dimensions and confirmed scale come from the stored floor-plan versions. The draft starts "
+          + "without nodes; replace its graph afterwards with the returned ETag.")
+  @ApiResponses({
+      @ApiResponse(responseCode = "201", description = "Draft created; Location points to its graph"),
+      @ApiResponse(responseCode = "400", description = "Missing, duplicated or malformed plans"),
+      @ApiResponse(responseCode = "404", description = "A floor-plan version does not belong to the site or floor"),
+      @ApiResponse(responseCode = "409", description = "The site already has a draft or an indoor map")
+  })
+  @PostMapping("/draft")
+  public ResponseEntity<DraftGraphResource> createFirstDraft(
+      @PathVariable UUID siteId, @Valid @RequestBody CreateFirstDraftResource request) {
+    var draft = commands.handle(request.toCommand(siteId));
+    URI graphLocation = URI.create("/api/v1/sites/" + siteId + "/maps/" + draft.id()
+        + "/versions/" + draft.modelVersionId() + "/graph");
+    return ResponseEntity.created(graphLocation)
+        .eTag("\"rev-" + draft.editRevision() + "\"")
+        .body(DraftGraphResource.from(draft));
   }
 
   /** Creates an editable copy of the current published map without changing its visibility. */

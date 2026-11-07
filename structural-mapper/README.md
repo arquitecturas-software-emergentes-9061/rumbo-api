@@ -23,6 +23,14 @@ curl -s -F "file=@plano.png" localhost:8010/analyze | head -c 300
 Con Docker: `docker compose --profile mapper up -d structural-mapper` desde la raíz de `rumbo-api` (escucha en `127.0.0.1:8010`).
 Para que el API lo use: `STRUCTURAL_MAPPER_ENABLED=true` y, si no es el puerto por defecto, `STRUCTURAL_MAPPER_URL`.
 
+## Percepción por red neuronal (opcional)
+
+Para planos fotografiados o escaneados, la red neuronal (BuildingCV) detecta muros y puertas mejor que la morfología
+clásica. No hace falta para PDF o SVG vectoriales ni para imágenes limpias. Se construye con `Dockerfile.ml`
+(`docker compose --profile mapper-ml up -d structural-mapper-ml`, varios GB) y se pide desde el API con
+`STRUCTURAL_MAPPER_USE_ML=true`. Si el servicio corre desde la imagen ligera, ignora la petición y usa la
+percepción determinista. **Revisa las licencias de BuildingCV y de sus pesos antes de distribuir esa imagen.**
+
 ## Pruebas
 
 ```bash

@@ -27,6 +27,8 @@ import java.util.Optional;
  * Adapter of {@link StructuralPlanInterpreterPort} that sends the stored original to the structural mapper service and
  * converts its scene into a proposal. Any failure of the service, such as an outage, a timeout or a file it cannot
  * decode, is logged and answered with an empty result, so the plan stays available as a preview.
+ * {@code use-ml} asks the service for its neural perception, which only helps on photographed or scanned plans and
+ * only exists when the service runs from the heavy image; the service falls back to its deterministic perception.
  */
 @Component
 @ConditionalOnProperty(name = "rumbo.planning.structural-mapper.enabled", havingValue = "true")
@@ -38,17 +40,20 @@ public class StructuralMapperPlanInterpreter implements StructuralPlanInterprete
   static final int MAPPER_MAX_SIDE = 4096;
 
   private final RestClient http;
+  private final boolean useMl;
 
-  StructuralMapperPlanInterpreter(RestClient http) {
+  StructuralMapperPlanInterpreter(RestClient http, boolean useMl) {
     this.http = http;
+    this.useMl = useMl;
   }
 
   @Autowired
   public StructuralMapperPlanInterpreter(
     @Value("${rumbo.planning.structural-mapper.url:http://localhost:8010}") String url,
     @Value("${rumbo.planning.structural-mapper.connect-timeout-ms:2000}") int connectTimeoutMs,
-    @Value("${rumbo.planning.structural-mapper.read-timeout-ms:30000}") int readTimeoutMs) {
-    this(RestClient.builder().baseUrl(url).requestFactory(factory(connectTimeoutMs, readTimeoutMs)).build());
+    @Value("${rumbo.planning.structural-mapper.read-timeout-ms:30000}") int readTimeoutMs,
+    @Value("${rumbo.planning.structural-mapper.use-ml:false}") boolean useMl) {
+    this(RestClient.builder().baseUrl(url).requestFactory(factory(connectTimeoutMs, readTimeoutMs)).build(), useMl);
   }
 
   private static SimpleClientHttpRequestFactory factory(int connectTimeoutMs, int readTimeoutMs) {
@@ -63,7 +68,7 @@ public class StructuralMapperPlanInterpreter implements StructuralPlanInterprete
                                                    OriginalPlanBounds bounds, Double metersPerUnit) {
     try {
       JsonNode scene = http.post().uri("/analyze").contentType(MediaType.MULTIPART_FORM_DATA)
-        .body(parts(original, format, bounds, metersPerUnit)).retrieve().body(JsonNode.class);
+        .body(parts(original, format, bounds, metersPerUnit, useMl)).retrieve().body(JsonNode.class);
       if (scene == null) return Optional.empty();
       return Optional.of(MapperSceneTopologyMapper.toTopology(scene, bounds, metersPerUnit != null));
     } catch (RestClientException | IllegalArgumentException failure) {
@@ -74,7 +79,8 @@ public class StructuralMapperPlanInterpreter implements StructuralPlanInterprete
   }
 
   private static MultiValueMap<String, Object> parts(byte[] original, FloorPlanFile.Format format,
-                                                      OriginalPlanBounds bounds, Double metersPerUnit) {
+                                                      OriginalPlanBounds bounds, Double metersPerUnit,
+                                                      boolean useMl) {
     HttpHeaders fileHeaders = new HttpHeaders();
     fileHeaders.setContentType(MediaType.parseMediaType(format.mediaType()));
     ByteArrayResource file = new ByteArrayResource(original) {
@@ -86,7 +92,7 @@ public class StructuralMapperPlanInterpreter implements StructuralPlanInterprete
     MultiValueMap<String, Object> parts = new LinkedMultiValueMap<>();
     parts.add("file", new HttpEntity<>(file, fileHeaders));
     parts.add("raster_scale", Double.toString(RASTER_SCALE));
-    parts.add("use_ml", "false");
+    parts.add("use_ml", Boolean.toString(useMl));
     Double pixelsPerMeter = pixelsPerMeter(format, bounds, metersPerUnit);
     if (pixelsPerMeter != null) parts.add("pixels_per_meter", Double.toString(pixelsPerMeter));
     return parts;

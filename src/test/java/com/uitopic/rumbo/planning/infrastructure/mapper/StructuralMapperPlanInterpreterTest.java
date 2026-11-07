@@ -26,12 +26,14 @@ class StructuralMapperPlanInterpreterTest {
 
   private MockRestServiceServer server;
   private StructuralMapperPlanInterpreter interpreter;
+  private RestClient.Builder builderForMl;
 
   @BeforeEach
   void setUp() {
     RestClient.Builder builder = RestClient.builder().baseUrl("http://mapper.test");
     server = MockRestServiceServer.bindTo(builder).build();
-    interpreter = new StructuralMapperPlanInterpreter(builder.build());
+    interpreter = new StructuralMapperPlanInterpreter(builder.build(), false);
+    builderForMl = builder;
   }
 
   private static String scene() throws IOException {
@@ -74,6 +76,23 @@ class StructuralMapperPlanInterpreterTest {
       .andRespond(withSuccess(scene(), MediaType.APPLICATION_JSON));
 
     assertThat(interpreter.propose(new byte[]{1}, Format.JPEG, BOUNDS, null)).isPresent();
+    server.verify();
+  }
+
+  @Test
+  void neuralPerceptionIsOnlyRequestedWhenConfigured() throws IOException {
+    server.expect(requestTo("http://mapper.test/analyze"))
+      .andExpect(content().string(org.hamcrest.Matchers.matchesPattern("(?s).*name=\"use_ml\".*?\\r\\n\\r\\nfalse.*")))
+      .andRespond(withSuccess(scene(), MediaType.APPLICATION_JSON));
+    assertThat(interpreter.propose(new byte[]{1}, Format.PNG, BOUNDS, null)).isPresent();
+    server.verify();
+
+    server.reset();
+    server.expect(requestTo("http://mapper.test/analyze"))
+      .andExpect(content().string(org.hamcrest.Matchers.matchesPattern("(?s).*name=\"use_ml\".*?\\r\\n\\r\\ntrue.*")))
+      .andRespond(withSuccess(scene(), MediaType.APPLICATION_JSON));
+    assertThat(new StructuralMapperPlanInterpreter(builderForMl.build(), true)
+      .propose(new byte[]{1}, Format.PNG, BOUNDS, null)).isPresent();
     server.verify();
   }
 

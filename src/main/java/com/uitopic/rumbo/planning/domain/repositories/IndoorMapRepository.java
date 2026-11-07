@@ -9,6 +9,9 @@ public interface IndoorMapRepository {
   /** Serializes lifecycle changes for an existing map of the requested site. */
   boolean lockMapForUpdate(UUID siteId, UUID mapId);
 
+  /** Checks whether the site already owns an indoor map, whatever the state of its versions. */
+  boolean siteHasMap(UUID siteId);
+
   /** Checks for an editable version while the owning map is locked. */
   boolean hasDraft(UUID mapId);
 

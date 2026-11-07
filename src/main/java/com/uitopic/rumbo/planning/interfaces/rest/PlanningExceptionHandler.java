@@ -1,6 +1,9 @@
 package com.uitopic.rumbo.planning.interfaces.rest;
 
+import com.uitopic.rumbo.planning.application.internal.exceptions.FirstDraftPlanNotFoundException;
+import com.uitopic.rumbo.planning.application.internal.exceptions.InvalidFirstDraftRequestException;
 import com.uitopic.rumbo.planning.application.internal.exceptions.MapVersionNotFoundException;
+import com.uitopic.rumbo.planning.application.internal.exceptions.SiteMapAlreadyExistsException;
 import com.uitopic.rumbo.planning.application.internal.exceptions.DraftMapVersionAlreadyExistsException;
 import com.uitopic.rumbo.planning.application.internal.exceptions.PublishedMapVersionChangedException;
 import com.uitopic.rumbo.planning.application.internal.exceptions.InvalidPublishedMapVersionException;
@@ -54,6 +57,24 @@ public class PlanningExceptionHandler {
   public ResponseEntity<PlanningErrorResource> draftAlreadyExists(DraftMapVersionAlreadyExistsException error) {
     return ResponseEntity.status(HttpStatus.CONFLICT).body(new PlanningErrorResource(
         "DRAFT_ALREADY_EXISTS", error.getMessage(), List.of()));
+  }
+
+  @ExceptionHandler(SiteMapAlreadyExistsException.class)
+  public ResponseEntity<PlanningErrorResource> siteMapAlreadyExists(SiteMapAlreadyExistsException error) {
+    return ResponseEntity.status(HttpStatus.CONFLICT).body(new PlanningErrorResource(
+        "SITE_MAP_ALREADY_EXISTS", error.getMessage(), List.of()));
+  }
+
+  @ExceptionHandler(FirstDraftPlanNotFoundException.class)
+  public ResponseEntity<PlanningErrorResource> firstDraftPlanNotFound(FirstDraftPlanNotFoundException error) {
+    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new PlanningErrorResource(
+        "PLAN_VERSION_NOT_FOUND", error.getMessage(), List.of()));
+  }
+
+  @ExceptionHandler(InvalidFirstDraftRequestException.class)
+  public ResponseEntity<PlanningErrorResource> invalidFirstDraft(InvalidFirstDraftRequestException error) {
+    return ResponseEntity.badRequest().body(new PlanningErrorResource(
+        "INVALID_REQUEST", error.getMessage(), List.of()));
   }
 
   @ExceptionHandler(PublishedMapVersionChangedException.class)

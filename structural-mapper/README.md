@@ -26,10 +26,10 @@ uvicorn app:app --port 8010
 curl -s localhost:8010/health   # ml_backend: cubicasa5k-onnx
 ```
 
-Con Docker: `docker compose --profile mapper up -d structural-mapper` desde la raíz de `rumbo-api` (escucha en
-`127.0.0.1:8010`); la imagen descarga el modelo al construirse. Para que el API lo use: `STRUCTURAL_MAPPER_ENABLED=true`
-y, si no es el puerto por defecto, `STRUCTURAL_MAPPER_URL`. El API pide el modelo salvo que se ponga
-`STRUCTURAL_MAPPER_USE_ML=false`.
+Con la API no hace falta nada: `mvn spring-boot:run` levanta este servicio con Docker Compose (escucha en
+`127.0.0.1:8010`; la imagen descarga el modelo al construirse) y la API siempre lo usa. A mano:
+`docker compose up -d structural-mapper` desde la raíz de `rumbo-api`. Si corre en otro puerto, indicarlo con
+`STRUCTURAL_MAPPER_URL`. La API pide el modelo salvo que se ponga `STRUCTURAL_MAPPER_USE_ML=false`.
 
 Variables del servicio: `STRUCTURAL_MAPPER_DISABLE_ML=1` desactiva cualquier modelo; `CUBICASA_ONNX_MODEL` usa otra
 copia del archivo (si falta o está dañada, el arranque falla en vez de servir resultados clásicos en silencio);

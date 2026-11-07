@@ -80,8 +80,8 @@ mvn clean verify
 Las pruebas de persistencia de la rama original se activan con
 `RUMBO_TEST_DB_URL`, `RUMBO_TEST_DB_USER` y `RUMBO_TEST_DB_PASSWORD` apuntando a una base
 PostgreSQL de prueba; las nuevas pruebas de IAM usan Testcontainers. Para arrancar la aplicación
-se usan `RUMBO_DB_URL`, `RUMBO_DB_USER`, `RUMBO_DB_PASSWORD` y `JWT_SECRET`.
-Redis se configura con `REDIS_HOST` y `REDIS_PORT`. Los cuatro endpoints
+basta `JWT_SECRET` (la base, Redis y el mapper los levanta Docker Compose, ver abajo); fuera de
+Docker se usan `RUMBO_DB_URL`, `RUMBO_DB_USER`, `RUMBO_DB_PASSWORD`, `REDIS_HOST` y `REDIS_PORT`. Los cuatro endpoints
 controlados por banderas están activos por defecto y el servidor escucha solo en
 `127.0.0.1`. `accessibleOnly=true` excluye conexiones sin accesibilidad confirmada.
 La autorización actual verifica el dueño de la sede; la membresía de varios administradores
@@ -101,17 +101,21 @@ Health check: `http://localhost:8080/actuator/health`.
 
 El arranque predeterminado registra las operaciones de los contextos integrados y conserva
 las dos provisionales etiquetadas **Demo navigation**. Solo escucha en `127.0.0.1`.
-Se necesitan PostgreSQL 17, Redis 7 y una clave JWT privada:
+Solo se necesitan Docker Desktop abierto y una clave JWT privada:
 
 ```powershell
-$env:RUMBO_DB_USER = "rumbo"
-$env:RUMBO_DB_PASSWORD = Read-Host -MaskInput "Contraseña local de PostgreSQL"
-$env:DB_PASSWORD = $env:RUMBO_DB_PASSWORD
-$env:RUMBO_DB_URL = "jdbc:postgresql://localhost:5432/rumbo"
 $env:JWT_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(48))
-docker compose up -d --wait
 mvn spring-boot:run
 ```
+
+`mvn spring-boot:run` levanta `docker-compose.yml` por su cuenta (PostgreSQL 17, Redis 7 y el
+structural mapper en `127.0.0.1:8010`), espera a que estén listos y conecta la API a ellos con las
+credenciales del compose; no hace falta `RUMBO_DB_URL` ni ejecutar `docker compose up` antes. El
+mapper siempre está activo: la primera vez construye su imagen y descarga su modelo (unos minutos),
+luego reutiliza la imagen. Los contenedores siguen corriendo al detener la API; se apagan con
+`docker compose down`. Para usar otra base de datos sin Docker, arrancar con
+`--spring.docker.compose.enabled=false` y las variables `RUMBO_DB_*`, `REDIS_*` y
+`STRUCTURAL_MAPPER_URL`.
 
 Abrir `http://localhost:8080/swagger-ui/index.html`. Flyway crea el esquema al arrancar.
 Usa una base **nueva**: la base PostgreSQL 16 del trabajo anterior conserva el historial

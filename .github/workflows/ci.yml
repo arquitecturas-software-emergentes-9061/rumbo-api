@@ -46,3 +46,21 @@ jobs:
             target/cucumber-reports/
             target/site/jacoco/
           if-no-files-found: ignore
+  structural-mapper:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: structural-mapper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: structural-mapper/requirements-geometry.txt
+      - name: Install dependencies
+        run: pip install -r requirements-geometry.txt
+      - name: Tests
+        run: STRUCTURAL_MAPPER_DISABLE_ML=1 pytest -q

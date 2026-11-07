@@ -1,5 +1,7 @@
-# Local infrastructure for development: `docker compose up -d`
+# Local infrastructure for development. `mvn spring-boot:run` starts it by itself; `docker compose up -d` also works.
 # Credentials are development defaults and can be overridden from `.env` (see `.env.example`).
+# A fixed project name lets every checkout or worktree reuse the same containers and volume.
+name: rumbo-api
 services:
   postgres:
     image: postgres:17-alpine
@@ -25,18 +27,15 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-  # Optional (not started by a plain `docker compose up`): reads PDF, PNG and JPEG plans for the interpretation
-  # endpoint, recognizing walls, doors and rooms with the CubiCasa5k model (downloaded at build time, no PyTorch).
-  # Start it with `docker compose --profile mapper up -d structural-mapper` and enable it in the API with
-  # STRUCTURAL_MAPPER_ENABLED=true (see structural-mapper/README.md).
+  # Reads PDF, PNG and JPEG plans for the interpretation endpoint, recognizing walls, doors and rooms with the
+  # CubiCasa5k model (downloaded at build time, no PyTorch). Always on: `mvn spring-boot:run` starts it with the rest.
+  # The first start builds the image (a few minutes); later starts reuse it.
   structural-mapper:
-    profiles: ["mapper"]
     build: ./structural-mapper
     ports:
       - "127.0.0.1:8010:8010"
-  # Legacy alternative with BuildingCV neural perception (several GB, PyTorch).
-  # Run one of the two, not both: `docker compose --profile mapper-ml up -d structural-mapper-ml`, and set
-  # STRUCTURAL_MAPPER_USE_ML=true in the API.
+  # Legacy alternative with BuildingCV neural perception (several GB, PyTorch). It uses the same port: stop
+  # structural-mapper first, then `docker compose --profile mapper-ml up -d structural-mapper-ml`.
   structural-mapper-ml:
     profiles: ["mapper-ml"]
     build:

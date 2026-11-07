@@ -9,7 +9,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -31,7 +30,6 @@ import java.util.Optional;
  * doors on raster plans; when the service has no model loaded it falls back to its deterministic perception.
  */
 @Component
-@ConditionalOnProperty(name = "rumbo.planning.structural-mapper.enabled", havingValue = "true")
 public class StructuralMapperPlanInterpreter implements StructuralPlanInterpreterPort {
   private static final Logger log = LoggerFactory.getLogger(StructuralMapperPlanInterpreter.class);
   /** Zoom the mapper applies to vector pages; it is sent explicitly so both sides agree on it. */

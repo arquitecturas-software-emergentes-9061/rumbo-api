@@ -1,0 +1,189 @@
+package com.uitopic.rumbo.planning.infrastructure.mapper;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.CandidateLink;
+import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.CandidateNode;
+import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Door;
+import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Segment;
+import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Topology;
+import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Zone;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.OriginalPlanBounds;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+/**
+ * Translates the scene the structural mapper returns, which is measured in the pixels of the image it analyzed, into
+ * the proposal the editor reviews, measured in the units of the stored original.
+ *
+ * <p>Conventions the editor relies on: a space and the node that stands for it share the same identifier, so the
+ * editor knows which nodes are rooms; every space becomes its bounding box, because a proposal zone is a rectangle.
+ */
+final class MapperSceneTopologyMapper {
+  static final int MAX_WALL_SEGMENTS = 5000;
+  private static final int MIN_REPORTED_SEVERITY_RANK = 1; // warnings and errors; "info" is noise for the editor
+
+  private MapperSceneTopologyMapper() {}
+
+  static Topology toTopology(JsonNode scene, OriginalPlanBounds bounds, boolean scaleCalibrated) {
+    double imageWidth = scene.path("image_size").path("width").asDouble();
+    if (imageWidth <= 0) {
+      throw new IllegalArgumentException("The mapper scene has no image size");
+    }
+    double k = bounds.width() / imageWidth;
+    List<String> warnings = new ArrayList<>();
+
+    Map<String, Integer> counters = new HashMap<>();
+    List<Zone> zones = new ArrayList<>();
+    Map<String, Zone> zoneBySpace = new HashMap<>();
+    for (JsonNode space : scene.path("spaces")) {
+      String category = category(space);
+      if (category == null) continue;
+      double[] box = box(space.path("polygon").path("outer"), k);
+      if (box == null) continue;
+      String id = space.path("id").asText();
+      String label = space.path("label").isNull() ? "" : space.path("label").asText("").strip();
+      String name = label.isEmpty() ? category + " " + counters.merge(category, 1, Integer::sum) : label;
+      Zone zone = new Zone(id, name, category, box[0], box[1], box[2] - box[0], box[3] - box[1]);
+      zones.add(zone);
+      zoneBySpace.put(id, zone);
+    }
+
+    List<Door> doors = new ArrayList<>();
+    for (JsonNode opening : scene.path("openings")) {
+      Door door = door(opening, k);
+      if (door != null) doors.add(door);
+    }
+
+    Map<String, String> nodeIds = new HashMap<>();
+    List<CandidateNode> nodes = new ArrayList<>();
+    for (JsonNode node : scene.path("graph").path("nodes")) {
+      String original = node.path("id").asText();
+      String role = node.path("kind").asText("waypoint").toUpperCase(Locale.ROOT);
+      String spaceId = node.path("space_id").isNull() ? null : node.path("space_id").asText(null);
+      boolean standsForSpace = spaceId != null && zoneBySpace.containsKey(spaceId)
+        && (role.equals("ROOM") || role.equals("CONNECTOR")) && !nodeIds.containsValue(spaceId);
+      String id = standsForSpace ? spaceId : original;
+      nodeIds.put(original, id);
+      String label = standsForSpace ? zoneBySpace.get(spaceId).name() : nodeLabel(node, role);
+      nodes.add(new CandidateNode(id, role, label, node.path("x").asDouble() * k, node.path("y").asDouble() * k));
+    }
+
+    List<CandidateLink> connections = new ArrayList<>();
+    for (JsonNode edge : scene.path("graph").path("edges")) {
+      String from = nodeIds.get(edge.path("from").asText()), to = nodeIds.get(edge.path("to").asText());
+      if (from == null || to == null || from.equals(to)) continue;
+      connections.add(new CandidateLink("link-" + connections.size(), from, to,
+        edge.path("kind").asText("corridor").toUpperCase(Locale.ROOT), edge.path("length_px").asDouble() * k, true));
+    }
+
+    List<Segment> walls = new ArrayList<>();
+    boolean truncated = false;
+    for (JsonNode wall : scene.path("walls")) {
+      truncated |= !addRing(walls, wall.path("outer"), k);
+    }
+
+    if (zones.isEmpty()) {
+      warnings.add("No se reconocieron ambientes en el plano; revisa que sea legible y de una sola planta");
+    }
+    if (truncated) {
+      warnings.add("El plano tiene más de " + MAX_WALL_SEGMENTS + " tramos de pared; solo se muestran los primeros");
+    }
+    for (JsonNode issue : scene.path("validation").path("issues")) {
+      if (severityRank(issue.path("severity").asText()) >= MIN_REPORTED_SEVERITY_RANK) {
+        warnings.add(describe(issue));
+      }
+    }
+    if (!scaleCalibrated) {
+      warnings.add("La escala se estimó automáticamente: calibra una distancia real antes de aplicar la propuesta");
+    }
+    warnings.add("Propuesta automática no publicada: revisa paredes, puertas, nombres, accesibilidad y conexiones");
+    return new Topology(zones, doors, nodes, connections, walls, warnings);
+  }
+
+  /** The validator speaks English; the editor shows Spanish. Unknown codes keep the validator's own text. */
+  private static String describe(JsonNode issue) {
+    int count = issue.path("subjects").size();
+    String subjects = count == 0 ? "Hay" : String.valueOf(count);
+    return switch (issue.path("code").asText()) {
+      case "dangling-edge" -> "Hay conexiones que apuntan a un nodo inexistente";
+      case "edge-crosses-wall" -> subjects + " conexiones cruzan una pared u obstáculo: revísalas";
+      case "isolated-node" -> subjects + " nodos no tienen conexiones";
+      case "disconnected-graph" -> subjects + " nodos no se alcanzan desde la red principal: la red quedó en varias partes";
+      case "no-entrance" -> "No se detectó ninguna entrada: márcala a mano para que las rutas puedan empezar";
+      case "room-unreachable" -> subjects + " ambientes no se alcanzan desde ninguna entrada";
+      case "space-without-access" -> subjects + " ambientes no tienen puerta detectada: agrega una apertura si son accesibles";
+      case "opening-without-node" -> subjects + " aperturas no están representadas como tránsito";
+      case "low-confidence-opening" -> subjects + " aperturas tienen baja confianza: verifícalas";
+      default -> issue.path("message").asText(issue.path("code").asText());
+    };
+  }
+
+  private static String category(JsonNode space) {
+    return switch (space.path("kind").asText()) {
+      case "room" -> "ROOM";
+      case "circulation" -> "CORRIDOR";
+      case "vertical" -> "elevator".equals(space.path("connector_kind").asText()) ? "ELEVATOR" : "STAIRS";
+      default -> null; // "void" and anything new are not part of the building
+    };
+  }
+
+  private static String nodeLabel(JsonNode node, String role) {
+    JsonNode label = node.path("label");
+    if (!label.isNull() && !label.asText("").isBlank()) return label.asText().strip();
+    return switch (role) {
+      case "DOOR" -> "Acceso";
+      case "ENTRANCE" -> "Entrada";
+      case "CONNECTOR" -> "Conector";
+      case "DECISION" -> "Cruce";
+      default -> "Recorrido";
+    };
+  }
+
+  /** The segment across the opening, along the longer side of its box and as wide as the opening. */
+  private static Door door(JsonNode opening, double k) {
+    double[] box = box(opening.path("polygon").path("outer"), k);
+    if (box == null) return null;
+    double cx = (box[0] + box[2]) / 2, cy = (box[1] + box[3]) / 2;
+    double half = Math.max(opening.path("width_px").asDouble() * k, 0) / 2;
+    boolean horizontal = (box[2] - box[0]) >= (box[3] - box[1]);
+    String id = opening.path("id").asText();
+    return horizontal ? new Door(id, cx - half, cy, cx + half, cy) : new Door(id, cx, cy - half, cx, cy + half);
+  }
+
+  /** @return {minX, minY, maxX, maxY} in plan units, or null when the ring has no points */
+  private static double[] box(JsonNode ring, double k) {
+    if (!ring.isArray() || ring.isEmpty()) return null;
+    double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE, maxX = -Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+    for (JsonNode point : ring) {
+      double x = point.get(0).asDouble() * k, y = point.get(1).asDouble() * k;
+      minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    }
+    return new double[]{minX, minY, maxX, maxY};
+  }
+
+  /** @return false when the cap on segments stopped it from adding the whole ring */
+  private static boolean addRing(List<Segment> walls, JsonNode ring, double k) {
+    int n = ring.size();
+    if (n < 2) return true;
+    for (int i = 0; i < n; i++) {
+      JsonNode a = ring.get(i), b = ring.get((i + 1) % n);
+      if (a.get(0).asDouble() == b.get(0).asDouble() && a.get(1).asDouble() == b.get(1).asDouble()) continue;
+      if (walls.size() >= MAX_WALL_SEGMENTS) return false;
+      walls.add(new Segment(a.get(0).asDouble() * k, a.get(1).asDouble() * k, b.get(0).asDouble() * k,
+        b.get(1).asDouble() * k, "mapper"));
+    }
+    return true;
+  }
+
+  private static int severityRank(String severity) {
+    return switch (severity) {
+      case "error" -> 2;
+      case "warning" -> 1;
+      default -> 0;
+    };
+  }
+}

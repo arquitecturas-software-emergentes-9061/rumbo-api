@@ -25,5 +25,23 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  # Optional (not started by a plain `docker compose up`): reads PDF, PNG and JPEG plans for the interpretation
+  # endpoint. Start it with `docker compose --profile mapper up -d structural-mapper` and enable it in the API with
+  # STRUCTURAL_MAPPER_ENABLED=true (see structural-mapper/README.md).
+  structural-mapper:
+    profiles: ["mapper"]
+    build: ./structural-mapper
+    ports:
+      - "127.0.0.1:8010:8010"
+  # Optional alternative to structural-mapper with neural perception for photographed or scanned plans (several GB).
+  # Run one of the two, not both: `docker compose --profile mapper-ml up -d structural-mapper-ml`, and set
+  # STRUCTURAL_MAPPER_USE_ML=true in the API.
+  structural-mapper-ml:
+    profiles: ["mapper-ml"]
+    build:
+      context: ./structural-mapper
+      dockerfile: Dockerfile.ml
+    ports:
+      - "127.0.0.1:8010:8010"
 volumes:
   rumbo-postgres:

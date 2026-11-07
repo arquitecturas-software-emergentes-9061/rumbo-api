@@ -7,9 +7,6 @@ without ever leaving the walkable area.
 """
 from __future__ import annotations
 
-from collections import defaultdict
-
-import cv2
 import networkx as nx
 import numpy as np
 from skimage.morphology import skeletonize
@@ -29,17 +26,40 @@ def skeleton_graph(mask: np.ndarray) -> nx.Graph:
 
     def neighbours(p):
         x, y = p
-        return [(x + dx, y + dy) for dx, dy in NEIGHBOURS if (x + dx, y + dy) in pixels]
+        return [(x + dx, y + dy) for dx, dy in NEIGHBOURS
+                if (x + dx, y + dy) in pixels
+                and not (dx and dy and ((x + dx, y) in pixels or (x, y + dy) in pixels))]
 
     degree = {p: len(neighbours(p)) for p in pixels}
     key_pixels = {p for p, d in degree.items() if d != 2}
-    if not key_pixels:  # a pure loop: pick an arbitrary pixel as the only node
-        key_pixels = {next(iter(pixels))}
+    # Each disconnected cycle needs anchors, even when another component has junctions.
+    unseen = set(pixels)
+    for start in sorted(pixels):
+        if start not in unseen:
+            continue
+        component, stack = set(), [start]
+        unseen.remove(start)
+        while stack:
+            point = stack.pop()
+            component.add(point)
+            for other in neighbours(point):
+                if other in unseen:
+                    unseen.remove(other)
+                    stack.append(other)
+        if component & key_pixels:
+            continue
+        path, traced, previous, current = [], set(), None, start
+        while current not in traced:
+            path.append(current)
+            traced.add(current)
+            other = next(point for point in neighbours(current) if point != previous)
+            previous, current = current, other
+        key_pixels.update(path[index] for index in (0, len(path) // 3, 2 * len(path) // 3))
 
     # cluster adjacent key pixels (junction blobs) into single nodes
     cluster_of: dict[tuple[int, int], int] = {}
     clusters: list[list[tuple[int, int]]] = []
-    for p in key_pixels:
+    for p in sorted(key_pixels):
         if p in cluster_of:
             continue
         stack = [p]
@@ -97,10 +117,26 @@ def _path_length(path) -> float:
 def _add_edge(graph: nx.Graph, a: int, b: int, path) -> None:
     length = _path_length(path)
     if a == b:
-        return  # self loops carry no routing information
-    if graph.has_edge(a, b):
-        if graph[a][b]["length"] <= length:
+        if len(path) < 4:
             return
+        # Represent a returning branch with distinct nodes, not a discarded self-loop.
+        i, j = len(path) // 3, 2 * len(path) // 3
+        middle, last = max(graph.nodes, default=-1) + 1, max(graph.nodes, default=-1) + 2
+        for node, point in ((middle, path[i]), (last, path[j])):
+            graph.add_node(node, x=float(point[0]), y=float(point[1]))
+        _add_edge(graph, a, middle, path[:i + 1])
+        _add_edge(graph, middle, last, path[i:j + 1])
+        _add_edge(graph, last, a, path[j:])
+        return
+    if graph.has_edge(a, b):
+        # A simple graph can preserve parallel corridors by splitting the extra route.
+        index = len(path) // 2
+        middle = max(graph.nodes, default=-1) + 1
+        point = path[index]
+        graph.add_node(middle, x=float(point[0]), y=float(point[1]))
+        _add_edge(graph, a, middle, path[:index + 1])
+        _add_edge(graph, middle, b, path[index:])
+        return
     graph.add_edge(a, b, path=list(path), length=length)
 
 
@@ -136,7 +172,7 @@ def collapse_degree_two(graph: nx.Graph, protected: set[int] | None = None) -> N
         if node in protected or node not in graph or graph.degree(node) != 2:
             continue
         a, b = list(graph.neighbors(node))
-        if a == b:
+        if a == b or graph.has_edge(a, b):
             continue
         pa = graph[a][node]["path"]
         pb = graph[node][b]["path"]
@@ -144,9 +180,6 @@ def collapse_degree_two(graph: nx.Graph, protected: set[int] | None = None) -> N
         pb = pb if _near(pb[0], graph.nodes[node]) else pb[::-1]
         merged = list(pa) + list(pb[1:])
         graph.remove_node(node)
-        if graph.has_edge(a, b):
-            if graph[a][b]["length"] <= _path_length(merged):
-                continue
         graph.add_edge(a, b, path=merged, length=_path_length(merged))
 
 
@@ -167,6 +200,8 @@ def merge_close_nodes(graph: nx.Graph, distance: float, protected: set[int] | No
                 continue
             if graph.degree(a) < 3 or graph.degree(b) < 3:
                 continue
+            if set(graph.neighbors(a)) & set(graph.neighbors(b)):
+                continue  # preserve cycles through a common neighbour
             ax, ay = graph.nodes[a]["x"], graph.nodes[a]["y"]
             bx, by = graph.nodes[b]["x"], graph.nodes[b]["y"]
             for n in list(graph.neighbors(b)):

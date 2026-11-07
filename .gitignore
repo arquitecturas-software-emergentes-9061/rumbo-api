@@ -13,3 +13,4 @@ logs/
 __pycache__/
 .pytest_cache/
 .venv/
+structural-mapper/.models/

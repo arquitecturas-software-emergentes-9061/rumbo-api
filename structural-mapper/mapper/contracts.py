@@ -60,6 +60,7 @@ class StructuralMasks:
     wall_probability: np.ndarray | None = None  # float32 in [0, 1]
     thin: np.ndarray | None = None  # thin dark strokes (door swings, symbols, text)
     backend: str = "unknown"
+    semantic_geometry: bool = False
 
 
 @dataclass(slots=True)

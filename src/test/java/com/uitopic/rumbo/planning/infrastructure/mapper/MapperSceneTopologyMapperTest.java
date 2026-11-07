@@ -6,6 +6,7 @@ import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Can
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Door;
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Topology;
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Zone;
+import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.PlanPoint;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.OriginalPlanBounds;
 import org.junit.jupiter.api.Test;
 
@@ -149,6 +150,35 @@ class MapperSceneTopologyMapperTest {
   void aSceneWithoutImageSizeIsRejected() {
     assertThatThrownBy(() -> MapperSceneTopologyMapper.toTopology(synthetic("{\"spaces\":[]}"),
       new OriginalPlanBounds(10, 10), true)).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void preservesNonConvexSpacesHolesBarrierClassesAndDiagonalDoorsThroughJson() throws IOException {
+    Topology topology = MapperSceneTopologyMapper.toTopology(synthetic("""
+      {"image_size":{"width":100,"height":100},
+       "spaces":[{"id":"a","kind":"room","label":"Triaje","label_position":[20,60],
+         "polygon":{"outer":[[10,10],[90,10],[90,40],[40,40],[40,90],[10,90]],
+                    "holes":[[[20,20],[30,20],[30,30],[20,30]]]}}],
+       "openings":[{"id":"diagonal","axis":[[40,40],[50,50]],"width_px":14.142}],
+       "walls":[{"outer":[[0,0],[10,0],[10,100],[0,100]],"holes":[]}],
+       "obstacles":[{"outer":[[20,20],[30,20],[30,30],[20,30]],"holes":[]}],
+       "windows":[{"outer":[[90,10],[95,10],[95,30],[90,30]],"holes":[]}],
+       "walkable":[{"polygon":{"outer":[[10,10],[35,10],[35,80],[10,80]],"holes":[]}}],
+       "graph":{"nodes":[],"edges":[]},"validation":{"issues":[]}}
+      """), new OriginalPlanBounds(50, 50), true);
+
+    Zone zone = topology.zones().getFirst();
+    assertThat(zone.polygon().outer()).hasSize(6).contains(new PlanPoint(20, 20));
+    assertThat(zone.polygon().holes()).hasSize(1);
+    assertThat(zone.polygon().holes().getFirst()).contains(new PlanPoint(15, 15));
+    assertThat(zone.labelPosition()).isEqualTo(new PlanPoint(10, 30));
+    assertThat(topology.doors()).containsExactly(new Door("diagonal", 20, 20, 25, 25));
+    assertThat(topology.barriers()).extracting(barrier -> barrier.kind()).containsExactly("WALL", "OBSTACLE", "WINDOW");
+    assertThat(topology.walkable()).hasSize(1);
+    JsonNode response = JSON.valueToTree(topology);
+    assertThat(response.at("/zones/0/polygon/holes/0/0/x").asDouble()).isEqualTo(10);
+    assertThat(response.at("/barriers/1/polygon/outer/0/x").asDouble()).isEqualTo(10);
+    assertThat(response.at("/walkable/0/outer/0/y").asDouble()).isEqualTo(5);
   }
 
   @Test

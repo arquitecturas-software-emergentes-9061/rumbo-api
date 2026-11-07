@@ -1,21 +1,26 @@
 # syntax=docker/dockerfile:1.7
-# Lean image: deterministic perception only (vector strokes + classical morphology), no PyTorch and no model weights.
-# The optional BuildingCV perceiver is not installed here; see README.md to enable it.
+# Default image: deterministic perception plus the CubiCasa5k semantic parser on ONNX Runtime (CPU, no PyTorch).
+# The 66 MB model is downloaded from the public rumbo-models release at build time and verified by SHA-256,
+# so the container starts offline. The optional BuildingCV perceiver is not installed here; see README.md.
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_PREFER_BINARY=1 \
-    STRUCTURAL_MAPPER_DISABLE_ML=1
+    CUBICASA_ONNX_MODEL=/opt/rumbo-models/cubicasa.onnx \
+    MAPPER_INFERENCE_THREADS=4
 
 RUN apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home mapper
 
 WORKDIR /workspace/structural-mapper
-COPY requirements-geometry.txt ./requirements-geometry.txt
-RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements-geometry.txt
+COPY requirements-geometry.txt requirements.txt ./
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt
+
+COPY mapper/perception/model_store.py ./mapper/perception/model_store.py
+RUN python mapper/perception/model_store.py "$CUBICASA_ONNX_MODEL"
 
 COPY app.py ./app.py
 COPY mapper ./mapper

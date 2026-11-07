@@ -20,6 +20,8 @@ def validate(scene: Scene) -> ValidationReport:
     prepared = prep(barrier) if barrier is not None and not barrier.is_empty else None
 
     crossing = []
+    outside = []
+    walkable = prep(unary_union(scene.walkable).buffer(0.75))
     for edge in graph.edges:
         a, b = nodes.get(edge.from_id), nodes.get(edge.to_id)
         if a is None or b is None:
@@ -27,9 +29,14 @@ def validate(scene: Scene) -> ValidationReport:
             continue
         if prepared is not None and prepared.intersects(LineString([(a.x, a.y), (b.x, b.y)])):
             crossing.append(f"{a.id}-{b.id}")
+        if not walkable.covers(LineString([(a.x, a.y), (b.x, b.y)])):
+            outside.append(f"{a.id}-{b.id}")
     if crossing:
         report.add(ValidationIssue("edge-crosses-wall", "error", f"{len(crossing)} edges cross a wall or obstacle.", crossing))
     report.metrics["edges_crossing_walls"] = len(crossing)
+    if outside:
+        report.add(ValidationIssue("edge-outside-walkable", "error", f"{len(outside)} edges leave the walkable area.", outside))
+    report.metrics["edges_outside_walkable"] = len(outside)
 
     g = nx.Graph()
     g.add_nodes_from(nodes)

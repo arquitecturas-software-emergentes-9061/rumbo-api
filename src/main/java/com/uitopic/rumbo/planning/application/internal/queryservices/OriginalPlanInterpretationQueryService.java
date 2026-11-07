@@ -1,6 +1,7 @@
 package com.uitopic.rumbo.planning.application.internal.queryservices;
 
 import com.uitopic.rumbo.planning.application.internal.FloorPlanVersionService;
+import com.uitopic.rumbo.planning.application.internal.exceptions.InvalidSvgPlanException;
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview;
 import com.uitopic.rumbo.planning.application.internal.outboundservices.StructuralPlanInterpreterPort;
 import com.uitopic.rumbo.planning.application.internal.outboundservices.SvgPlanPreviewPort;
@@ -37,13 +38,24 @@ public class OriginalPlanInterpretationQueryService {
     var scale = scales.find(site, version).filter(value -> value.floorId().equals(floor))
       .map(ScaleReference::metersPerUnit).orElse(null);
     var bounds = files.bounds(original);
-    var proposal = format == Format.SVG ? previews.proposeStoredTopology(original.bytes(), bounds) : null;
+    SvgPlanPreview.Topology proposal = null;
+    InvalidSvgPlanException unsupportedSvg = null;
+    if (format == Format.SVG) {
+      try {
+        proposal = previews.proposeStoredTopology(original.bytes(), bounds);
+      } catch (InvalidSvgPlanException failure) {
+        // The restricted annotation parser cannot read every valid SVG (e.g. percentage
+        // dimensions). Let the structural adapter interpret its rendered geometry.
+        unsupportedSvg = failure;
+      }
+    }
     // An SVG with annotated zones is read exactly. Everything else, such as PDF, PNG, JPEG or an SVG without
     // annotations, goes to the structural mapper; if it is off or fails, the plan stays a preview.
     if (proposal == null || proposal.zones().isEmpty()) {
       var inferred = structural.propose(original.bytes(), format, bounds, scale);
       if (inferred.isPresent() && !inferred.get().zones().isEmpty()) proposal = inferred.get();
     }
+    if (proposal == null && unsupportedSvg != null) throw unsupportedSvg;
     return new Result(version, floor, format.mediaType(),
       proposal == null ? Processing.PREVIEW_ONLY : Processing.SVG_CANDIDATES,
       scale == null ? ScaleStatus.PROVISIONAL : ScaleStatus.CONFIRMED, scale, proposal);

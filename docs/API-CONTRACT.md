@@ -101,9 +101,17 @@ calibration keeps its existing behavior.
 
 `POST /api/v1/sites/{siteId}/floors/{floorId}/plans/versions/{versionId}/interpretation`
 uses the original scoped to the administrator, site and floor. `SVG_CANDIDATES`
-includes candidate walls, annotated zones, doors and links in the original preview
-coordinate frame. `PREVIEW_ONLY` identifies PNG, JPEG and single-page PDF. The original
-remains available for viewing and calibration in either case.
+includes candidate walls, zones, doors and links in the original preview coordinate frame.
+Annotated SVG is interpreted directly. When the optional structural mapper is enabled, PDF,
+PNG, JPEG and unannotated SVG can also produce candidates. Files without a usable proposal
+remain `PREVIEW_ONLY`; the original remains available for viewing and calibration.
+
+Structural mapper v4 proposals add `zones[].polygon` and `zones[].labelPosition` alongside
+the compatible bounding-box fields. A polygon is `{outer: [{x,y}, ...], holes: [[{x,y}, ...], ...]}`.
+`barriers[]` contains `{kind: WALL|WINDOW|OBSTACLE, polygon}` and `walkable[]` contains the
+traversable polygons. Door endpoints retain their actual orientation. Clients may fall back
+to rectangular zones and `wallCandidates` for older mapper responses or annotated SVG.
+These additions describe the proposal; the persisted draft graph contract remains unchanged.
 
 The result contains `CONFIRMED` with `metersPerUnit` only when that version and floor
 have a saved physical reference. `PROVISIONAL` keeps all dimensions in plan units.

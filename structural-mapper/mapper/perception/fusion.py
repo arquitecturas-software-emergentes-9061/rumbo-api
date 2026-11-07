@@ -2,7 +2,8 @@
 
 Policy (documented so administrators can reason about proposals):
 - vector strokes are exact: always kept;
-- classical thick strokes are kept: they are the drawn structure of a line plan;
+- classical thick strokes complement legacy models; a joint semantic parser owns
+  wall geometry to avoid adding furniture back into its structural predictions;
 - ML wall components are kept when they agree with the drawn structure (overlap) or
   when the network is confident about them (they cover walls the classical detector
   cannot see, e.g. light-grey or hatched walls), never as isolated speckle;
@@ -28,7 +29,7 @@ def fuse(primary: StructuralMasks | None, classical: StructuralMasks | None, vec
         wall |= vector.wall
         backends.append(vector.backend)
     drawn = wall.copy()
-    if classical is not None:
+    if classical is not None and not (primary is not None and primary.semantic_geometry):
         if drawn.any():
             wall |= _accept_classical(classical.wall, drawn, scale)
         else:
@@ -41,9 +42,11 @@ def fuse(primary: StructuralMasks | None, classical: StructuralMasks | None, vec
         window |= _attached(primary.window, wall, scale)
         backends.append(primary.backend)
 
-    # Perception never produces a door where a wall exists; walls win.
-    door &= ~wall
-    window &= ~wall
+    # Joint parsers label a boundary as a wall AND identify its opening icon.
+    # Keep that evidence so reconstruction can cut the doorway through its host wall.
+    if primary is None or not primary.semantic_geometry:
+        door &= ~wall
+        window &= ~wall
     thin = classical.thin if classical is not None else None
     if thin is not None:
         thin = thin & ~wall
@@ -54,6 +57,7 @@ def fuse(primary: StructuralMasks | None, classical: StructuralMasks | None, vec
         wall_probability=primary.wall_probability if primary else None,
         thin=thin,
         backend="+".join(backends),
+        semantic_geometry=primary.semantic_geometry if primary is not None else False,
     )
 
 

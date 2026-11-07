@@ -18,6 +18,7 @@ from itertools import count
 import cv2
 import numpy as np
 from shapely.geometry import LineString, Point, Polygon
+from shapely.affinity import translate
 from shapely.ops import unary_union
 
 from ..contracts import Opening, Scale, Space, TextLabel, WallElement
@@ -36,10 +37,12 @@ SEAL_M = 8.0  # widest gap sealed when separating inside from outside
 
 
 class SpaceInference:
-    def __init__(self, scale: Scale, shape: tuple[int, int], thin: np.ndarray | None = None):
+    def __init__(self, scale: Scale, shape: tuple[int, int], thin: np.ndarray | None = None,
+                 semantic_geometry: bool = False):
         self.scale = scale
         self.shape = shape
         self.thin = thin
+        self.semantic_geometry = semantic_geometry
         self.glass: list[WallElement] = []  # wide exterior gaps that are glazing, not entrances
 
     def run(self, walls: list[WallElement], openings: list[Opening], labels: list[TextLabel]) -> tuple[list[Space], list[Opening], dict]:
@@ -55,16 +58,18 @@ class SpaceInference:
         ids = count(1)
         entrance_candidates: list[Opening] = []
         for component, stats, _ in components(free, min_area=min_area):
-            polygons = mask_to_polygons(component, simplify_px=max(1.0, self.scale.px(0.04)), min_area=min_area)
+            x, y, w, h = (int(stats[index]) for index in (cv2.CC_STAT_LEFT, cv2.CC_STAT_TOP, cv2.CC_STAT_WIDTH, cv2.CC_STAT_HEIGHT))
+            local = component[y:y + h, x:x + w]
+            polygons = mask_to_polygons(local, simplify_px=max(1.0, self.scale.px(0.04)), min_area=min_area)
             if not polygons:
                 continue
-            polygon = max(polygons, key=lambda p: p.area)
+            polygon = translate(max(polygons, key=lambda p: p.area), xoff=x, yoff=y)
             space_id = f"s{next(ids)}"
             label_image[component] = int(space_id[1:])
             area = float(stats[cv2.CC_STAT_AREA])
-            distance = cv2.distanceTransform(component.astype(np.uint8), cv2.DIST_L2, 5)
+            distance = cv2.distanceTransform(np.pad(local.astype(np.uint8), 1), cv2.DIST_L2, 5)
             radius = float(distance.max())
-            ys, xs = np.nonzero(component)
+            ys, xs = np.nonzero(local)
             _, long_side, short_side, _, _ = oriented_box(np.column_stack((xs, ys)))
             space = Space(
                 id=space_id,
@@ -137,6 +142,12 @@ class SpaceInference:
             if not self._inside(component, probe):
                 normal = -normal
             touches_border = bool((part & border).any())
+            # A semantic boundary touching the estimated envelope is not a door
+            # prediction. Requiring icon evidence avoids giant entrances across
+            # an unmodelled staircase or terrace. Border-cropped corridors remain
+            # supported; actual semantic doors are assigned separately below.
+            if self.semantic_geometry and not touches_border:
+                continue
             evidence = swing_evidence(self.thin, center, (float(normal[0]), float(normal[1])), width, self.scale) if self.thin is not None else 0.0
             limit = MAX_ENTRANCE_M if (touches_border or evidence > 0) else MAX_DOOR_M
             if width < self.scale.px(0.5):

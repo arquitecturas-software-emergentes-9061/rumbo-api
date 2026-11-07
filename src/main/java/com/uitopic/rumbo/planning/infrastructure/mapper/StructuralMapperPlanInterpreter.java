@@ -27,8 +27,8 @@ import java.util.Optional;
  * Adapter of {@link StructuralPlanInterpreterPort} that sends the stored original to the structural mapper service and
  * converts its scene into a proposal. Any failure of the service, such as an outage, a timeout or a file it cannot
  * decode, is logged and answered with an empty result, so the plan stays available as a preview.
- * {@code use-ml} asks the service for its neural perception, which only helps on photographed or scanned plans and
- * only exists when the service runs from the heavy image; the service falls back to its deterministic perception.
+ * {@code use-ml} (on by default) asks the service for its semantic floor-plan parser, which recognizes rooms, walls and
+ * doors on raster plans; when the service has no model loaded it falls back to its deterministic perception.
  */
 @Component
 @ConditionalOnProperty(name = "rumbo.planning.structural-mapper.enabled", havingValue = "true")
@@ -52,7 +52,7 @@ public class StructuralMapperPlanInterpreter implements StructuralPlanInterprete
     @Value("${rumbo.planning.structural-mapper.url:http://localhost:8010}") String url,
     @Value("${rumbo.planning.structural-mapper.connect-timeout-ms:2000}") int connectTimeoutMs,
     @Value("${rumbo.planning.structural-mapper.read-timeout-ms:30000}") int readTimeoutMs,
-    @Value("${rumbo.planning.structural-mapper.use-ml:false}") boolean useMl) {
+    @Value("${rumbo.planning.structural-mapper.use-ml:true}") boolean useMl) {
     this(RestClient.builder().baseUrl(url).requestFactory(factory(connectTimeoutMs, readTimeoutMs)).build(), useMl);
   }
 
@@ -93,6 +93,10 @@ public class StructuralMapperPlanInterpreter implements StructuralPlanInterprete
     parts.add("file", new HttpEntity<>(file, fileHeaders));
     parts.add("raster_scale", Double.toString(RASTER_SCALE));
     parts.add("use_ml", Boolean.toString(useMl));
+    if (metersPerUnit != null && metersPerUnit > 0) {
+      parts.add("meters_per_unit", Double.toString(metersPerUnit));
+      parts.add("original_width_units", Double.toString(bounds.width()));
+    }
     Double pixelsPerMeter = pixelsPerMeter(format, bounds, metersPerUnit);
     if (pixelsPerMeter != null) parts.add("pixels_per_meter", Double.toString(pixelsPerMeter));
     return parts;

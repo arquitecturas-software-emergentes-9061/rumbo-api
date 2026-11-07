@@ -171,4 +171,53 @@ class BeaconControllerIntegrationTest {
       .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
   }
 
+  @Test void registersUnplacedBeaconWithMetadataEditsItAndBlocksActivationUntilPlaced() throws Exception {
+    UUID admin = UUID.randomUUID(), siteId = site(admin), floor = UUID.randomUUID();
+    draft(siteId, floor);
+    String base = "/api/v1/sites/" + siteId + "/beacons";
+    String uuid = "f7826da6-4fa2-4e98-8024-bc5b71e0893e";
+    String payload = mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"floorId\":\"" + floor + "\",\"name\":\"B-05\",\"proximityUuid\":\"" + uuid
+          + "\",\"major\":100,\"minor\":5,\"txPowerDbm\":-59}"))
+      .andExpect(status().isCreated())
+      .andExpect(jsonPath("$.identifier").value(uuid + ":100:5"))
+      .andExpect(jsonPath("$.name").value("B-05"))
+      .andExpect(jsonPath("$.active").value(false))
+      .andExpect(jsonPath("$.x").doesNotExist())
+      .andReturn().getResponse().getContentAsString();
+    UUID beaconId = UUID.fromString(json.readTree(payload).get("id").asText());
+
+    mvc.perform(patch(base + "/" + beaconId + "/status").with(caller(admin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON).content("{\"active\":true}"))
+      .andExpect(status().isUnprocessableEntity())
+      .andExpect(jsonPath("$.code").value("INVALID_BEACON"));
+
+    mvc.perform(put(base + "/" + beaconId).with(caller(admin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"floorId\":\"" + floor + "\",\"name\":\"B-05\",\"proximityUuid\":\"" + uuid
+          + "\",\"major\":100,\"minor\":5,\"txPowerDbm\":-59,\"x\":42.8,\"y\":18.2}"))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.x").value(42.8));
+
+    mvc.perform(patch(base + "/" + beaconId + "/status").with(caller(admin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON).content("{\"active\":true}"))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.active").value(true));
+  }
+
+  @Test void rejectsDuplicateIbeaconTripletAndOutOfRangeMajor() throws Exception {
+    UUID admin = UUID.randomUUID(), siteId = site(admin), floor = UUID.randomUUID();
+    draft(siteId, floor);
+    String base = "/api/v1/sites/" + siteId + "/beacons";
+    String body = "{\"floorId\":\"" + floor + "\",\"proximityUuid\":\"f7826da6-4fa2-4e98-8024-bc5b71e0893e\","
+        + "\"major\":100,\"minor\":1,\"txPowerDbm\":-59}";
+    mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated());
+    mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isConflict())
+      .andExpect(jsonPath("$.code").value("BEACON_IDENTIFIER_EXISTS"));
+    mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content(body.replace("\"major\":100", "\"major\":70000")))
+      .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+  }
 }

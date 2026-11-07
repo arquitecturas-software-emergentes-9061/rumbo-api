@@ -26,14 +26,15 @@ services:
       timeout: 3s
       retries: 10
   # Optional (not started by a plain `docker compose up`): reads PDF, PNG and JPEG plans for the interpretation
-  # endpoint. Start it with `docker compose --profile mapper up -d structural-mapper` and enable it in the API with
+  # endpoint, recognizing walls, doors and rooms with the CubiCasa5k model (downloaded at build time, no PyTorch).
+  # Start it with `docker compose --profile mapper up -d structural-mapper` and enable it in the API with
   # STRUCTURAL_MAPPER_ENABLED=true (see structural-mapper/README.md).
   structural-mapper:
     profiles: ["mapper"]
     build: ./structural-mapper
     ports:
       - "127.0.0.1:8010:8010"
-  # Optional alternative to structural-mapper with neural perception for photographed or scanned plans (several GB).
+  # Legacy alternative with BuildingCV neural perception (several GB, PyTorch).
   # Run one of the two, not both: `docker compose --profile mapper-ml up -d structural-mapper-ml`, and set
   # STRUCTURAL_MAPPER_USE_ML=true in the API.
   structural-mapper-ml:

@@ -121,6 +121,19 @@ class StructuralPlanInterpretationIntegrationTest {
   }
 
   @Test
+  void aValidSvgOutsideTheAnnotationParsersSubsetStillReachesTheStructuralMapper() throws Exception {
+    when(mapper.propose(any(), eq(Format.SVG), any(), any())).thenReturn(Optional.of(ONE_ROOM));
+    String svg = """
+      <svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+        <rect width="100%" height="100%" fill="white"/>
+        <path d="M 10 10 L 190 10 L 190 90 L 10 90 Z" fill="none" stroke="black" stroke-width="5"/>
+      </svg>""";
+    interpret(plan("plano.svg", "image/svg+xml", svg.getBytes(StandardCharsets.UTF_8)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.proposal.zones[0].name").value("Cardiologia"));
+    verify(mapper).propose(any(), eq(Format.SVG), any(), eq(null));
+  }
+
+  @Test
   void aSceneWithoutAnyRecognizedSpaceIsNotPresentedAsAProposal() throws Exception {
     when(mapper.propose(any(), any(), any(), any())).thenReturn(Optional.of(NOTHING));
 

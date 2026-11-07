@@ -65,7 +65,7 @@ def test_scale_is_estimated_when_unknown(synthetic_case):
 def test_payload_serialization_contract(synthetic_case):
     scene = _scene(synthetic_case)
     payload = scene_to_payload(scene)
-    assert payload["parser_version"] == "3"
+    assert payload["parser_version"] == "4"
     assert payload["image_size"] == {"width": scene.width, "height": scene.height}
     assert {"walls", "obstacles", "windows", "openings", "spaces", "walkable", "graph", "validation", "diagnostics", "scale"} <= payload.keys()
     node = payload["graph"]["nodes"][0]

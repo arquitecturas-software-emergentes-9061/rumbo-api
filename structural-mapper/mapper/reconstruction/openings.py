@@ -52,7 +52,8 @@ def detect_openings(masks: StructuralMasks, walls: list[WallElement], scale: Sca
                 candidate.confidence = 0.85
             openings.append(candidate)
 
-    for component, origin, _ in components_cropped(masks.door, min_area=scale.px(0.25) ** 2):
+    # Icon masks can be narrow strokes; their ink area is not physical doorway area.
+    for component, origin, _ in components_cropped(masks.door, min_area=max(4.0, scale.px(0.03) * scale.px(0.2))):
         candidate = _opening_from_component(component, blocked, scale, 0.45, 3.2, ids, ("ml",), 0.6, check_contacts=False, origin=origin)
         if candidate is None:
             continue

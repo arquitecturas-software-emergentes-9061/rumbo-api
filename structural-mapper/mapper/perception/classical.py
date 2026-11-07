@@ -50,11 +50,9 @@ def thick_structure(mask: np.ndarray, thickness: float, ratio: float = 0.6) -> n
 
 def remove_small(mask: np.ndarray, min_area: float) -> np.ndarray:
     count, labels, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), 8)
-    keep = np.zeros_like(mask, dtype=bool)
-    for index in range(1, count):
-        if stats[index, cv2.CC_STAT_AREA] >= min_area:
-            keep[labels == index] = True
-    return keep
+    keep = stats[:, cv2.CC_STAT_AREA] >= min_area
+    keep[0] = False
+    return keep[labels]
 
 
 class ClassicalPerceiver:

@@ -58,9 +58,17 @@ def rasterize(polygons: Iterable[BaseGeometry], shape: tuple[int, int], value: i
     for geometry in polygons:
         for polygon in as_polygons(geometry):
             outer = np.round(np.asarray(polygon.exterior.coords)).astype(np.int32)
-            cv2.fillPoly(mask, [outer], value)
+            x0, y0 = np.maximum(outer.min(axis=0), (0, 0))
+            x1, y1 = np.minimum(outer.max(axis=0) + 1, (shape[1], shape[0]))
+            if x1 <= x0 or y1 <= y0:
+                continue
+            # Holes belong to this polygon only; they must not erase another obstacle.
+            origin = np.array([x0, y0], dtype=np.int32)
+            local = np.zeros((y1 - y0, x1 - x0), dtype=np.uint8)
+            cv2.fillPoly(local, [outer - origin], value)
             for hole in polygon.interiors:
-                cv2.fillPoly(mask, [np.round(np.asarray(hole.coords)).astype(np.int32)], 0)
+                cv2.fillPoly(local, [np.round(np.asarray(hole.coords)).astype(np.int32) - origin], 0)
+            mask[y0:y1, x0:x1] |= local
     if dilate_px > 0:
         mask = cv2.dilate(mask, np.ones((2 * dilate_px + 1, 2 * dilate_px + 1), np.uint8))
     return mask.astype(bool)

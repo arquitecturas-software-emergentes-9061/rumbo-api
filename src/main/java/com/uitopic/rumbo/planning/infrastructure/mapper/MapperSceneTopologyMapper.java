@@ -7,6 +7,9 @@ import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Doo
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Segment;
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Topology;
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Zone;
+import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Barrier;
+import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.PlanPoint;
+import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.PlanPolygon;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.OriginalPlanBounds;
 
 import java.util.ArrayList;
@@ -20,7 +23,7 @@ import java.util.Map;
  * the proposal the editor reviews, measured in the units of the stored original.
  *
  * <p>Conventions the editor relies on: a space and the node that stands for it share the same identifier, so the
- * editor knows which nodes are rooms; every space becomes its bounding box, because a proposal zone is a rectangle.
+ * editor knows which nodes are rooms. Bounding boxes are retained for older clients; polygons are authoritative.
  */
 final class MapperSceneTopologyMapper {
   static final int MAX_WALL_SEGMENTS = 5000;
@@ -47,7 +50,11 @@ final class MapperSceneTopologyMapper {
       String id = space.path("id").asText();
       String label = space.path("label").isNull() ? "" : space.path("label").asText("").strip();
       String name = label.isEmpty() ? category + " " + counters.merge(category, 1, Integer::sum) : label;
-      Zone zone = new Zone(id, name, category, box[0], box[1], box[2] - box[0], box[3] - box[1]);
+      JsonNode anchor = space.path("label_position");
+      PlanPoint labelPosition = anchor.isArray() && anchor.size() == 2
+        ? point(anchor, k) : new PlanPoint((box[0] + box[2]) / 2, (box[1] + box[3]) / 2);
+      Zone zone = new Zone(id, name, category, box[0], box[1], box[2] - box[0], box[3] - box[1],
+        polygon(space.path("polygon"), k), labelPosition);
       zones.add(zone);
       zoneBySpace.put(id, zone);
     }
@@ -84,6 +91,20 @@ final class MapperSceneTopologyMapper {
     boolean truncated = false;
     for (JsonNode wall : scene.path("walls")) {
       truncated |= !addRing(walls, wall.path("outer"), k);
+      for (JsonNode hole : wall.path("holes")) truncated |= !addRing(walls, hole, k);
+    }
+    List<Barrier> barriers = new ArrayList<>();
+    for (String field : List.of("walls", "obstacles", "windows")) {
+      String kind = switch (field) { case "walls" -> "WALL"; case "obstacles" -> "OBSTACLE"; default -> "WINDOW"; };
+      for (JsonNode element : scene.path(field)) {
+        PlanPolygon shape = polygon(element, k);
+        if (shape != null) barriers.add(new Barrier(kind, shape));
+      }
+    }
+    List<PlanPolygon> walkable = new ArrayList<>();
+    for (JsonNode area : scene.path("walkable")) {
+      PlanPolygon shape = polygon(area.path("polygon"), k);
+      if (shape != null) walkable.add(shape);
     }
 
     if (zones.isEmpty()) {
@@ -101,7 +122,7 @@ final class MapperSceneTopologyMapper {
       warnings.add("La escala se estimó automáticamente: calibra una distancia real antes de aplicar la propuesta");
     }
     warnings.add("Propuesta automática no publicada: revisa paredes, puertas, nombres, accesibilidad y conexiones");
-    return new Topology(zones, doors, nodes, connections, walls, warnings);
+    return new Topology(zones, doors, nodes, connections, walls, warnings, barriers, walkable);
   }
 
   /** The validator speaks English; the editor shows Spanish. Unknown codes keep the validator's own text. */
@@ -111,6 +132,7 @@ final class MapperSceneTopologyMapper {
     return switch (issue.path("code").asText()) {
       case "dangling-edge" -> "Hay conexiones que apuntan a un nodo inexistente";
       case "edge-crosses-wall" -> subjects + " conexiones cruzan una pared u obstáculo: revísalas";
+      case "edge-outside-walkable" -> subjects + " conexiones salen del espacio transitable: revísalas";
       case "isolated-node" -> subjects + " nodos no tienen conexiones";
       case "disconnected-graph" -> subjects + " nodos no se alcanzan desde la red principal: la red quedó en varias partes";
       case "no-entrance" -> "No se detectó ninguna entrada: márcala a mano para que las rutas puedan empezar";
@@ -143,8 +165,13 @@ final class MapperSceneTopologyMapper {
     };
   }
 
-  /** The segment across the opening, along the longer side of its box and as wide as the opening. */
+  /** v4 supplies the exact opening axis; retain the box fallback for older mapper deployments. */
   private static Door door(JsonNode opening, double k) {
+    JsonNode axis = opening.path("axis");
+    if (axis.isArray() && axis.size() == 2) {
+      PlanPoint from = point(axis.get(0), k), to = point(axis.get(1), k);
+      return new Door(opening.path("id").asText(), from.x(), from.y(), to.x(), to.y());
+    }
     double[] box = box(opening.path("polygon").path("outer"), k);
     if (box == null) return null;
     double cx = (box[0] + box[2]) / 2, cy = (box[1] + box[3]) / 2;
@@ -152,6 +179,25 @@ final class MapperSceneTopologyMapper {
     boolean horizontal = (box[2] - box[0]) >= (box[3] - box[1]);
     String id = opening.path("id").asText();
     return horizontal ? new Door(id, cx - half, cy, cx + half, cy) : new Door(id, cx, cy - half, cx, cy + half);
+  }
+
+  private static PlanPoint point(JsonNode point, double k) {
+    return new PlanPoint(point.get(0).asDouble() * k, point.get(1).asDouble() * k);
+  }
+
+  private static List<PlanPoint> ring(JsonNode ring, double k) {
+    List<PlanPoint> points = new ArrayList<>();
+    for (JsonNode vertex : ring) points.add(point(vertex, k));
+    return points;
+  }
+
+  private static PlanPolygon polygon(JsonNode polygon, double k) {
+    if (!polygon.path("outer").isArray() || polygon.path("outer").size() < 3) return null;
+    List<List<PlanPoint>> holes = new ArrayList<>();
+    for (JsonNode hole : polygon.path("holes")) {
+      if (hole.isArray() && hole.size() >= 3) holes.add(ring(hole, k));
+    }
+    return new PlanPolygon(ring(polygon.path("outer"), k), holes);
   }
 
   /** @return {minX, minY, maxX, maxY} in plan units, or null when the ring has no points */

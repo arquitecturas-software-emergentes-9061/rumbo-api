@@ -80,6 +80,17 @@ class StructuralMapperPlanInterpreterTest {
   }
 
   @Test
+  void calibratedSvgSendsOriginalUnitsSoItsScaleCanBeDerivedAfterRendering() throws IOException {
+    server.expect(requestTo("http://mapper.test/analyze"))
+      .andExpect(content().string(containsString("name=\"meters_per_unit\"")))
+      .andExpect(content().string(containsString("name=\"original_width_units\"")))
+      .andExpect(content().string(containsString("642.0")))
+      .andRespond(withSuccess(scene(), MediaType.APPLICATION_JSON));
+    assertThat(interpreter.propose(new byte[]{1}, Format.SVG, BOUNDS, 0.05)).isPresent();
+    server.verify();
+  }
+
+  @Test
   void neuralPerceptionIsOnlyRequestedWhenConfigured() throws IOException {
     server.expect(requestTo("http://mapper.test/analyze"))
       .andExpect(content().string(org.hamcrest.Matchers.matchesPattern("(?s).*name=\"use_ml\".*?\\r\\n\\r\\nfalse.*")))

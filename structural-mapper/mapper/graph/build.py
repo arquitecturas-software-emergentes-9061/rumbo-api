@@ -19,17 +19,21 @@ from itertools import count
 import networkx as nx
 import numpy as np
 from shapely.geometry import LineString, Point, Polygon
-from shapely.ops import unary_union
+from shapely.ops import nearest_points, unary_union
 from shapely.prepared import prep
 
 from ..contracts import GraphEdge, GraphNode, NavigationGraph, Opening, Scale, Space, WallElement
 from ..geometry import rasterize
+from ..walkable.free_space import walkable_union
 from .skeleton import collapse_degree_two, merge_close_nodes, prune_spurs, rdp, skeleton_graph
 
 TURN_TOLERANCE_M = 0.35
 MERGE_M = 0.7
 SPUR_M = 1.2
 COLLINEAR_COS = -0.94  # ~160 degrees
+SNAP_M = 0.5  # how far a node may sit from the rasterized free space and still be bridged
+BRIDGE_MAX_M = 40.0  # longest geodesic repair; beyond it a fragment stays flagged for review
+SEMANTIC_KINDS = ("door", "entrance", "room", "connector")
 
 
 class GraphBuilder:
@@ -47,9 +51,16 @@ class GraphBuilder:
         self.skeleton_node_ids: dict[int, str] = {}
         self.dropped_crossing = 0
         self.room_ids: set[str] = set()
+        self.walls = walls
+        self.allowed = None
+        self.bridged_components = 0
 
     # ---- public --------------------------------------------------------------------
-    def build(self, spaces: list[Space], openings: list[Opening], walkable: dict[str, Polygon]) -> NavigationGraph:
+    def build(self, spaces: list[Space], openings: list[Opening], walkable: dict[str, Polygon],
+              walkable_area: list[Polygon] | None = None) -> NavigationGraph:
+        # Sub-pixel tolerance accounts for raster centre rounding, not body clearance.
+        allowed = walkable_area if walkable_area is not None else walkable_union(walkable, openings, self.scale, self.walls)
+        self.allowed = prep(unary_union(allowed).buffer(0.75))
         by_space = {s.id: s for s in spaces}
         self.room_ids = {s.id for s in spaces if s.kind in ("room", "vertical")}
         circulation = [walkable[s.id] for s in spaces if s.kind == "circulation" and s.id in walkable]
@@ -61,7 +72,107 @@ class GraphBuilder:
         self._connect_room_nodes(walkable)
         self._simplify()
         self.dropped_crossing = self._drop_crossing_edges()
+        self.bridged_components = self._bridge_components(allowed)
         return NavigationGraph(nodes=list(self.nodes.values()), edges=list(self.edges.values()))
+
+    # ---- connectivity repair -------------------------------------------------------------
+    def _components(self) -> list[set[str]]:
+        graph = nx.Graph()
+        graph.add_nodes_from(self.nodes)
+        graph.add_edges_from(tuple(key) for key in self.edges)
+        return [set(c) for c in nx.connected_components(graph)]
+
+    def _semantic(self, component: set[str]) -> int:
+        return sum(1 for n in component if self.nodes[n].kind in SEMANTIC_KINDS)
+
+    def _bridge_components(self, allowed: list[Polygon]) -> int:
+        """Join graph fragments that the free space itself connects.
+
+        Local attachment can fail at a doorway (a probe lands on a jamb, an edge grazes the
+        inset boundary) and leave a room or door isolated although a walkable path exists.
+        A geodesic search over the rasterized free space, which already excludes walls,
+        finds that path; it is added through the same wall-safe polyline as other edges.
+        Fragments that the free space does not connect stay isolated and keep their
+        validation warning: no route is invented through an undetected opening.
+        """
+        components = self._components()
+        if len(components) <= 1:
+            return 0
+        from skimage.graph import MCP_Geometric
+
+        free = rasterize(allowed, self.shape)
+        if not self.barrier.is_empty:
+            free &= ~rasterize([self.barrier], self.shape)
+        costs = np.where(free, 1.0, np.inf)
+        snap = max(1, int(round(self.scale.px(SNAP_M))))
+        limit = self.scale.px(BRIDGE_MAX_M)
+
+        main = max(components, key=lambda c: (self._semantic(c), len(c)))
+        others = [c for c in components if c is not main]
+        starts: dict[tuple[int, int], str] = {}
+        for node_id in main:
+            pixel = self._free_pixel(free, self.nodes[node_id], snap)
+            if pixel is not None:
+                starts.setdefault(pixel, node_id)
+        if not starts:
+            return 0
+        mcp = MCP_Geometric(costs, fully_connected=True)
+        cumulative, _ = mcp.find_costs(list(starts))
+
+        bridged = 0
+        for component in others:
+            if self._semantic(component) == 0:
+                continue
+            best = None
+            for node_id in component:
+                pixel = self._free_pixel(free, self.nodes[node_id], snap)
+                if pixel is None or not np.isfinite(cumulative[pixel]) or cumulative[pixel] > limit:
+                    continue
+                if best is None or cumulative[pixel] < best[0]:
+                    best = (cumulative[pixel], node_id, pixel)
+            if best is None:
+                continue
+            _, node_id, pixel = best
+            route = mcp.traceback(pixel)  # from the reached start pixel to this fragment
+            target = starts.get(tuple(route[0]))
+            if target is None:
+                continue
+            node, end = self.nodes[node_id], self.nodes[target]
+            points = [(node.x, node.y)] + [(float(c), float(r)) for r, c in reversed(route)] + [(end.x, end.y)]
+            chain = self._wall_safe(points)
+            # Only commit a bridge whose every segment satisfies the validator's invariants.
+            if not all(self._visible(u, v) for u, v in zip(chain, chain[1:])):
+                continue
+            previous = node_id
+            for bend in chain[1:-1]:
+                bend_id = self._add_node(bend[0], bend[1], "waypoint")
+                self._add_edge(previous, bend_id, "corridor")
+                previous = bend_id
+            self._add_edge(previous, target, "corridor")
+            bridged += 1
+        # Fragments without any wayfinding meaning (stray skeleton pieces) are noise.
+        for component in self._components():
+            if self._semantic(component) == 0:
+                for node_id in component:
+                    for key in [k for k in self.edges if node_id in k]:
+                        del self.edges[key]
+                    del self.nodes[node_id]
+        return bridged
+
+    @staticmethod
+    def _free_pixel(free: np.ndarray, node: GraphNode, radius: int) -> tuple[int, int] | None:
+        x, y = int(round(node.x)), int(round(node.y))
+        height, width = free.shape
+        if 0 <= y < height and 0 <= x < width and free[y, x]:
+            return (y, x)
+        y0, y1 = max(0, y - radius), min(height, y + radius + 1)
+        x0, x1 = max(0, x - radius), min(width, x + radius + 1)
+        window = np.argwhere(free[y0:y1, x0:x1])
+        if len(window) == 0:
+            return None
+        distances = np.hypot(window[:, 0] + y0 - y, window[:, 1] + x0 - x)
+        r, c = window[int(np.argmin(distances))]
+        return (int(r + y0), int(c + x0))
 
     def _drop_crossing_edges(self) -> int:
         """Safety net: the invariant is enforced at construction, but never trust it blindly."""
@@ -106,13 +217,14 @@ class GraphBuilder:
             kind = "decision" if graph.degree(node) >= 3 else "waypoint"
             self.skeleton_node_ids[node] = self._add_node(data["x"], data["y"], kind)
         for a, b, data in graph.edges(data=True):
-            path = data["path"]
-            path = path if self._near(path[0], graph.nodes[a]) else path[::-1]
+            path = self._orient(data["path"], graph.nodes[a])
             self._add_polyline(self.skeleton_node_ids[a], self.skeleton_node_ids[b], [(graph.nodes[a]["x"], graph.nodes[a]["y"])] + list(path) + [(graph.nodes[b]["x"], graph.nodes[b]["y"])], "corridor")
 
     @staticmethod
-    def _near(pixel, attrs) -> bool:
-        return abs(pixel[0] - attrs["x"]) <= 2 and abs(pixel[1] - attrs["y"]) <= 2
+    def _orient(path, start):
+        def distance(point):
+            return (point[0] - start["x"]) ** 2 + (point[1] - start["y"]) ** 2
+        return path if distance(path[0]) <= distance(path[-1]) else path[::-1]
 
     def _nearest_skeleton_node(self, graph: nx.Graph, point, radius: float) -> int | None:
         best, best_d = None, radius
@@ -128,7 +240,7 @@ class GraphBuilder:
         door_id = self._add_node(opening.center[0], opening.center[1], kind, opening_id=opening.id)
         depth = max(2.0, opening.polygon.area / max(opening.width_px, 1.0))
         for sign, space_id in zip((1, -1), opening.space_ids):
-            if space_id is None or space_id not in spaces:
+            if space_id is None or space_id not in spaces or space_id not in walkable:
                 continue
             space = spaces[space_id]
             inside = (
@@ -142,10 +254,24 @@ class GraphBuilder:
                 )
                 if space.polygon.buffer(1.0).contains(Point(other)):
                     inside = other
+            # The temporary opening seal and metric body inset can put this probe
+            # outside the usable polygon. Follow the doorway normal to the actual
+            # inset boundary before turning towards the room anchor or skeleton.
+            direction = np.asarray(inside) - np.asarray(opening.center)
+            direction /= max(np.linalg.norm(direction), 1.0)
+            ray = LineString([opening.center, np.asarray(opening.center) + direction * self.scale.px(3.0)])
+            entry = walkable[space_id].intersection(ray)
+            if not entry.is_empty:
+                _, closest = nearest_points(Point(opening.center), entry)
+                candidate = np.asarray(closest.coords[0]) + direction
+                if walkable[space_id].covers(Point(candidate)):
+                    inside = tuple(candidate)
+                else:
+                    inside = tuple(closest.coords[0])
             if space.kind == "circulation":
                 self._connect_to_skeleton(door_id, inside, space)
             elif space.kind in ("room", "vertical"):
-                self._connect_to_room(door_id, inside, space, walkable.get(space.id, space.polygon))
+                self._connect_to_room(door_id, inside, space, walkable[space.id])
 
     def _connect_to_skeleton(self, door_id: str, inside, space: Space) -> None:
         graph = self.skeleton
@@ -160,9 +286,13 @@ class GraphBuilder:
             p = (data["x"], data["y"])
             candidates.append((np.hypot(p[0] - inside[0], p[1] - inside[1]), self.skeleton_node_ids[node], p, None))
         for a, b, data in graph.edges(data=True):
-            path = data["path"]
+            # Undirected edge iteration may reverse endpoint order after a split.
+            # Sample and split indices must use the same path orientation.
+            path = self._orient(data["path"], graph.nodes[a])
             step = max(1, len(path) // 40)
-            for index in range(0, len(path), step):
+            pixels = np.asarray(path)
+            nearest = int(np.argmin(np.hypot(pixels[:, 0] - inside[0], pixels[:, 1] - inside[1])))
+            for index in sorted(set(range(0, len(path), step)) | {nearest}):
                 p = path[index]
                 candidates.append((np.hypot(p[0] - inside[0], p[1] - inside[1]), None, (float(p[0]), float(p[1])), (a, b, index)))
         candidates.sort(key=lambda item: item[0])
@@ -195,10 +325,13 @@ class GraphBuilder:
         if graph is None or not graph.has_edge(a, b):
             return None
         data = graph[a][b]
-        path = data["path"]
+        path = self._orient(data["path"], graph.nodes[a])
         for end in (a, b):
             attrs = graph.nodes[end]
-            if np.hypot(attrs["x"] - point[0], attrs["y"] - point[1]) < merge:
+            # Visibility was checked to `point`, not to a nearby endpoint. Moving
+            # that attachment by MERGE_M can turn a normal doorway crossing into
+            # a diagonal through its jamb or outside its narrow usable strip.
+            if np.hypot(attrs["x"] - point[0], attrs["y"] - point[1]) <= 0.75:
                 return self.skeleton_node_ids[end]
         new = max(graph.nodes) + 1
         graph.add_node(new, x=float(point[0]), y=float(point[1]))
@@ -236,9 +369,10 @@ class GraphBuilder:
         try:
             from shapely.ops import polylabel
 
-            return polylabel(walk if walk.geom_type == "Polygon" else space.polygon, tolerance=1.0)
+            part = walk if walk.geom_type == "Polygon" else max(walk.geoms, key=lambda p: p.area)
+            return polylabel(part, tolerance=1.0)
         except Exception:
-            return space.polygon.representative_point()
+            return walk.representative_point()
 
     def _route_inside(self, from_id: str, to_id: str, walk: Polygon) -> None:
         """Connect two nodes inside one space through its own skeleton (non-convex rooms)."""
@@ -257,8 +391,7 @@ class GraphBuilder:
             return
         points = [(a.x, a.y)]
         for u, v in zip(route, route[1:]):
-            path = graph[u][v]["path"]
-            path = path if self._near(path[0], graph.nodes[u]) else path[::-1]
+            path = self._orient(graph[u][v]["path"], graph.nodes[u])
             points.extend(path)
         points.append((b.x, b.y))
         self._add_polyline(from_id, to_id, points, "corridor")
@@ -340,10 +473,8 @@ class GraphBuilder:
         return out
 
     def _visible(self, a, b) -> bool:
-        if self.barrier.is_empty:
-            return True
         line = LineString([a, b])
-        return not self.prepared.intersects(line)
+        return (self.allowed is None or self.allowed.covers(line)) and (self.barrier.is_empty or not self.prepared.intersects(line))
 
     # ---- final simplification --------------------------------------------------------------
     def _simplify(self) -> None:
@@ -360,6 +491,8 @@ class GraphBuilder:
                 if node.kind != "waypoint" or len(adjacency.get(node.id, [])) != 2:
                     continue
                 a, b = adjacency[node.id]
+                if frozenset((a, b)) in self.edges:
+                    continue  # contracting this triangle would erase an alternative route
                 na, nb = self.nodes[a], self.nodes[b]
                 va = np.array([na.x - node.x, na.y - node.y])
                 vb = np.array([nb.x - node.x, nb.y - node.y])

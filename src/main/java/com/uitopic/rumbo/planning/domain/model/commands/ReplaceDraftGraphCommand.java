@@ -4,6 +4,8 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapWall;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapDoor;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -12,7 +14,13 @@ import java.util.UUID;
 public record ReplaceDraftGraphCommand(UUID siteId, UUID mapId, UUID modelVersionId,
                                        long expectedRevision,
                                        List<NodeInput> nodes, List<ConnectionInput> connections,
-                                       List<DestinationInput> destinations) {
+                                       List<DestinationInput> destinations,
+                                       List<MapWall> walls, List<MapDoor> doors) {
+  public ReplaceDraftGraphCommand(UUID siteId, UUID mapId, UUID modelVersionId,
+                                  long expectedRevision, List<NodeInput> nodes,
+                                  List<ConnectionInput> connections, List<DestinationInput> destinations) {
+    this(siteId, mapId, modelVersionId, expectedRevision, nodes, connections, destinations, List.of(), List.of());
+  }
   public ReplaceDraftGraphCommand {
     Objects.requireNonNull(siteId, "siteId is required");
     Objects.requireNonNull(mapId, "mapId is required");
@@ -23,6 +31,8 @@ public record ReplaceDraftGraphCommand(UUID siteId, UUID mapId, UUID modelVersio
     nodes = List.copyOf(nodes);
     connections = List.copyOf(connections);
     destinations = List.copyOf(destinations);
+    if (walls != null) walls = List.copyOf(walls);
+    if (doors != null) doors = List.copyOf(doors);
   }
 
   /** Node location in the stored floor-plan coordinate system. */

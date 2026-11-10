@@ -17,6 +17,8 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphIssue;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphIssueCode;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapVersionStatus;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapWall;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapDoor;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.SpatialCoordinate;
@@ -127,6 +129,10 @@ public class IndoorMapRepositoryImpl implements IndoorMapRepository {
     }
 
     UUID versionId = map.modelVersionId();
+    entityManager.createNativeQuery("DELETE FROM map_doors WHERE model_version_id = :versionId")
+        .setParameter("versionId", versionId).executeUpdate();
+    entityManager.createNativeQuery("DELETE FROM map_walls WHERE model_version_id = :versionId")
+        .setParameter("versionId", versionId).executeUpdate();
     entityManager.createQuery("delete from MapDestinationJpaEntity d where d.id.modelVersionId = :versionId")
         .setParameter("versionId", versionId).executeUpdate();
     entityManager.createQuery("delete from MapConnectionJpaEntity c where c.id.modelVersionId = :versionId")
@@ -145,6 +151,20 @@ public class IndoorMapRepositoryImpl implements IndoorMapRepository {
       entityManager.persist(new PlanCoordinateSpaceJpaEntity(
           new VersionedElementId(space.planVersionId(), versionId), space.floorId(),
           space.widthUnits(), space.heightUnits(), scale == null ? null : scale.metersPerUnit()));
+    }
+    entityManager.flush();
+    for (MapWall wall : map.walls()) {
+      entityManager.createNativeQuery("INSERT INTO map_walls (id, model_version_id, floor_id, plan_version_id, x1, y1, x2, y2) VALUES (:id, :versionId, :floorId, :planId, :x1, :y1, :x2, :y2)")
+          .setParameter("id", wall.id()).setParameter("versionId", versionId)
+          .setParameter("floorId", wall.floorId()).setParameter("planId", wall.planVersionId())
+          .setParameter("x1", wall.x1()).setParameter("y1", wall.y1())
+          .setParameter("x2", wall.x2()).setParameter("y2", wall.y2()).executeUpdate();
+    }
+    for (MapDoor door : map.doors()) {
+      entityManager.createNativeQuery("INSERT INTO map_doors (id, model_version_id, wall_id, from_fraction, to_fraction) VALUES (:id, :versionId, :wallId, :fromFraction, :toFraction)")
+          .setParameter("id", door.id()).setParameter("versionId", versionId)
+          .setParameter("wallId", door.wallId()).setParameter("fromFraction", door.from())
+          .setParameter("toFraction", door.to()).executeUpdate();
     }
     entityManager.flush();
     for (MapNode node : map.nodes()) {
@@ -265,6 +285,19 @@ public class IndoorMapRepositoryImpl implements IndoorMapRepository {
               row.id().elementId(), "Stored plan scale is invalid");
         }
       }
+    }
+    for (Object raw : entityManager.createNativeQuery("SELECT id, floor_id, plan_version_id, x1, y1, x2, y2 FROM map_walls WHERE model_version_id = :versionId ORDER BY id")
+        .setParameter("versionId", modelVersionId).getResultList()) {
+      Object[] row = (Object[]) raw;
+      map.addWall(new MapWall((UUID) row[0], (UUID) row[1], (UUID) row[2],
+          ((Number) row[3]).doubleValue(), ((Number) row[4]).doubleValue(),
+          ((Number) row[5]).doubleValue(), ((Number) row[6]).doubleValue()));
+    }
+    for (Object raw : entityManager.createNativeQuery("SELECT id, wall_id, from_fraction, to_fraction FROM map_doors WHERE model_version_id = :versionId ORDER BY id")
+        .setParameter("versionId", modelVersionId).getResultList()) {
+      Object[] row = (Object[]) raw;
+      map.addDoor(new MapDoor((UUID) row[0], (UUID) row[1],
+          ((Number) row[2]).doubleValue(), ((Number) row[3]).doubleValue()));
     }
     var nodeRows = entityManager.createQuery("select n from MapNodeJpaEntity n "
         + "where n.id.modelVersionId = :versionId order by n.id.elementId", MapNodeJpaEntity.class)

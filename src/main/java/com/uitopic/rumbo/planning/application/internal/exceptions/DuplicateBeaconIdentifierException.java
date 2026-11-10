@@ -1,6 +1,6 @@
 package com.uitopic.rumbo.planning.application.internal.exceptions;
 
-/** A beacon identifier is already registered within this site. */
+/** A beacon identifier or physical iBeacon identity is already registered. */
 public class DuplicateBeaconIdentifierException extends RuntimeException {
-  public DuplicateBeaconIdentifierException() { super("The beacon identifier is already registered in this site"); }
+  public DuplicateBeaconIdentifierException() { super("The beacon identity is already registered"); }
 }

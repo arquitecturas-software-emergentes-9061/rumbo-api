@@ -1,5 +1,6 @@
 package com.uitopic.rumbo.planning.infrastructure.svg;
 
+import com.uitopic.rumbo.planning.domain.services.CandidateRouteGeometry;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -85,6 +86,24 @@ public final class SvgRoomTopologyProposalService {
       }
     }
 
+    var walls = interpretation.wallCandidates().stream().map(line -> new CandidateRouteGeometry.Segment(
+      new CandidateRouteGeometry.Point(line.x1(), line.y1()),
+      new CandidateRouteGeometry.Point(line.x2(), line.y2()))).toList();
+    var openings = new ArrayList<CandidateRouteGeometry.Segment>();
+    for (Door door : doors) {
+      var opening = new CandidateRouteGeometry.Segment(
+        new CandidateRouteGeometry.Point(door.x1(), door.y1()),
+        new CandidateRouteGeometry.Point(door.x2(), door.y2()));
+      if (walls.isEmpty() || CandidateRouteGeometry.openingFitsWall(opening, walls)) openings.add(opening);
+      else warnings.add("Puerta " + door.id() + " sin un muro compatible: se conserva para revisión, sin proponer rutas por ella");
+    }
+    var traversable = zones.stream().map(zone -> new CandidateRouteGeometry.Polygon(List.of(
+      new CandidateRouteGeometry.Point(zone.x(), zone.y()),
+      new CandidateRouteGeometry.Point(zone.x() + zone.width(), zone.y()),
+      new CandidateRouteGeometry.Point(zone.x() + zone.width(), zone.y() + zone.height()),
+      new CandidateRouteGeometry.Point(zone.x(), zone.y() + zone.height())), List.of())).toList();
+    var geometry = new CandidateRouteGeometry(walls, openings, List.of(), traversable, false);
+
     var nodes = new ArrayList<CandidateNode>();
     var links = new ArrayList<CandidateLink>();
     for (Zone zone : zones) {
@@ -107,6 +126,13 @@ public final class SvgRoomTopologyProposalService {
           zone.y() + zone.height() / 2 - y);
         if (distance <= EPS) {
           warnings.add("Zona " + zone.id() + " con centro coincidente con acceso");
+          continue;
+        }
+        var route = geometry.review(new CandidateRouteGeometry.Point(zone.x() + zone.width() / 2,
+          zone.y() + zone.height() / 2), new CandidateRouteGeometry.Point(x, y), "DOORWAY");
+        if (!route.accepted()) {
+          warnings.add("Puerta " + door.id() + " y ambiente " + zone.name() + ": " + route.warning()
+            + "; corrige la geometría antes de crear una ruta");
           continue;
         }
         links.add(new CandidateLink("link-" + links.size(), zone.id(),

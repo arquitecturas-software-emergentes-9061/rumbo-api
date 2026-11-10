@@ -40,6 +40,37 @@ class SvgRoomTopologyProposalServiceTest {
     assertTrue(proposal.warnings().stream().anyMatch(s -> s.contains("No hay conexiones")));
   }
 
+  @Test void keepsWallsAndDoorsButOmitsRoutesThatCrossAnUnopenedWall() {
+    var proposal = service.propose("""
+      <svg viewBox="0 0 20 10">
+        <rect data-rumbo-role="room" x="0" y="0" width="10" height="10"/>
+        <rect data-rumbo-role="corridor" x="10" y="0" width="10" height="10"/>
+        <line x1="7" y1="0" x2="7" y2="10"/>
+        <line x1="10" y1="0" x2="10" y2="10"/>
+        <line data-rumbo-role="door" x1="10" y1="4" x2="10" y2="6"/>
+      </svg>
+      """);
+    assertEquals(2, proposal.wallCandidates().size());
+    assertEquals(1, proposal.doors().size());
+    assertEquals(1, proposal.connections().size());
+    assertTrue(proposal.warnings().stream().anyMatch(text -> text.contains("fuera de una puerta")));
+  }
+
+  @Test void keepsAnUnmatchedDoorForReviewWithoutInventingRoutes() {
+    var proposal = service.propose("""
+      <svg viewBox="0 0 20 10">
+        <rect data-rumbo-role="room" x="0" y="0" width="10" height="10"/>
+        <rect data-rumbo-role="corridor" x="10" y="0" width="10" height="10"/>
+        <line x1="3" y1="0" x2="3" y2="10"/>
+        <line data-rumbo-role="door" x1="10" y1="4" x2="10" y2="6"/>
+      </svg>
+      """);
+    assertEquals(1, proposal.wallCandidates().size());
+    assertEquals(1, proposal.doors().size());
+    assertTrue(proposal.connections().isEmpty());
+    assertTrue(proposal.warnings().stream().anyMatch(text -> text.contains("sin un muro compatible")));
+  }
+
   @Test void rejectsAmbiguousDoorTouchingThreeZones() {
     var proposal = service.propose("""
       <svg viewBox="0 0 20 10">

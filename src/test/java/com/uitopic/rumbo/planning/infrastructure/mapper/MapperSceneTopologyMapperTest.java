@@ -3,6 +3,7 @@ package com.uitopic.rumbo.planning.infrastructure.mapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.CandidateNode;
+import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.CandidateLink;
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Door;
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Topology;
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Zone;
@@ -144,6 +145,56 @@ class MapperSceneTopologyMapperTest {
       .anyMatch(text -> text.startsWith("No se detectó ninguna entrada"))
       .anyMatch(text -> text.startsWith("3 nodos no se alcanzan"))
       .contains("Texto propio").doesNotContain("noise");
+  }
+
+  @Test
+  void recognizedOpeningTurnsACrossingIntoDoorwayAndLowConfidenceLeavesItForReview() throws IOException {
+    String scene = """
+      {"image_size":{"width":100,"height":100},
+       "spaces":[],"walls":[{"outer":[[50,0],[50,100]]}],
+       "walkable":[{"polygon":{"outer":[[0,0],[100,0],[100,100],[0,100]],"holes":[]}}],
+       "openings":[{"id":"door","axis":[[50,45],[50,55]],"confidence":%s}],
+       "graph":{"nodes":[{"id":"a","x":20,"y":50},{"id":"b","x":80,"y":50}],
+         "edges":[{"from":"a","to":"b","kind":"corridor","length_px":60}]},
+       "validation":{"status":"ok","issues":[]}}
+      """;
+    Topology certain = MapperSceneTopologyMapper.toTopology(synthetic(scene.formatted("0.9")),
+      new OriginalPlanBounds(100, 100), true);
+    assertThat(certain.doors()).hasSize(1);
+    assertThat(certain.wallCandidates()).hasSize(2);
+    assertThat(certain.connections()).extracting(CandidateLink::kind).containsExactly("DOORWAY");
+
+    Topology uncertain = MapperSceneTopologyMapper.toTopology(synthetic(scene.formatted("0.3")),
+      new OriginalPlanBounds(100, 100), true);
+    assertThat(uncertain.doors()).hasSize(1);
+    assertThat(uncertain.wallCandidates()).hasSize(2);
+    assertThat(uncertain.connections()).isEmpty();
+    assertThat(uncertain.warnings()).anyMatch(text -> text.contains("detección incierta"))
+      .anyMatch(text -> text.contains("fuera de una puerta"));
+  }
+
+  @Test
+  void uncertainTraversableSpaceKeepsNodesButDoesNotInventAnEdge() throws IOException {
+    Topology topology = MapperSceneTopologyMapper.toTopology(synthetic("""
+      {"image_size":{"width":100,"height":100},"spaces":[],"walls":[],"openings":[],"walkable":[],
+       "graph":{"nodes":[{"id":"a","x":20,"y":50},{"id":"b","x":80,"y":50}],
+         "edges":[{"from":"a","to":"b","kind":"corridor","length_px":60}]},
+       "validation":{"status":"warnings","issues":[]}}
+      """), new OriginalPlanBounds(100, 100), true);
+    assertThat(topology.nodes()).hasSize(2);
+    assertThat(topology.connections()).isEmpty();
+    assertThat(topology.warnings()).anyMatch(text -> text.contains("espacio transitable"));
+  }
+
+  @Test
+  void anUnusableDoorCandidateIsReportedInsteadOfSilentlyDiscarded() throws IOException {
+    Topology topology = MapperSceneTopologyMapper.toTopology(synthetic("""
+      {"image_size":{"width":100,"height":100},"spaces":[],"walls":[],
+       "openings":[{"id":"unclear","axis":[[25,25],[25,25]],"confidence":0.9}],
+       "graph":{"nodes":[],"edges":[]},"validation":{"status":"warnings","issues":[]}}
+      """), new OriginalPlanBounds(100, 100), true);
+    assertThat(topology.doors()).isEmpty();
+    assertThat(topology.warnings()).anyMatch(text -> text.contains("puerta detectada no tiene una geometría interpretable"));
   }
 
   @Test

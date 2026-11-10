@@ -309,8 +309,11 @@ public final class IndoorMap extends AbstractDomainAggregateRoot<UUID> {
 
   private void validateWallCrossings(MapConnection connection, MapNode source, MapNode target) {
     if (!source.position().planVersionId().equals(target.position().planVersionId())) return;
+    boolean hasWall = false;
+    boolean linkedDoor = false;
     for (MapWall wall : walls.values()) {
       if (!wall.planVersionId().equals(source.position().planVersionId())) continue;
+      hasWall = true;
       double ax = source.position().x(), ay = source.position().y();
       double bx = target.position().x(), by = target.position().y();
       double dx = bx - ax, dy = by - ay;
@@ -320,14 +323,19 @@ public final class IndoorMap extends AbstractDomainAggregateRoot<UUID> {
       double rx = wall.x1() - ax, ry = wall.y1() - ay;
       double alongConnection = (rx * wy - ry * wx) / determinant;
       double alongWall = (rx * dy - ry * dx) / determinant;
-      if (alongConnection <= 1e-6 || alongConnection >= 1 - 1e-6
-          || alongWall <= 1e-6 || alongWall >= 1 - 1e-6) continue;
       boolean throughDoor = doors.values().stream().anyMatch(door -> door.wallId().equals(wall.id())
           && alongWall >= door.from() - 1e-6 && alongWall <= door.to() + 1e-6);
+      if (throughDoor && alongConnection >= -1e-6 && alongConnection <= 1 + 1e-6) linkedDoor = true;
+      if (alongConnection <= 1e-6 || alongConnection >= 1 - 1e-6
+          || alongWall <= 1e-6 || alongWall >= 1 - 1e-6) continue;
       if (!throughDoor || connection.type() != ConnectionType.DOORWAY) {
         reject(GraphIssueCode.CONNECTION_CROSSES_WALL, GraphElementType.CONNECTION,
             connection.id(), "Connection crosses a wall without a DOORWAY opening");
       }
+    }
+    if (connection.type() == ConnectionType.DOORWAY && hasWall && !linkedDoor) {
+      reject(GraphIssueCode.DOORWAY_WITHOUT_OPENING, GraphElementType.CONNECTION,
+          connection.id(), "DOORWAY does not meet an opening associated with a wall");
     }
   }
 

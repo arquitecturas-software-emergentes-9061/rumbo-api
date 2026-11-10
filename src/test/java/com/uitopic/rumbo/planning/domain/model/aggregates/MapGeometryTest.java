@@ -37,4 +37,18 @@ class MapGeometryTest {
     assertThrows(InvalidMapGraphException.class, () -> map.addDoor(
         new MapDoor(UUID.randomUUID(), UUID.randomUUID(), .2, .4)));
   }
+
+  @Test
+  void rejectsDoorwayThatDoesNotMeetAnOpening() {
+    UUID floor = UUID.randomUUID(), plan = UUID.randomUUID();
+    IndoorMap map = new IndoorMap(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+    map.addPlan(new PlanCoordinateSpace(floor, plan, 100, 100));
+    UUID wall = UUID.randomUUID(), left = UUID.randomUUID(), right = UUID.randomUUID();
+    map.addWall(new MapWall(wall, floor, plan, 50, 0, 50, 100));
+    map.addDoor(new MapDoor(UUID.randomUUID(), wall, .1, .2));
+    map.addNode(left, floor, plan, 20, 50, NodeType.INTERSECTION);
+    map.addNode(right, floor, plan, 80, 50, NodeType.INTERSECTION);
+    assertThrows(InvalidMapGraphException.class, () -> map.addConnection(UUID.randomUUID(), left, right,
+        ConnectionType.DOORWAY, 60, 60, true));
+  }
 }

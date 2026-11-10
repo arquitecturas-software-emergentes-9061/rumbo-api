@@ -55,7 +55,9 @@ cruzar muros ni salir del área transitable); lo que el espacio libre no comunic
 Es una aproximación geométrica;
 no acredita accesibilidad de una silla de ruedas ni condiciones físicas ausentes en el dibujo.
 
-La respuesta conserva los polígonos con huecos y el eje real de cada apertura (`openings[].axis`). La API los
+La respuesta conserva los polígonos con huecos y el eje real de cada apertura (`openings[].axis`). Las aperturas
+detectadas que no pueden asociarse con certeza a dos espacios también llegan en `openings`, con
+`review_required: true` y `review_reason`; no autorizan aristas del grafo hasta que se revisen. La API los
 proyecta a las unidades del original, junto con las ventanas, obstáculos y área transitable. La calibración puede
 enviarse como `meters_per_unit` y `original_width_units`; se convierte después de decodificar, también para SVG.
 `pixels_per_meter` sigue disponible para clientes anteriores. Los tiempos `t_*` son por etapa; `t_total` de

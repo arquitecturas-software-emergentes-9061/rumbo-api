@@ -198,6 +198,42 @@ class MapperSceneTopologyMapperTest {
   }
 
   @Test
+  void aDetectedButUnassignedDoorStaysVisibleWithoutAuthorizingADoorway() throws IOException {
+    Topology topology = MapperSceneTopologyMapper.toTopology(synthetic("""
+      {"image_size":{"width":100,"height":100},"spaces":[],
+       "walls":[{"outer":[[50,0],[50,100]]}],
+       "walkable":[{"polygon":{"outer":[[0,0],[100,0],[100,100],[0,100]],"holes":[]}}],
+       "openings":[{"id":"uncertain","axis":[[50,45],[50,55]],"confidence":0.95,
+         "review_required":true,"review_reason":"no se identificaron ambos lados de la abertura"}],
+       "graph":{"nodes":[{"id":"a","x":20,"y":50},{"id":"b","x":80,"y":50}],
+         "edges":[{"from":"a","to":"b","kind":"doorway","length_px":60}]},
+       "validation":{"status":"warnings","issues":[]}}
+      """), new OriginalPlanBounds(100, 100), true);
+    assertThat(topology.doors()).hasSize(1);
+    assertThat(topology.connections()).isEmpty();
+    assertThat(topology.warnings()).anyMatch(text -> text.contains("no se identificaron ambos lados"));
+  }
+
+  @Test
+  void aConfirmedDoorInAWallGapSupportsDoorwayConnections() throws IOException {
+    Topology topology = MapperSceneTopologyMapper.toTopology(synthetic("""
+      {"image_size":{"width":100,"height":100},
+       "spaces":[
+         {"id":"left","kind":"room","polygon":{"outer":[[0,0],[50,0],[50,100],[0,100]]}},
+         {"id":"right","kind":"room","polygon":{"outer":[[50,0],[100,0],[100,100],[50,100]]}}],
+       "walls":[{"outer":[[50,0],[50,45]]},{"outer":[[50,55],[50,100]]}],
+       "walkable":[{"polygon":{"outer":[[0,0],[100,0],[100,100],[0,100]],"holes":[]}}],
+       "openings":[{"id":"door","kind":"door","axis":[[50,45],[50,55]],"confidence":0.9,
+         "spaces":["left","right"]}],
+       "graph":{"nodes":[{"id":"a","x":20,"y":50},{"id":"b","x":80,"y":50}],
+         "edges":[{"from":"a","to":"b","kind":"corridor","length_px":60}]},
+       "validation":{"status":"ok","issues":[]}}
+      """), new OriginalPlanBounds(100, 100), true);
+    assertThat(topology.doors()).hasSize(1);
+    assertThat(topology.connections()).extracting(CandidateLink::kind).containsExactly("DOORWAY");
+  }
+
+  @Test
   void aSceneWithoutImageSizeIsRejected() {
     assertThatThrownBy(() -> MapperSceneTopologyMapper.toTopology(synthetic("{\"spaces\":[]}"),
       new OriginalPlanBounds(10, 10), true)).isInstanceOf(IllegalArgumentException.class);

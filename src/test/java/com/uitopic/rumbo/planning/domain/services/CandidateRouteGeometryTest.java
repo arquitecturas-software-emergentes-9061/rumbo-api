@@ -47,4 +47,16 @@ class CandidateRouteGeometryTest {
       List.of(square(0, 0, 100, 100)), false);
     assertFalse(geometry.review(p(30, 50), p(70, 50), "CORRIDOR").accepted());
   }
+
+  @Test void aRecognizedGapBetweenWallEndsCanHostAnOpening() {
+    var walls = List.of(line(50, 0, 50, 45), line(50, 55, 50, 100));
+    var opening = line(50, 45, 50, 55);
+    assertFalse(CandidateRouteGeometry.openingFitsWall(opening, walls));
+    assertTrue(CandidateRouteGeometry.openingFitsWallGap(opening, walls));
+    assertFalse(CandidateRouteGeometry.openingFitsWallGap(line(60, 45, 60, 55), walls));
+    assertFalse(CandidateRouteGeometry.openingFitsWallGap(line(40, 50, 60, 50),
+      List.of(line(40, 0, 40, 100), line(60, 0, 60, 100))));
+    assertFalse(CandidateRouteGeometry.openingFitsWallGap(line(50, 45, 50, 55),
+      List.of(line(50, 0, 50, 100))));
+  }
 }

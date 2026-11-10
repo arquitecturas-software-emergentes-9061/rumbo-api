@@ -9,6 +9,7 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.FloorPlanFile.Format
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ScaleReference;
 import com.uitopic.rumbo.planning.domain.repositories.ScaleReferenceRepository;
 import java.util.UUID;
+import java.util.ArrayList;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -49,15 +50,36 @@ public class OriginalPlanInterpretationQueryService {
         unsupportedSvg = failure;
       }
     }
-    // An SVG with annotated zones is read exactly. Everything else, such as PDF, PNG, JPEG or an SVG without
-    // annotations, goes to the structural mapper; if it is off or fails, the plan stays a preview.
-    if (proposal == null || proposal.zones().isEmpty()) {
+    // Explicit SVG rooms stay authoritative. If the SVG has no annotated doors, structural interpretation may
+    // supplement door candidates without replacing those rooms. Other formats use the structural proposal.
+    if (format == Format.SVG && proposal != null && !proposal.zones().isEmpty() && proposal.doors().isEmpty()) {
       var inferred = structural.propose(original.bytes(), format, bounds, scale);
-      if (inferred.isPresent() && !inferred.get().zones().isEmpty()) proposal = inferred.get();
+      if (inferred.isPresent() && !inferred.get().doors().isEmpty()) {
+        var warnings = new ArrayList<>(proposal.warnings());
+        warnings.add("Se detectaron puertas adicionales en el dibujo; revisa su posición y asociación con los muros");
+        inferred.get().warnings().stream().filter(warning -> warning.startsWith("Puerta ")).forEach(warnings::add);
+        var walls = proposal.wallCandidates().isEmpty() ? inferred.get().wallCandidates() : proposal.wallCandidates();
+        proposal = new SvgPlanPreview.Topology(proposal.zones(), inferred.get().doors(), proposal.nodes(),
+          proposal.connections(), walls, warnings, proposal.barriers(), proposal.walkable());
+      }
+    } else if (proposal == null || proposal.zones().isEmpty()) {
+      var inferred = structural.propose(original.bytes(), format, bounds, scale);
+      if (inferred.isPresent() && hasReviewableGeometry(inferred.get())) {
+        var candidate = inferred.get();
+        if (proposal != null && candidate.wallCandidates().isEmpty() && !proposal.wallCandidates().isEmpty())
+          candidate = new SvgPlanPreview.Topology(candidate.zones(), candidate.doors(), candidate.nodes(),
+            candidate.connections(), proposal.wallCandidates(), candidate.warnings(), candidate.barriers(), candidate.walkable());
+        proposal = candidate;
+      }
     }
     if (proposal == null && unsupportedSvg != null) throw unsupportedSvg;
     return new Result(version, floor, format.mediaType(),
       proposal == null ? Processing.PREVIEW_ONLY : Processing.SVG_CANDIDATES,
       scale == null ? ScaleStatus.PROVISIONAL : ScaleStatus.CONFIRMED, scale, proposal);
+  }
+
+  private static boolean hasReviewableGeometry(SvgPlanPreview.Topology proposal) {
+    return !proposal.zones().isEmpty() || !proposal.doors().isEmpty()
+      || !proposal.wallCandidates().isEmpty() || !proposal.barriers().isEmpty();
   }
 }

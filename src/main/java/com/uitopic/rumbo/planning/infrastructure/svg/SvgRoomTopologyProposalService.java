@@ -140,6 +140,8 @@ public final class SvgRoomTopologyProposalService {
       }
     }
     if (zones.isEmpty()) warnings.add("No hay zonas semánticas; un SVG sin anotaciones no permite deducir recintos con certeza");
+    if (!zones.isEmpty() && doors.isEmpty())
+      warnings.add("No hay puertas anotadas en el SVG; revisa las aberturas reconocidas en el dibujo o agrégalas manualmente");
     if (!zones.isEmpty() && links.isEmpty())
       warnings.add("No hay conexiones verificables entre zonas; no inventar rutas por proximidad");
     warnings.add("Propuesta no publicada: revisar paredes, anchos de puertas, accesibilidad, escala y topología");

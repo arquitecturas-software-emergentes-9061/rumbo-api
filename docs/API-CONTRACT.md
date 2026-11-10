@@ -121,6 +121,10 @@ confirmed traversable space is omitted from the candidate graph with a `warnings
 Low-confidence or unmatched doors and conflicting walls remain in `doors[]` and
 `wallCandidates[]` for administrator review. Missing or incomplete geometry does not authorize
 the interpreter to invent a navigable route.
+Door candidates detected by the structural mapper remain in `doors[]` even when their adjacent
+spaces cannot be identified; these receive a warning and do not authorize `DOORWAY` links. A
+proposal with reviewable doors or walls may have no recognized zones. An SVG with explicit rooms
+but no annotated doors can receive structural door candidates without replacing its explicit rooms.
 
 The result contains `CONFIRMED` with `metersPerUnit` only when that version and floor
 have a saved physical reference. `PROVISIONAL` keeps all dimensions in plan units.

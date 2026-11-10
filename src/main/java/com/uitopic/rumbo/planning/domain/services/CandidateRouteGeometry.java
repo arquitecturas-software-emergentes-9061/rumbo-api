@@ -54,6 +54,28 @@ public final class CandidateRouteGeometry {
     return false;
   }
 
+  /** A real doorway may be a gap between wall ends rather than an opening on one continuous wall segment. */
+  public static boolean openingFitsWallGap(Segment opening, List<Segment> walls) {
+    if (length(opening) <= EPS || walls.size() < 2) return false;
+    double tolerance = Math.max(.5, Math.min(length(opening) * .15, 2));
+    for (int first = 0; first < walls.size(); first++) {
+      if (!alignedWallEnd(opening.from(), opening, walls.get(first), tolerance)) continue;
+      for (int second = 0; second < walls.size(); second++) {
+        if (first != second && alignedWallEnd(opening.to(), opening, walls.get(second), tolerance)) return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean alignedWallEnd(Point end, Segment opening, Segment wall, double tolerance) {
+    double wallLength = length(wall);
+    if (wallLength <= EPS) return false;
+    double sine = Math.abs(cross(opening.from(), opening.to(), wall.to())
+      - cross(opening.from(), opening.to(), wall.from())) / (length(opening) * wallLength);
+    return sine <= .2 && (Math.hypot(end.x() - wall.from().x(), end.y() - wall.from().y()) <= tolerance
+      || Math.hypot(end.x() - wall.to().x(), end.y() - wall.to().y()) <= tolerance);
+  }
+
   public Decision review(Point from, Point to, String proposedKind) {
     Segment route = new Segment(from, to);
     if (length(route) <= EPS) return reject("la conexión no tiene longitud");

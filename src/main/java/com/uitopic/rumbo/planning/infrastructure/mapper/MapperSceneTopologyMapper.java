@@ -66,6 +66,8 @@ final class MapperSceneTopologyMapper {
       if (door != null) doors.add(door);
       else warnings.add("Una puerta detectada no tiene una geometría interpretable: revisa el plano antes de trazar rutas por ella");
     }
+    if (doors.isEmpty() && (!zones.isEmpty() || scene.path("walls").size() > 0))
+      warnings.add("No se detectaron puertas con geometría visible; revisa las aberturas del plano y agrégalas manualmente si corresponde");
 
     List<Segment> walls = new ArrayList<>();
     boolean truncated = false;
@@ -92,12 +94,19 @@ final class MapperSceneTopologyMapper {
     for (JsonNode opening : scene.path("openings")) {
       Door door = door(opening, k);
       if (door == null) continue;
+      if (opening.path("review_required").asBoolean(false)) {
+        String reason = opening.path("review_reason").asText("su asociación con los espacios es incierta");
+        warnings.add("Puerta " + door.id() + ": " + reason + "; se conserva para revisión sin proponer rutas por ella");
+        continue;
+      }
       if (opening.path("confidence").asDouble(0) < 0.7) {
         warnings.add("Puerta " + door.id() + " con detección incierta: se conserva para revisión, sin proponer rutas por ella");
         continue;
       }
       var openingSegment = segment(door.x1(), door.y1(), door.x2(), door.y2());
-      if (!CandidateRouteGeometry.openingFitsWall(openingSegment, routeWalls)) {
+      boolean confirmedGap = recognizedSides(opening, zoneBySpace)
+        && CandidateRouteGeometry.openingFitsWallGap(openingSegment, routeWalls);
+      if (!CandidateRouteGeometry.openingFitsWall(openingSegment, routeWalls) && !confirmedGap) {
         warnings.add("Puerta " + door.id() + " sin un muro compatible: se conserva para revisión, sin proponer rutas por ella");
         continue;
       }
@@ -192,6 +201,16 @@ final class MapperSceneTopologyMapper {
       case "vertical" -> "elevator".equals(space.path("connector_kind").asText()) ? "ELEVATOR" : "STAIRS";
       default -> null; // "void" and anything new are not part of the building
     };
+  }
+
+  private static boolean recognizedSides(JsonNode opening, Map<String, Zone> zones) {
+    JsonNode sides = opening.path("spaces");
+    if (!sides.isArray() || sides.size() != 2) return false;
+    String first = sides.get(0).isNull() ? null : sides.get(0).asText();
+    String second = sides.get(1).isNull() ? null : sides.get(1).asText();
+    if (first != null && !zones.containsKey(first) || second != null && !zones.containsKey(second)) return false;
+    if ("entrance".equals(opening.path("kind").asText())) return (first == null) != (second == null);
+    return first != null && second != null && !first.equals(second);
   }
 
   private static String nodeLabel(JsonNode node, String role) {

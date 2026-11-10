@@ -44,6 +44,7 @@ class SpaceInference:
         self.thin = thin
         self.semantic_geometry = semantic_geometry
         self.glass: list[WallElement] = []  # wide exterior gaps that are glazing, not entrances
+        self.opening_candidates: list[Opening] = []  # detected geometry that cannot authorize a route
 
     def run(self, walls: list[WallElement], openings: list[Opening], labels: list[TextLabel]) -> tuple[list[Space], list[Opening], dict]:
         blocked = rasterize([w.polygon for w in walls], self.shape)
@@ -189,18 +190,26 @@ class SpaceInference:
             sides = [self._side_space(opening, sign, label_image, exterior) for sign in (1, -1)]
             a, b = sides
             if a == b:
+                opening.review_reason = "no separa dos espacios reconocidos"
+                self.opening_candidates.append(opening)
                 continue  # does not separate anything: text, furniture or a symbol inside a room
             if a == "exterior" or b == "exterior":
                 inner = b if a == "exterior" else a
                 if inner is None:
+                    opening.review_reason = "no se pudo asociar a un espacio interior"
+                    self.opening_candidates.append(opening)
                     continue
                 if not ({"swing", "ml"} & set(opening.sources)):
                     # a door-sized gap in the exterior wall with no door drawn in it is a window
                     self.glass.append(WallElement(polygon=opening.polygon, kind="window", confidence=0.5))
+                    opening.review_reason = "la abertura exterior podría ser una ventana"
+                    self.opening_candidates.append(opening)
                     continue
                 opening.kind = "entrance"
                 opening.space_ids = (inner, None)
             elif a is None or b is None:
+                opening.review_reason = "no se identificaron ambos lados de la abertura"
+                self.opening_candidates.append(opening)
                 continue
             else:
                 opening.space_ids = (a, b)

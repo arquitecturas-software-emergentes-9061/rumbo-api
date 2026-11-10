@@ -114,6 +114,18 @@ to rectangular zones and `wallCandidates` for older mapper responses or annotate
 These additions describe the proposal. The editor may adopt compatible wall candidates and
 door openings into the versioned draft geometry described below; the original SVG is unchanged.
 
+Route candidates are reviewed against recognized walls, door openings, barriers and traversable
+spaces before they appear in `connections[]`. A crossing at a confirmed opening uses `DOORWAY`;
+a crossing through a wall or barrier, a doorway without an associated opening, or a route outside
+confirmed traversable space is omitted from the candidate graph with a `warnings[]` explanation.
+Low-confidence or unmatched doors and conflicting walls remain in `doors[]` and
+`wallCandidates[]` for administrator review. Missing or incomplete geometry does not authorize
+the interpreter to invent a navigable route.
+Door candidates detected by the structural mapper remain in `doors[]` even when their adjacent
+spaces cannot be identified; these receive a warning and do not authorize `DOORWAY` links. A
+proposal with reviewable doors or walls may have no recognized zones. An SVG with explicit rooms
+but no annotated doors can receive structural door candidates without replacing its explicit rooms.
+
 The result contains `CONFIRMED` with `metersPerUnit` only when that version and floor
 have a saved physical reference. `PROVISIONAL` keeps all dimensions in plan units.
 SVGs outside the interpreter's supported geometry return `422 INVALID_SVG_PLAN`.

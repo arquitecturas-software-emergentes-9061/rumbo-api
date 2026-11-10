@@ -66,6 +66,9 @@ class StructuralPlanInterpretationIntegrationTest {
     List.of(new CandidateNode("s1", "ROOM", "Cardiologia", 40, 30)),
     List.<CandidateLink>of(), List.of(), List.of("Propuesta automática no publicada"));
   private static final Topology NOTHING = new Topology(List.of(), List.of(), List.of(), List.of(), List.of(), List.of());
+  private static final Topology DOOR_ONLY = new Topology(List.of(),
+    List.of(new Door("candidate-door", 40, 50, 60, 50)), List.of(), List.of(), List.of(),
+    List.of("Puerta candidate-door: asociación incierta; se conserva para revisión"));
   private static final String ANNOTATED_SVG = """
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
       <rect data-rumbo-role="room" x="0" y="0" width="80" height="40"/>
@@ -138,6 +141,36 @@ class StructuralPlanInterpretationIntegrationTest {
     when(mapper.propose(any(), any(), any(), any())).thenReturn(Optional.of(NOTHING));
 
     interpret(plan("plano.png", "image/png", png(200, 100))).andExpect(jsonPath("$.processing").value("PREVIEW_ONLY"));
+  }
+
+  @Test
+  void aDoorCandidateWithoutRecognizedRoomsIsStillAvailableForReview() throws Exception {
+    when(mapper.propose(any(), eq(Format.PNG), any(), any())).thenReturn(Optional.of(DOOR_ONLY));
+    interpret(plan("plano.png", "image/png", png(200, 100)))
+      .andExpect(jsonPath("$.processing").value("SVG_CANDIDATES"))
+      .andExpect(jsonPath("$.proposal.zones").isEmpty())
+      .andExpect(jsonPath("$.proposal.doors[0].id").value("candidate-door"));
+  }
+
+  @Test
+  void anAnnotatedSvgWithoutDoorsCanAddVisualDoorCandidatesWithoutReplacingItsRooms() throws Exception {
+    when(mapper.propose(any(), eq(Format.SVG), any(), any())).thenReturn(Optional.of(DOOR_ONLY));
+    String svg = """
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100">
+        <rect data-rumbo-role="room" x="0" y="0" width="80" height="40"/>
+      </svg>""";
+    interpret(plan("plano.svg", "image/svg+xml", svg.getBytes(StandardCharsets.UTF_8)))
+      .andExpect(jsonPath("$.proposal.zones[0].id").value("zone-0"))
+      .andExpect(jsonPath("$.proposal.doors[0].id").value("candidate-door"));
+    verify(mapper).propose(any(), eq(Format.SVG), any(), any());
+  }
+
+  @Test
+  void visualDoorCandidatesKeepSvgWallSegmentsWhenTheMapperFindsNoWalls() throws Exception {
+    when(mapper.propose(any(), eq(Format.SVG), any(), any())).thenReturn(Optional.of(DOOR_ONLY));
+    interpret(plan("plano.svg", "image/svg+xml", PLAIN_SVG.getBytes(StandardCharsets.UTF_8)))
+      .andExpect(jsonPath("$.proposal.doors[0].id").value("candidate-door"))
+      .andExpect(jsonPath("$.proposal.wallCandidates").isNotEmpty());
   }
 
   @Test

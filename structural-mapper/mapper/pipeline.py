@@ -92,6 +92,7 @@ class Pipeline:
             scale=scale,
             walls=walls,
             openings=openings,
+            opening_candidates=inference.opening_candidates,
             spaces=spaces,
             walkable=free,
             graph=graph,
@@ -109,6 +110,7 @@ class Pipeline:
             "obstacles": sum(1 for w in walls if w.kind == "obstacle"),
             "windows": sum(1 for w in walls if w.kind == "window"),
             "doors": sum(1 for o in openings if o.kind in ("door", "passage")),
+            "door_candidates": len(inference.opening_candidates),
             "entrances": sum(1 for o in openings if o.kind == "entrance"),
             "spaces": len(spaces),
             "circulation_spaces": sum(1 for s in spaces if s.kind == "circulation"),
@@ -180,6 +182,21 @@ def scene_to_payload(scene: Scene) -> dict:
         anchor = space.anchor
         return [round(anchor.x, 2), round(anchor.y, 2)]
 
+    def opening_payload(opening):
+        return {
+            "id": opening.id,
+            "kind": opening.kind,
+            "polygon": polygon(opening.polygon),
+            "center": [round(opening.center[0], 2), round(opening.center[1], 2)],
+            "axis": ring(opening.axis.coords),
+            "width_px": round(opening.width_px, 2),
+            "confidence": round(opening.confidence, 3),
+            "spaces": [space for space in opening.space_ids],
+            "sources": list(opening.sources),
+            "review_required": opening.review_reason is not None,
+            "review_reason": opening.review_reason,
+        }
+
     return {
         "parser": "rumbo-structural-mapper",
         "parser_version": PARSER_VERSION,
@@ -188,20 +205,7 @@ def scene_to_payload(scene: Scene) -> dict:
         "walls": [polygon(w.polygon) for w in scene.walls if w.kind == "wall"],
         "obstacles": [polygon(w.polygon) for w in scene.walls if w.kind == "obstacle"],
         "windows": [polygon(w.polygon) for w in scene.walls if w.kind == "window"],
-        "openings": [
-            {
-                "id": o.id,
-                "kind": o.kind,
-                "polygon": polygon(o.polygon),
-                "center": [round(o.center[0], 2), round(o.center[1], 2)],
-                "axis": ring(o.axis.coords),
-                "width_px": round(o.width_px, 2),
-                "confidence": round(o.confidence, 3),
-                "spaces": [s for s in o.space_ids],
-                "sources": list(o.sources),
-            }
-            for o in scene.openings
-        ],
+        "openings": [opening_payload(o) for o in (*scene.openings, *scene.opening_candidates)],
         "doors": [polygon(o.polygon) for o in scene.openings if o.kind != "entrance"],
         "spaces": [
             {

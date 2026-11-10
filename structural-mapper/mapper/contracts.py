@@ -84,6 +84,7 @@ class Opening:
     confidence: float = 1.0
     space_ids: tuple[str | None, str | None] = (None, None)
     sources: tuple[str, ...] = ()
+    review_reason: str | None = None
 
 
 @dataclass(slots=True)
@@ -166,6 +167,7 @@ class Scene:
     scale: Scale
     walls: list[WallElement] = field(default_factory=list)
     openings: list[Opening] = field(default_factory=list)
+    opening_candidates: list[Opening] = field(default_factory=list)
     spaces: list[Space] = field(default_factory=list)
     walkable: list[Polygon] = field(default_factory=list)
     graph: NavigationGraph = field(default_factory=NavigationGraph)

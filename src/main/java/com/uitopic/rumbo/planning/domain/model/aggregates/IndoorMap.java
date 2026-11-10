@@ -20,6 +20,8 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.SpatialCoordinate;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PublishedMapSnapshot;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapWall;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapDoor;
 import com.uitopic.rumbo.shared.domain.model.aggregates.AbstractDomainAggregateRoot;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -49,6 +51,8 @@ public final class IndoorMap extends AbstractDomainAggregateRoot<UUID> {
   private final Map<UUID, MapNode> nodes = new LinkedHashMap<>();
   private final Map<UUID, MapConnection> connections = new LinkedHashMap<>();
   private final Map<UUID, MapDestination> destinations = new LinkedHashMap<>();
+  private final Map<UUID, MapWall> walls = new LinkedHashMap<>();
+  private final Map<UUID, MapDoor> doors = new LinkedHashMap<>();
 
   /** Starts an empty draft graph for one site and model version. */
   public IndoorMap(UUID id, UUID siteId, UUID modelVersionId) {
@@ -84,6 +88,8 @@ public final class IndoorMap extends AbstractDomainAggregateRoot<UUID> {
       draft.addNode(node.id(), node.floorId(), node.planVersionId(),
           node.x(), node.y(), node.type());
     }
+    source.walls().forEach(draft::addWall);
+    source.doors().forEach(draft::addDoor);
     for (PublishedMapSnapshot.Connection connection : source.connections()) {
       draft.addConnection(connection.id(), connection.sourceNodeId(),
           connection.targetNodeId(), connection.type(), connection.distanceMeters(),
@@ -125,6 +131,31 @@ public final class IndoorMap extends AbstractDomainAggregateRoot<UUID> {
 
   /** Read-only snapshot of medical entries tied to this version's destination nodes. */
   public List<MapDestination> destinations() { return List.copyOf(destinations.values()); }
+  public List<MapWall> walls() { return List.copyOf(walls.values()); }
+  public List<MapDoor> doors() { return List.copyOf(doors.values()); }
+
+  public void addWall(MapWall wall) {
+    requireDraft();
+    PlanCoordinateSpace space = plans.get(wall.planVersionId());
+    if (space == null || !space.floorId().equals(wall.floorId())
+        || wall.x1() < 0 || wall.x1() > space.widthUnits()
+        || wall.x2() < 0 || wall.x2() > space.widthUnits()
+        || wall.y1() < 0 || wall.y1() > space.heightUnits()
+        || wall.y2() < 0 || wall.y2() > space.heightUnits()
+        || walls.putIfAbsent(wall.id(), wall) != null) {
+      reject(GraphIssueCode.INVALID_WALL_DATA, GraphElementType.WALL, wall.id(), "Wall is duplicated or outside its floor plan");
+    }
+  }
+
+  public void addDoor(MapDoor door) {
+    requireDraft();
+    if (!walls.containsKey(door.wallId()) || doors.containsKey(door.id())
+        || doors.values().stream().anyMatch(other -> other.wallId().equals(door.wallId())
+            && door.from() < other.to() && other.from() < door.to())) {
+      reject(GraphIssueCode.INVALID_DOOR_DATA, GraphElementType.DOOR, door.id(), "Door has no wall, overlaps another opening, or duplicates an ID");
+    }
+    doors.put(door.id(), door);
+  }
 
   /** Adds one medical entry only when its node is a destination in this version. */
   public void addDestination(MapDestination destination) {
@@ -272,7 +303,32 @@ public final class IndoorMap extends AbstractDomainAggregateRoot<UUID> {
       reject(GraphIssueCode.DUPLICATE_CONNECTION, GraphElementType.CONNECTION, connection.id(),
           "Connection repeats a traversable link of the same type");
     }
+    if (!crossesFloor) validateWallCrossings(connection, source, target);
     connections.put(connection.id(), connection);
+  }
+
+  private void validateWallCrossings(MapConnection connection, MapNode source, MapNode target) {
+    if (!source.position().planVersionId().equals(target.position().planVersionId())) return;
+    for (MapWall wall : walls.values()) {
+      if (!wall.planVersionId().equals(source.position().planVersionId())) continue;
+      double ax = source.position().x(), ay = source.position().y();
+      double bx = target.position().x(), by = target.position().y();
+      double dx = bx - ax, dy = by - ay;
+      double wx = wall.x2() - wall.x1(), wy = wall.y2() - wall.y1();
+      double determinant = dx * wy - dy * wx;
+      if (Math.abs(determinant) < 1e-8) continue;
+      double rx = wall.x1() - ax, ry = wall.y1() - ay;
+      double alongConnection = (rx * wy - ry * wx) / determinant;
+      double alongWall = (rx * dy - ry * dx) / determinant;
+      if (alongConnection <= 1e-6 || alongConnection >= 1 - 1e-6
+          || alongWall <= 1e-6 || alongWall >= 1 - 1e-6) continue;
+      boolean throughDoor = doors.values().stream().anyMatch(door -> door.wallId().equals(wall.id())
+          && alongWall >= door.from() - 1e-6 && alongWall <= door.to() + 1e-6);
+      if (!throughDoor || connection.type() != ConnectionType.DOORWAY) {
+        reject(GraphIssueCode.CONNECTION_CROSSES_WALL, GraphElementType.CONNECTION,
+            connection.id(), "Connection crosses a wall without a DOORWAY opening");
+      }
+    }
   }
 
   /** Adds a weighted editor connection, reporting invalid metrics at its ID. */

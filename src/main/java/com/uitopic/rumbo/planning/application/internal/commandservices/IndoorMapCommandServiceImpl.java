@@ -153,6 +153,8 @@ public class IndoorMapCommandServiceImpl implements IndoorMapCommandService {
         current.modelVersionId(), current.editRevision());
     current.plans().forEach(replacement::addPlan);
     current.scales().forEach(replacement::setScale);
+    (command.walls() == null ? current.walls() : command.walls()).forEach(replacement::addWall);
+    (command.doors() == null ? current.doors() : command.doors()).forEach(replacement::addDoor);
     command.nodes().forEach(node -> replacement.addNode(node.id(), node.floorId(),
         node.planVersionId(), node.x(), node.y(), node.type()));
     command.connections().forEach(connection -> replacement.addConnection(connection.id(),

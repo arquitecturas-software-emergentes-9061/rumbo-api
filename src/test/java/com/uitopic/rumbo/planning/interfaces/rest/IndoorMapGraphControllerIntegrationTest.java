@@ -69,6 +69,27 @@ class IndoorMapGraphControllerIntegrationTest {
   }
 
   @Test
+  void savesWallsAndDoorsUnderTheDraftEtagAndReadsThemBack() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    UUID floor = map.plans().getFirst().floorId(), plan = map.plans().getFirst().planVersionId();
+    UUID wall = UUID.randomUUID(), door = UUID.randomUUID();
+    GraphUpdateResource update = new GraphUpdateResource(nodeInputs(map), connectionInputs(map),
+        List.of(), List.of(new GraphUpdateResource.WallInputResource(wall, floor, plan,
+            50.0, 0.0, 50.0, 100.0)),
+        List.of(new GraphUpdateResource.DoorInputResource(door, wall, .4, .6)));
+    String url = "/api/v1/sites/" + map.siteId() + "/maps/" + map.id()
+        + "/versions/" + map.modelVersionId() + "/graph";
+    mvc.perform(put(url).header("If-Match", "\"rev-0\"")
+        .contentType("application/json").content(json.writeValueAsString(update)))
+      .andExpect(status().isOk()).andExpect(header().string("ETag", "\"rev-1\""))
+      .andExpect(jsonPath("$.walls[0].id").value(wall.toString()))
+      .andExpect(jsonPath("$.doors[0].wallId").value(wall.toString()));
+    mvc.perform(get(url)).andExpect(status().isOk())
+      .andExpect(jsonPath("$.doors[0].id").value(door.toString()));
+  }
+
+  @Test
   void discoversOnlyTheOwnedSitesCurrentDraftAndItsRevision() throws Exception {
     IndoorMap map = draft();
     store.saveDraft(map);

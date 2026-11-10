@@ -15,3 +15,7 @@ The editor saves an existing draft graph in one operation. A previous `PUT` trea
 ## Consequences
 
 The draft editing request contract changes: clients must send all three collections and the current `If-Match`. No generic partial `PATCH` is introduced for graph collections. WI-US10-03 remains open until US-09 provides a candidate room model and a reliable matching contract; silently keeping destinations on a generic replacement would not establish their correct room references. See [API-CONTRACT.md](../API-CONTRACT.md) for HTTP details.
+
+## Geometry extension (2026-11-10)
+
+The same revision-checked `PUT` accepts versioned `walls[]` and `doors[]` alongside the three required graph collections. A wall belongs to a registered floor-plan coordinate space; a door identifies its wall and an opening along it. Omitted geometry collections preserve stored geometry for older clients, while explicit arrays replace them. Planning validates that route connections do not cross solid walls and that a crossing through an opening is `DOORWAY`. The original plan file stays in floor-plan storage. Successor drafts copy the published version's geometry.

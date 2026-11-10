@@ -7,7 +7,13 @@ import java.util.UUID;
 /** Immutable, versioned read model of a published Planning map. */
 public record PublishedMapSnapshot(UUID siteId, UUID mapId, UUID modelVersionId,
                                    List<Plan> plans, List<Node> nodes,
-                                   List<Connection> connections, List<Destination> destinations) {
+                                   List<Connection> connections, List<Destination> destinations,
+                                   List<MapWall> walls, List<MapDoor> doors) {
+  public PublishedMapSnapshot(UUID siteId, UUID mapId, UUID modelVersionId,
+                              List<Plan> plans, List<Node> nodes,
+                              List<Connection> connections, List<Destination> destinations) {
+    this(siteId, mapId, modelVersionId, plans, nodes, connections, destinations, List.of(), List.of());
+  }
   public PublishedMapSnapshot {
     Objects.requireNonNull(siteId, "siteId is required");
     Objects.requireNonNull(mapId, "mapId is required");
@@ -16,6 +22,8 @@ public record PublishedMapSnapshot(UUID siteId, UUID mapId, UUID modelVersionId,
     nodes = List.copyOf(nodes);
     connections = List.copyOf(connections);
     destinations = List.copyOf(destinations);
+    walls = List.copyOf(walls);
+    doors = List.copyOf(doors);
   }
 
   /** Coordinate frame and confirmed physical scale of one floor-plan version. */

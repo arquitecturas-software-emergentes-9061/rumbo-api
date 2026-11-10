@@ -8,6 +8,8 @@ import com.uitopic.rumbo.planning.domain.model.entities.MapNode;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapWall;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapDoor;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.SpatialCoordinate;
@@ -42,6 +44,24 @@ class IndoorMapRepositoryImplIntegrationTest {
   @Autowired IndoorMapRepositoryImpl store;
   @Autowired EntityManager entityManager;
   @Autowired JdbcTemplate jdbc;
+
+  @Test
+  void savesAndReloadsEditableWallsAndDoorsWithTheDraftVersion() {
+    UUID floor = UUID.randomUUID(), plan = UUID.randomUUID();
+    IndoorMap map = new IndoorMap(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+    map.addPlan(new PlanCoordinateSpace(floor, plan, 100, 80));
+    MapWall wall = new MapWall(UUID.randomUUID(), floor, plan, 50, 0, 50, 80);
+    MapDoor door = new MapDoor(UUID.randomUUID(), wall.id(), .4, .6);
+    map.addWall(wall);
+    map.addDoor(door);
+    store.saveDraft(map);
+    entityManager.clear();
+
+    IndoorMap loaded = store.findDraft(map.id(), map.modelVersionId()).orElseThrow();
+    assertEquals(java.util.List.of(wall), loaded.walls());
+    assertEquals(java.util.List.of(door), loaded.doors());
+    assertEquals(0, loaded.editRevision());
+  }
 
   @Test
   void savesAndReloadsPlanScaleNodesAndWeightedConnections() {

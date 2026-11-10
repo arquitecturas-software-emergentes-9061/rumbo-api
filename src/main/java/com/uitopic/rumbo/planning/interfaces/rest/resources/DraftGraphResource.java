@@ -7,6 +7,8 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapVersionStatus;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapWall;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapDoor;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -17,7 +19,8 @@ import java.util.stream.Collectors;
 public record DraftGraphResource(UUID siteId, UUID mapId, UUID modelVersionId,
                                  MapVersionStatus status, List<PlanResource> plans,
                                  List<NodeResource> nodes, List<ConnectionResource> connections,
-                                 List<DestinationResource> destinations) {
+                                 List<DestinationResource> destinations,
+                                 List<WallResource> walls, List<DoorResource> doors) {
   /** Builds a REST snapshot without exposing the Planning aggregate. */
   public static DraftGraphResource from(IndoorMap map) {
     Map<UUID, MapScale> scales = map.scales().stream()
@@ -36,7 +39,11 @@ public record DraftGraphResource(UUID siteId, UUID mapId, UUID modelVersionId,
             connection.accessibility(), connection.bidirectional())).toList(),
         map.destinations().stream().map(destination -> new DestinationResource(destination.id(),
             destination.nodeId(), destination.type(), destination.name(),
-            destination.specialty())).toList());
+            destination.specialty())).toList(),
+        map.walls().stream().map(wall -> new WallResource(wall.id(), wall.floorId(),
+            wall.planVersionId(), wall.x1(), wall.y1(), wall.x2(), wall.y2())).toList(),
+        map.doors().stream().map(door -> new DoorResource(door.id(), door.wallId(),
+            door.from(), door.to())).toList());
   }
 
   /** Floor-plan coordinate bounds and optional confirmed physical scale. */
@@ -57,4 +64,7 @@ public record DraftGraphResource(UUID siteId, UUID mapId, UUID modelVersionId,
   /** Editable medical entry and its destination node reference. */
   public record DestinationResource(UUID id, UUID nodeId, DirectoryEntryType type,
                                     String name, String specialty) {}
+  public record WallResource(UUID id, UUID floorId, UUID planVersionId,
+                             double x1, double y1, double x2, double y2) {}
+  public record DoorResource(UUID id, UUID wallId, double from, double to) {}
 }

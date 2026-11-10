@@ -8,6 +8,8 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibil
 import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapVersionStatus;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapWall;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapDoor;
 import com.uitopic.rumbo.planning.infrastructure.persistence.jpa.model.IndoorMapJpaEntity;
 import com.uitopic.rumbo.planning.infrastructure.persistence.jpa.model.MapConnectionJpaEntity;
 import com.uitopic.rumbo.planning.infrastructure.persistence.jpa.model.MapDestinationJpaEntity;
@@ -92,8 +94,23 @@ public class PublishedMapRepositoryImpl implements PublishedMapRepository {
         .map(row -> new PublishedMapSnapshot.Destination(row.id().elementId(), versionId,
             row.nodeId(), nodesById.get(row.nodeId()).floorId(),
             DirectoryEntryType.valueOf(row.entryType()), row.name(), row.specialty())).toList();
+    List<MapWall> walls = new java.util.ArrayList<>();
+    for (Object raw : entityManager.createNativeQuery("SELECT id, floor_id, plan_version_id, x1, y1, x2, y2 FROM map_walls WHERE model_version_id = :versionId ORDER BY id")
+        .setParameter("versionId", versionId).getResultList()) {
+      Object[] row = (Object[]) raw;
+      walls.add(new MapWall((UUID) row[0], (UUID) row[1], (UUID) row[2],
+          ((Number) row[3]).doubleValue(), ((Number) row[4]).doubleValue(),
+          ((Number) row[5]).doubleValue(), ((Number) row[6]).doubleValue()));
+    }
+    List<MapDoor> doors = new java.util.ArrayList<>();
+    for (Object raw : entityManager.createNativeQuery("SELECT id, wall_id, from_fraction, to_fraction FROM map_doors WHERE model_version_id = :versionId ORDER BY id")
+        .setParameter("versionId", versionId).getResultList()) {
+      Object[] row = (Object[]) raw;
+      doors.add(new MapDoor((UUID) row[0], (UUID) row[1],
+          ((Number) row[2]).doubleValue(), ((Number) row[3]).doubleValue()));
+    }
     return Optional.of(new PublishedMapSnapshot(siteId, mapId, versionId,
-        plans, nodes, connections, destinations));
+        plans, nodes, connections, destinations, walls, doors));
   }
 
   @Override

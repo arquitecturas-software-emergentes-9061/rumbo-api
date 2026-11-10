@@ -5,6 +5,8 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionAccessibility;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.DirectoryEntryType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapWall;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapDoor;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
@@ -14,7 +16,15 @@ import java.util.UUID;
 public record GraphUpdateResource(
     @NotNull List<@NotNull @Valid NodeInputResource> nodes,
     @NotNull List<@NotNull @Valid ConnectionInputResource> connections,
-    @NotNull List<@NotNull @Valid DestinationInputResource> destinations) {
+    @NotNull List<@NotNull @Valid DestinationInputResource> destinations,
+    List<@NotNull @Valid WallInputResource> walls,
+    List<@NotNull @Valid DoorInputResource> doors) {
+
+  public GraphUpdateResource(List<NodeInputResource> nodes,
+                             List<ConnectionInputResource> connections,
+                             List<DestinationInputResource> destinations) {
+    this(nodes, connections, destinations, null, null);
+  }
 
   /** Converts validated REST input to a Planning command. */
   public ReplaceDraftGraphCommand toCommand(UUID siteId, UUID mapId, UUID modelVersionId,
@@ -28,8 +38,18 @@ public record GraphUpdateResource(
             connection.accessibility(), connection.bidirectional())).toList(),
         destinations.stream().map(destination -> new ReplaceDraftGraphCommand.DestinationInput(
             destination.id(), destination.nodeId(), destination.type(),
-            destination.name(), destination.specialty())).toList());
+            destination.name(), destination.specialty())).toList(),
+        walls == null ? null : walls.stream().map(wall -> new MapWall(wall.id(), wall.floorId(),
+            wall.planVersionId(), wall.x1(), wall.y1(), wall.x2(), wall.y2())).toList(),
+        doors == null ? null : doors.stream().map(door -> new MapDoor(
+            door.id(), door.wallId(), door.from(), door.to())).toList());
   }
+
+  public record WallInputResource(@NotNull UUID id, @NotNull UUID floorId,
+                                  @NotNull UUID planVersionId, @NotNull Double x1,
+                                  @NotNull Double y1, @NotNull Double x2, @NotNull Double y2) {}
+  public record DoorInputResource(@NotNull UUID id, @NotNull UUID wallId,
+                                  @NotNull Double from, @NotNull Double to) {}
 
   /** A node positioned in plan units, with its stable identifier. */
   public record NodeInputResource(@NotNull UUID id, @NotNull UUID floorId,

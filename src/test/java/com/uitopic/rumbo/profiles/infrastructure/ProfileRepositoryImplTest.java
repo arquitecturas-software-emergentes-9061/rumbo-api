@@ -82,6 +82,18 @@ class ProfileRepositoryImplTest {
     assertColumn(columns, "updated_at", "timestamp with time zone", null, "NO");
   }
 
+  @Test
+  void updatingExistingProfilePreservesItsRowAndIdentity() {
+    Profile initial = profiles.save(Profile.initialize(UUID.randomUUID(), "Ana", "PATIENT", Instant.now()));
+    Profile updated = profiles.save(initial.updatePersonalData(
+        new com.uitopic.rumbo.profiles.domain.model.valueobjects.FullName("Maria"), null, Instant.now()));
+    entityManager.clear();
+    assertThat(updated.id()).isEqualTo(initial.id());
+    assertThat(profiles.findByUserId(initial.userId()).orElseThrow().fullName().value()).isEqualTo("Maria");
+    assertThat(jdbc.queryForObject("select count(*) from profiles_user_profiles where user_id = ?",
+        Long.class, initial.userId())).isEqualTo(1);
+  }
+
   private static void assertColumn(List<Map<String, Object>> columns, String name, String type, Integer length,
                                    String nullable) {
     Map<String, Object> column = columns.stream()

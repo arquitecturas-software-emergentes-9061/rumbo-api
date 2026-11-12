@@ -175,7 +175,7 @@ class BeaconControllerIntegrationTest {
     UUID admin = UUID.randomUUID(), siteId = site(admin), floor = UUID.randomUUID();
     draft(siteId, floor);
     String base = "/api/v1/sites/" + siteId + "/beacons";
-    String uuid = "f7826da6-4fa2-4e98-8024-bc5b71e0893e";
+    String uuid = UUID.randomUUID().toString();
     String payload = mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
         .contentType(MediaType.APPLICATION_JSON)
         .content("{\"floorId\":\"" + floor + "\",\"name\":\"B-05\",\"proximityUuid\":\"" + uuid
@@ -208,7 +208,7 @@ class BeaconControllerIntegrationTest {
     UUID admin = UUID.randomUUID(), siteId = site(admin), floor = UUID.randomUUID();
     draft(siteId, floor);
     String base = "/api/v1/sites/" + siteId + "/beacons";
-    String body = "{\"floorId\":\"" + floor + "\",\"proximityUuid\":\"f7826da6-4fa2-4e98-8024-bc5b71e0893e\","
+    String body = "{\"floorId\":\"" + floor + "\",\"proximityUuid\":\"" + UUID.randomUUID() + "\","
         + "\"major\":100,\"minor\":1,\"txPowerDbm\":-59}";
     mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
         .contentType(MediaType.APPLICATION_JSON).content(body)).andExpect(status().isCreated());
@@ -219,5 +219,50 @@ class BeaconControllerIntegrationTest {
         .contentType(MediaType.APPLICATION_JSON)
         .content(body.replace("\"major\":100", "\"major\":70000")))
       .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+  }
+
+  @Test void rejectsSameIdentifierAcrossSitesEvenWhenFirstBeaconIsInactive() throws Exception {
+    UUID firstAdmin = UUID.randomUUID(), secondAdmin = UUID.randomUUID();
+    UUID firstSite = site(firstAdmin), secondSite = site(secondAdmin);
+    UUID firstFloor = UUID.randomUUID(), secondFloor = UUID.randomUUID();
+    String identifier = "ble_" + UUID.randomUUID().toString().replace("-", "");
+    String firstBody = "{\"floorId\":\"" + firstFloor + "\",\"identifier\":\"" + identifier + "\"}";
+    String secondBody = "{\"floorId\":\"" + secondFloor + "\",\"identifier\":\"" + identifier.toUpperCase() + "\"}";
+    mvc.perform(post("/api/v1/sites/" + firstSite + "/beacons")
+        .with(caller(firstAdmin, UserRole.CLINIC_ADMIN)).contentType(MediaType.APPLICATION_JSON)
+        .content(firstBody))
+      .andExpect(status().isCreated()).andExpect(jsonPath("$.active").value(false));
+    mvc.perform(post("/api/v1/sites/" + secondSite + "/beacons")
+        .with(caller(secondAdmin, UserRole.CLINIC_ADMIN)).contentType(MediaType.APPLICATION_JSON)
+        .content(secondBody))
+      .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("BEACON_IDENTIFIER_EXISTS"));
+    mvc.perform(get("/api/v1/sites/" + secondSite + "/beacons")
+        .with(caller(secondAdmin, UserRole.CLINIC_ADMIN)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(0)));
+  }
+
+  @Test void rejectsSamePhysicalTripletAcrossSitesAndConflictingUpdates() throws Exception {
+    UUID firstAdmin = UUID.randomUUID(), secondAdmin = UUID.randomUUID();
+    UUID firstSite = site(firstAdmin), secondSite = site(secondAdmin);
+    UUID firstFloor = UUID.randomUUID(), secondFloor = UUID.randomUUID();
+    UUID physicalUuid = UUID.randomUUID();
+    String firstBase = "/api/v1/sites/" + firstSite + "/beacons";
+    String secondBase = "/api/v1/sites/" + secondSite + "/beacons";
+    String triplet = "\"proximityUuid\":\"" + physicalUuid + "\",\"major\":8,\"minor\":9";
+    mvc.perform(post(firstBase).with(caller(firstAdmin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"floorId\":\"" + firstFloor + "\",\"identifier\":\"first_" + physicalUuid + "\"," + triplet + "}"))
+      .andExpect(status().isCreated());
+    String secondBody = "{\"floorId\":\"" + secondFloor + "\",\"identifier\":\"second_" + physicalUuid + "\"}";
+    String saved = mvc.perform(post(secondBase).with(caller(secondAdmin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON).content(secondBody))
+      .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+    UUID secondId = UUID.fromString(json.readTree(saved).get("id").asText());
+    mvc.perform(put(secondBase + "/" + secondId).with(caller(secondAdmin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"floorId\":\"" + secondFloor + "\",\"identifier\":\"second_" + physicalUuid + "\"," + triplet + "}"))
+      .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("BEACON_IDENTIFIER_EXISTS"));
+    mvc.perform(get(secondBase + "/" + secondId).with(caller(secondAdmin, UserRole.CLINIC_ADMIN)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.proximityUuid").doesNotExist());
   }
 }

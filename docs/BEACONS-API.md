@@ -21,7 +21,8 @@ Endpoints:
   `txPowerDbm` (-120..0). `identifier` is optional when the UUID/major/minor triplet is sent
   and is then derived as `uuid:major:minor`. `x`/`y` are optional: a beacon without them is
   registered **unplaced and inactive**, and an unplaced beacon cannot be activated (422
-  `INVALID_BEACON`). The triplet is unique per site (409 `BEACON_IDENTIFIER_EXISTS`).
+  `INVALID_BEACON`). Both the normalized identifier and physical iBeacon triplet are unique
+  across all sites, including inactive inventory (409 `BEACON_IDENTIFIER_EXISTS`).
 - `PUT /api/v1/sites/{siteId}/beacons/{id}` — replaces the editable fields with the same
   body. Removing the position deactivates the beacon.
 - `GET /api/v1/sites/{siteId}/beacons?floorId=<uuid>` — inventory by floor.
@@ -29,8 +30,12 @@ Endpoints:
 - `PATCH /api/v1/sites/{siteId}/beacons/{id}/status` — activate/deactivate.
 
 The spatial reference uses plan coordinates, not GPS or meters. The identifier
-is normalized to lowercase and unique per site. Tests cover duplicate,
+is normalized to lowercase and unique across the platform. Tests cover duplicate,
 wrong-account and nonexistent floor/point cases.
+
+The Flyway migration checks existing inventory before changing any row. If two sites
+already use the same normalized identifier or iBeacon triplet, deployment stops so an
+administrator can resolve the ambiguity without silently deleting a beacon.
 
 Not included: BLE signal sampling, Android runtime permissions, beacon calibration,
 automatic retargeting after reimporting a floor plan, or institutional multi-admin

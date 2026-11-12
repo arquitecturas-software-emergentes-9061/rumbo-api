@@ -15,7 +15,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
-/** JDBC inventory adapter; the database enforces unique identifiers per site. */
+/** JDBC inventory adapter; the database enforces platform-wide beacon identity. */
 @Repository
 public class BeaconRepositoryImpl implements BeaconRepository {
   private final JdbcTemplate jdbc;

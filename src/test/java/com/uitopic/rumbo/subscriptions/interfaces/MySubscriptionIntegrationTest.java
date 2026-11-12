@@ -27,7 +27,7 @@ class MySubscriptionIntegrationTest extends CheckoutIntegrationSupport {
   @Test void adminSeesOwnPlanAndPeriodAfterSignedWebhookAndOtherAdminCannotSeeIt() throws Exception {
     when(gateway.createCheckoutSession(any())).thenReturn(
         new PaymentGateway.CheckoutSession("cs_test", "https://checkout.stripe.com/test"));
-    String admin = token("CLINIC_ADMIN");
+    String admin = clinicAdmin();
     String order = mvc.perform(post(CHECKOUT).header(HttpHeaders.AUTHORIZATION, "Bearer " + admin)
         .contentType(MediaType.APPLICATION_JSON).content("{\"planCode\":\"BASIC\"}"))
         .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
@@ -60,12 +60,12 @@ class MySubscriptionIntegrationTest extends CheckoutIntegrationSupport {
         Math.max(0, Duration.between(Instant.now(), end).toDays()),
         Math.max(0, Duration.between(beforeQuery, end).toDays()));
     assertThat(response).doesNotContain("providerSubscriptionId", "sub_test", "cs_test");
-    mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token("CLINIC_ADMIN")))
+    mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + clinicAdmin()))
         .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("SUBSCRIPTION_NOT_FOUND"));
   }
 
   @Test void adminWithoutSubscriptionGetsNotFound() throws Exception {
-    mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + token("CLINIC_ADMIN")))
+    mvc.perform(get(PATH).header(HttpHeaders.AUTHORIZATION, "Bearer " + clinicAdmin()))
         .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("SUBSCRIPTION_NOT_FOUND"));
   }
 

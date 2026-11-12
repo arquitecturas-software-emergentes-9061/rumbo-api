@@ -12,7 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @EnabledIfEnvironmentVariable(named = "STRIPE_SECRET_KEY", matches = "(sk|rk)_test_.+")
 class StripeCheckoutLiveIntegrationTest extends CheckoutIntegrationSupport {
   @Test void createsSandboxSessionsThroughApiForBothCheckoutPlans() throws Exception {
-    String admin = token("CLINIC_ADMIN");
+    String admin = clinicAdmin();
     for (String code : new String[]{"BASIC", "PROFESSIONAL"}) {
       String body = mvc.perform(post(CHECKOUT).header(HttpHeaders.AUTHORIZATION, "Bearer " + admin)
         .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(java.util.Map.of("planCode", code))))

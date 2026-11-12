@@ -21,6 +21,18 @@ abstract class CheckoutIntegrationSupport {
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper mapper;
   @Autowired JdbcTemplate jdbc;
+  protected String clinicAdmin() throws Exception {
+    String admin = token("CLINIC_ADMIN");
+    registerClinic(admin, "Checkout Clinic");
+    return admin;
+  }
+  protected UUID registerClinic(String admin, String name) throws Exception {
+    String response = mvc.perform(put("/api/v1/clinics/me").header("Authorization", "Bearer " + admin)
+      .contentType(MediaType.APPLICATION_JSON)
+      .content(mapper.writeValueAsString(Map.of("name", name, "code", "TEST", "contactEmail", "contact@example.test"))))
+      .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+    return UUID.fromString(mapper.readTree(response).get("id").asText());
+  }
   protected String token(String role) throws Exception {
     String email = "checkout-" + UUID.randomUUID() + "@example.test";
     String password = "Test-" + UUID.randomUUID();

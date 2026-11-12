@@ -14,6 +14,10 @@ public class PaymentOrderJpaEntity {
   private UUID id;
   @Column(name = "payer_user_id", nullable = false)
   private UUID payerUserId;
+  @Column(name = "organization_id", nullable = false)
+  private UUID organizationId;
+  @Column(name = "organization_name", nullable = false, length = 160)
+  private String organizationName;
   @Enumerated(EnumType.STRING) @Column(name = "plan_code", nullable = false, length = 30)
   private PlanCode planCode;
   @Column(nullable = false, precision = 10, scale = 2)
@@ -32,6 +36,10 @@ public class PaymentOrderJpaEntity {
   public void setId(UUID id) { this.id = id; }
   public UUID getPayerUserId() { return payerUserId; }
   public void setPayerUserId(UUID payerUserId) { this.payerUserId = payerUserId; }
+  public UUID getOrganizationId() { return organizationId; }
+  public void setOrganizationId(UUID organizationId) { this.organizationId = organizationId; }
+  public String getOrganizationName() { return organizationName; }
+  public void setOrganizationName(String organizationName) { this.organizationName = organizationName; }
   public PlanCode getPlanCode() { return planCode; }
   public void setPlanCode(PlanCode planCode) { this.planCode = planCode; }
   public BigDecimal getAmount() { return amount; }

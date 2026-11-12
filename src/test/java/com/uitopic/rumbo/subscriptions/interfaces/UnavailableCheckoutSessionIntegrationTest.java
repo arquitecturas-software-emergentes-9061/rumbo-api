@@ -14,7 +14,7 @@ class UnavailableCheckoutSessionIntegrationTest extends CheckoutIntegrationSuppo
   @Autowired PaymentGateway gateway;
   @Test void missingKeyUsesUnavailableBeanAndReturns503() throws Exception {
     assertThat(gateway).isInstanceOf(UnavailablePaymentGateway.class);
-    mvc.perform(post(CHECKOUT).header(HttpHeaders.AUTHORIZATION, "Bearer " + token("CLINIC_ADMIN"))
+    mvc.perform(post(CHECKOUT).header(HttpHeaders.AUTHORIZATION, "Bearer " + clinicAdmin())
       .contentType(MediaType.APPLICATION_JSON).content("{\"planCode\":\"BASIC\"}"))
       .andExpect(status().isServiceUnavailable()).andExpect(jsonPath("$.code").value("PAYMENTS_UNAVAILABLE"));
   }

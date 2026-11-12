@@ -8,6 +8,7 @@ import java.util.UUID;
 public class PaymentOrder {
   private final UUID id;
   private final UUID payerUserId;
+  private final OrganizationRef organization;
   private final PlanCode planCode;
   private final Money amount;
   private PaymentOrderStatus status;
@@ -15,10 +16,11 @@ public class PaymentOrder {
   private final Instant createdAt;
   private Instant updatedAt;
 
-  public PaymentOrder(UUID id, UUID payerUserId, PlanCode planCode, Money amount,
+  public PaymentOrder(UUID id, UUID payerUserId, OrganizationRef organization, PlanCode planCode, Money amount,
       PaymentOrderStatus status, String providerSessionId, Instant createdAt, Instant updatedAt) {
     this.id = Objects.requireNonNull(id);
     this.payerUserId = Objects.requireNonNull(payerUserId);
+    this.organization = Objects.requireNonNull(organization);
     this.planCode = Objects.requireNonNull(planCode);
     this.amount = Objects.requireNonNull(amount);
     this.status = Objects.requireNonNull(status);
@@ -26,9 +28,9 @@ public class PaymentOrder {
     this.createdAt = Objects.requireNonNull(createdAt);
     this.updatedAt = Objects.requireNonNull(updatedAt);
   }
-  public static PaymentOrder create(UUID payerUserId, PlanCode planCode, Money amount) {
+  public static PaymentOrder create(UUID payerUserId, OrganizationRef organization, PlanCode planCode, Money amount) {
     Instant now = Instant.now();
-    return new PaymentOrder(UUID.randomUUID(), payerUserId, planCode, amount, PaymentOrderStatus.PENDING, null, now, now);
+    return new PaymentOrder(UUID.randomUUID(), payerUserId, organization, planCode, amount, PaymentOrderStatus.PENDING, null, now, now);
   }
   public void attachCheckoutSession(String sessionId) {
     requirePending();
@@ -50,6 +52,7 @@ public class PaymentOrder {
   public void markCancelled() { transition(PaymentOrderStatus.CANCELLED); }
   public UUID id() { return id; }
   public UUID payerUserId() { return payerUserId; }
+  public OrganizationRef organization() { return organization; }
   public PlanCode planCode() { return planCode; }
   public Money amount() { return amount; }
   public PaymentOrderStatus status() { return status; }

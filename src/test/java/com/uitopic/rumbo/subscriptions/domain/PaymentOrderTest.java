@@ -9,19 +9,24 @@ import java.math.BigDecimal;
 import java.util.UUID;
 import static org.assertj.core.api.Assertions.*;
 class PaymentOrderTest {
-  private PaymentOrder order() { return PaymentOrder.create(UUID.randomUUID(), PlanCode.BASIC, new Money(new BigDecimal("39.90"), "PEN")); }
+  private final OrganizationRef organization = new OrganizationRef(UUID.randomUUID(), "Clinic");
+  private PaymentOrder order() { return PaymentOrder.create(UUID.randomUUID(), organization, PlanCode.BASIC, new Money(new BigDecimal("39.90"), "PEN")); }
   @Test void createsPendingSnapshotAndAttachesSessionOnce() {
     var order = order();
     assertThat(order.status()).isEqualTo(PaymentOrderStatus.PENDING);
     assertThat(order.providerSessionId()).isNull();
     assertThat(order.amount().amount()).isEqualTo(new BigDecimal("39.90"));
     order.attachCheckoutSession("session-id");
+    assertThat(order.organization()).isSameAs(organization);
     assertThat(order.providerSessionId()).isEqualTo("session-id");
     assertThat(order.updatedAt()).isAfterOrEqualTo(order.createdAt());
     assertThatThrownBy(() -> order.attachCheckoutSession("another")).isInstanceOf(IllegalStateException.class);
   }
+  @Test void requiresOrganization() {
+    assertThatNullPointerException().isThrownBy(() -> PaymentOrder.create(UUID.randomUUID(), null, PlanCode.BASIC, new Money(BigDecimal.ONE, "PEN")));
+  }
   @Test void rejectsMissingIdentityAndInvalidSession() {
-    assertThatNullPointerException().isThrownBy(() -> PaymentOrder.create(null, PlanCode.BASIC, new Money(BigDecimal.ONE, "PEN")));
+    assertThatNullPointerException().isThrownBy(() -> PaymentOrder.create(null, new OrganizationRef(UUID.randomUUID(), "Clinic"), PlanCode.BASIC, new Money(BigDecimal.ONE, "PEN")));
     var order = order();
     assertThatIllegalArgumentException().isThrownBy(() -> order.attachCheckoutSession(" "));
     assertThatIllegalArgumentException().isThrownBy(() -> order.attachCheckoutSession(null));
@@ -37,11 +42,13 @@ class PaymentOrderTest {
       case CANCELLED -> order.markCancelled();
       default -> throw new AssertionError();
     }
+    assertThat(order.organization()).isSameAs(organization);
     assertThat(order.status()).isEqualTo(target);
     var updatedAt = order.updatedAt();
     order.markPaid();
     assertThatIllegalStateException().isThrownBy(order::markFailed);
     order.markExpired();
+    assertThat(order.organization()).isSameAs(organization);
     assertThat(order.status()).isEqualTo(target);
     assertThat(order.updatedAt()).isEqualTo(updatedAt);
     assertThatIllegalStateException().isThrownBy(order::markCancelled);

@@ -16,6 +16,8 @@ public class SubscriptionsExceptionHandler {
   public ProblemDetail subscriptionNotFound() { return ProblemDetails.of(HttpStatus.NOT_FOUND, "SUBSCRIPTION_NOT_FOUND", "Subscription not found"); }
   @ExceptionHandler(InvalidWebhookSignatureException.class)
   public ProblemDetail signature() { return ProblemDetails.of(HttpStatus.BAD_REQUEST, "INVALID_WEBHOOK_SIGNATURE", "Invalid webhook signature"); }
+  @ExceptionHandler(OrganizationRequiredException.class)
+  public ProblemDetail organizationRequired() { return ProblemDetails.of(HttpStatus.CONFLICT, "ORGANIZATION_REQUIRED", "Register a clinic before checkout"); }
   @ExceptionHandler(PlanNotFoundException.class)
   public ProblemDetail planNotFound() { return ProblemDetails.of(HttpStatus.NOT_FOUND, "PLAN_NOT_FOUND", "Plan not found"); }
   @ExceptionHandler(PaymentOrderNotFoundException.class)

@@ -4,5 +4,6 @@ import java.util.*;
 import com.uitopic.rumbo.subscriptions.domain.model.aggregates.PaymentOrder;
 public interface PaymentOrderRepository {
   PaymentOrder save(PaymentOrder order);
+  Optional<PaymentOrder> findByIdForUpdate(UUID id);
   Optional<PaymentOrder> findByIdAndPayerUserId(UUID id, UUID payerUserId);
 }

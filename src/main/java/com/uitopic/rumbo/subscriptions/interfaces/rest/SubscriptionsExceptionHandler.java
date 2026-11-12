@@ -12,6 +12,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice(basePackageClasses = PaymentOrdersController.class)
 @Order(0)
 public class SubscriptionsExceptionHandler {
+  @ExceptionHandler(InvalidWebhookSignatureException.class)
+  public ProblemDetail signature() { return ProblemDetails.of(HttpStatus.BAD_REQUEST, "INVALID_WEBHOOK_SIGNATURE", "Invalid webhook signature"); }
   @ExceptionHandler(PlanNotFoundException.class)
   public ProblemDetail planNotFound() { return ProblemDetails.of(HttpStatus.NOT_FOUND, "PLAN_NOT_FOUND", "Plan not found"); }
   @ExceptionHandler(PaymentOrderNotFoundException.class)

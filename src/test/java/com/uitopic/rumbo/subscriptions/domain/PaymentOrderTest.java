@@ -28,7 +28,7 @@ class PaymentOrderTest {
     assertThatIllegalArgumentException().isThrownBy(() -> order.attachCheckoutSession("a".repeat(256)));
   }
   @ParameterizedTest @EnumSource(value = PaymentOrderStatus.class, names = "PENDING", mode = EnumSource.Mode.EXCLUDE)
-  void terminalStatesRejectEveryFurtherTransition(PaymentOrderStatus target) {
+  void terminalStatesIgnoreWebhookTransitionsAndRejectOtherTransitions(PaymentOrderStatus target) {
     var order = order();
     switch (target) {
       case PAID -> order.markPaid();
@@ -38,9 +38,12 @@ class PaymentOrderTest {
       default -> throw new AssertionError();
     }
     assertThat(order.status()).isEqualTo(target);
-    assertThatIllegalStateException().isThrownBy(order::markPaid);
+    var updatedAt = order.updatedAt();
+    order.markPaid();
     assertThatIllegalStateException().isThrownBy(order::markFailed);
-    assertThatIllegalStateException().isThrownBy(order::markExpired);
+    order.markExpired();
+    assertThat(order.status()).isEqualTo(target);
+    assertThat(order.updatedAt()).isEqualTo(updatedAt);
     assertThatIllegalStateException().isThrownBy(order::markCancelled);
     assertThatIllegalStateException().isThrownBy(() -> order.attachCheckoutSession("session"));
   }

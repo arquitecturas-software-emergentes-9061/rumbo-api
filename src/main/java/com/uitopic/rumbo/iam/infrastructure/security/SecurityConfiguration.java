@@ -55,6 +55,7 @@ public class SecurityConfiguration {
       .authorizeHttpRequests(auth -> auth
         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
         .requestMatchers(HttpMethod.POST, PUBLIC_AUTH_ENDPOINTS).permitAll()
+        .requestMatchers(HttpMethod.POST, "/api/v1/subscriptions/stripe/webhook").permitAll()
         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
         .anyRequest().authenticated())
       .addFilterBefore(new JwtAuthenticationFilter(tokenProvider, revocation), UsernamePasswordAuthenticationFilter.class)

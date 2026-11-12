@@ -258,7 +258,7 @@ The TS-12 calculator reads only the current published graph through the `navigat
 - `404 Not Found`: a node or published model is missing, or no compatible route exists. Never return a partial route.
 - `422 Unprocessable Entity`: a published model exists but its data is invalid for route calculation. Publication should prevent this state; this response is defensive.
 
-Error bodies contain `code` and `message`: `INVALID_ROUTE_REQUEST` for `400`, `ROUTE_NOT_FOUND` for `404`, and `INVALID_PUBLISHED_MODEL` for `422`. A foreign-site node produces `400` only when it belongs to another site's current published version; an unknown or unpublished node produces `404`.
+Error bodies contain `code` and `message`: `INVALID_ROUTE_REQUEST` for `400`, `ROUTE_NOT_FOUND` for `404` when a node or published model is missing or no route exists even without the accessibility restriction, `NO_COMPATIBLE_ROUTE` for `404` when `accessibleOnly=true` and only an unrestricted route exists (message: "No route satisfies the requested accessibility preference"; the incompatible route is never returned), and `INVALID_PUBLISHED_MODEL` for `422`. A foreign-site node produces `400` only when it belongs to another site's current published version; an unknown or unpublished node produces `404`.
 
 Example `200` response:
 

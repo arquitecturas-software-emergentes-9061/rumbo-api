@@ -2,6 +2,7 @@ package com.uitopic.rumbo.navigation.interfaces.rest;
 
 import com.uitopic.rumbo.navigation.application.internal.exceptions.RouteNotFoundException;
 import com.uitopic.rumbo.navigation.domain.exceptions.InvalidPublishedGraphException;
+import com.uitopic.rumbo.navigation.domain.exceptions.NoCompatibleRouteException;
 import com.uitopic.rumbo.navigation.domain.exceptions.RouteNodeOutsideSiteException;
 import com.uitopic.rumbo.shared.interfaces.rest.resources.ApiErrorResource;
 import org.springframework.core.Ordered;
@@ -26,6 +27,12 @@ public class PublishedRoutesExceptionHandler {
   @ExceptionHandler(RouteNotFoundException.class)
   public ResponseEntity<ApiErrorResource> notFound(RouteNotFoundException error) {
     return ResponseEntity.status(404).body(new ApiErrorResource("ROUTE_NOT_FOUND",
+        error.getMessage()));
+  }
+
+  @ExceptionHandler(NoCompatibleRouteException.class)
+  public ResponseEntity<ApiErrorResource> noCompatibleRoute(NoCompatibleRouteException error) {
+    return ResponseEntity.status(404).body(new ApiErrorResource("NO_COMPATIBLE_ROUTE",
         error.getMessage()));
   }
 

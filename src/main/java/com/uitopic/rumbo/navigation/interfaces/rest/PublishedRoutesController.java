@@ -74,7 +74,8 @@ public class PublishedRoutesController {
                      "type":"ELEVATOR","distanceMeters":5.0,"cost":10.0}]}
                   """))),
       @ApiResponse(responseCode = "400", description = "Invalid parameters or another site's node"),
-      @ApiResponse(responseCode = "404", description = "Published model, node, or route missing"),
+      @ApiResponse(responseCode = "404", description = "ROUTE_NOT_FOUND: published model, node, or route missing; "
+          + "NO_COMPATIBLE_ROUTE: no route satisfies the requested accessibility preference"),
       @ApiResponse(responseCode = "422", description = "Published model cannot be routed")
   })
   @GetMapping

@@ -2,7 +2,9 @@ package com.uitopic.rumbo.profiles.interfaces.rest;
 
 import com.uitopic.rumbo.iam.interfaces.security.AuthenticatedPrincipal;
 import com.uitopic.rumbo.profiles.application.commandhandlers.*;
+import com.uitopic.rumbo.profiles.application.queryhandlers.GetMyProfileQueryHandler;
 import com.uitopic.rumbo.profiles.domain.model.commands.*;
+import com.uitopic.rumbo.profiles.domain.model.queries.GetMyProfileQuery;
 import com.uitopic.rumbo.profiles.domain.model.valueobjects.ProfileImageFile;
 import com.uitopic.rumbo.profiles.interfaces.rest.resources.*;
 import com.uitopic.rumbo.profiles.interfaces.rest.transform.ProfileResourceAssembler;
@@ -22,15 +24,23 @@ import org.springframework.web.multipart.MultipartFile;
 @Tag(name = "Profiles", description = "Personal profile of the authenticated user")
 @SecurityRequirement(name = OpenApiConfiguration.BEARER_AUTH)
 public class ProfilesController {
+  private final GetMyProfileQueryHandler get;
   private final UpdateProfileCommandHandler update;
   private final ReplaceProfileImageCommandHandler replace;
   private final RemoveProfileImageCommandHandler remove;
 
   public ProfilesController(UpdateProfileCommandHandler update, ReplaceProfileImageCommandHandler replace,
-                            RemoveProfileImageCommandHandler remove) {
+                            RemoveProfileImageCommandHandler remove, GetMyProfileQueryHandler get) {
+    this.get = get;
     this.update = update;
     this.replace = replace;
     this.remove = remove;
+  }
+
+  @GetMapping("/me")
+  @Operation(summary = "Get the caller's profile")
+  public ProfileResponse get(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
+    return ProfileResourceAssembler.toResponse(get.handle(new GetMyProfileQuery(principal.userId())));
   }
 
   @PutMapping(value = "/me", consumes = MediaType.APPLICATION_JSON_VALUE)

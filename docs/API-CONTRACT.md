@@ -313,6 +313,17 @@ An address matching another site in the same account returns 409
 return 409 `FLOOR_NUMBER_EXISTS`. Invalid fields return 400, unauthenticated
 requests return 401, other roles return 403, and foreign or missing sites return 404.
 
+## Personal profile
+
+`GET /api/v1/profiles/me` reads the authenticated caller's stored profile. The user ID
+comes exclusively from the JWT. No request body or client-supplied user ID is required.
+
+- `200 OK`: the same `ProfileResponse` as `PUT /api/v1/profiles/me`, containing
+  `userId`, `fullName`, `role`, nullable `phoneNumber`, and nullable `imageUrl`.
+  The response never includes `storageKey`. Later sign-ins retrieve the latest saved data.
+- `401 Unauthorized`: no valid authentication token.
+- `404 Not Found`: the authenticated account has no profile; `code: "PROFILE_NOT_FOUND"`.
+
 ## Shared rules
 
 - HTTP error bodies contain `code` and `message`; IAM, Planning beacon inventory and Analytics also

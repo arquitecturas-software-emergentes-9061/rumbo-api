@@ -9,6 +9,8 @@ public class PaymentOrder {
   private final UUID id;
   private final UUID payerUserId;
   private final OrganizationRef organization;
+  private final BillingDetails billing;
+  private Instant paidAt;
   private final PlanCode planCode;
   private final Money amount;
   private PaymentOrderStatus status;
@@ -16,11 +18,14 @@ public class PaymentOrder {
   private final Instant createdAt;
   private Instant updatedAt;
 
-  public PaymentOrder(UUID id, UUID payerUserId, OrganizationRef organization, PlanCode planCode, Money amount,
-      PaymentOrderStatus status, String providerSessionId, Instant createdAt, Instant updatedAt) {
+  public PaymentOrder(UUID id, UUID payerUserId, OrganizationRef organization, BillingDetails billing, PlanCode planCode, Money amount,
+      PaymentOrderStatus status, String providerSessionId, Instant createdAt, Instant updatedAt, Instant paidAt) {
     this.id = Objects.requireNonNull(id);
     this.payerUserId = Objects.requireNonNull(payerUserId);
     this.organization = Objects.requireNonNull(organization);
+    // Historical orders may have no billing snapshot; new orders require it in create().
+    this.billing = billing;
+    this.paidAt = paidAt;
     this.planCode = Objects.requireNonNull(planCode);
     this.amount = Objects.requireNonNull(amount);
     this.status = Objects.requireNonNull(status);
@@ -28,9 +33,9 @@ public class PaymentOrder {
     this.createdAt = Objects.requireNonNull(createdAt);
     this.updatedAt = Objects.requireNonNull(updatedAt);
   }
-  public static PaymentOrder create(UUID payerUserId, OrganizationRef organization, PlanCode planCode, Money amount) {
+  public static PaymentOrder create(UUID payerUserId, OrganizationRef organization, BillingDetails billing, PlanCode planCode, Money amount) {
     Instant now = Instant.now();
-    return new PaymentOrder(UUID.randomUUID(), payerUserId, organization, planCode, amount, PaymentOrderStatus.PENDING, null, now, now);
+    return new PaymentOrder(UUID.randomUUID(), payerUserId, organization, BillingDetails.required(billing), planCode, amount, PaymentOrderStatus.PENDING, null, now, now, null);
   }
   public void attachCheckoutSession(String sessionId) {
     requirePending();
@@ -46,13 +51,15 @@ public class PaymentOrder {
   private void transition(PaymentOrderStatus next) { requirePending(); status = next; updatedAt = Instant.now(); }
   public void markFailed() { transition(PaymentOrderStatus.FAILED); }
   public void markPaid() { markPaid(Instant.now()); }
-  public void markPaid(Instant now) { if (status == PaymentOrderStatus.PENDING) { status = PaymentOrderStatus.PAID; updatedAt = now; } }
+  public void markPaid(Instant now) { if (status == PaymentOrderStatus.PENDING) { status = PaymentOrderStatus.PAID; updatedAt = Objects.requireNonNull(now); paidAt = now; } }
   public void markExpired() { markExpired(Instant.now()); }
   public void markExpired(Instant now) { if (status == PaymentOrderStatus.PENDING) { status = PaymentOrderStatus.EXPIRED; updatedAt = now; } }
   public void markCancelled() { transition(PaymentOrderStatus.CANCELLED); }
   public UUID id() { return id; }
   public UUID payerUserId() { return payerUserId; }
   public OrganizationRef organization() { return organization; }
+  public BillingDetails billing() { return billing; }
+  public Instant paidAt() { return paidAt; }
   public PlanCode planCode() { return planCode; }
   public Money amount() { return amount; }
   public PaymentOrderStatus status() { return status; }

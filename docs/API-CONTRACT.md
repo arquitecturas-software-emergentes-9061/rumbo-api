@@ -324,6 +324,105 @@ comes exclusively from the JWT. No request body or client-supplied user ID is re
 - `401 Unauthorized`: no valid authentication token.
 - `404 Not Found`: the authenticated account has no profile; `code: "PROFILE_NOT_FOUND"`.
 
+## Subscription checkout and payment orders (PR-79 v3)
+
+Both endpoints require a `CLINIC_ADMIN` JWT. The payer and contracting clinic are
+resolved from that JWT; clients cannot supply an owner or organization ID.
+
+`POST /api/v1/subscriptions/checkout-sessions`
+
+```json
+{
+  "planCode": "BASIC",
+  "billing": {
+    "legalName": "Clínica Ejemplo S.A.C.",
+    "ruc": "20491823901",
+    "fiscalAddress": "Av. Javier Prado Este 4200, Lima",
+    "billingEmail": "pagos@clinica.pe",
+    "purchaseOrder": "PO-2024-089"
+  }
+}
+```
+
+All billing strings are trimmed before validation and storage. `billing` is
+required. `legalName` requires 2–160 characters, `ruc` exactly 11 digits (no
+prefix or checksum validation), `fiscalAddress` 5–200 characters, and
+`billingEmail` a valid email address of at most 254 characters. `purchaseOrder`
+is optional, at most 40 characters; omission, null or whitespace becomes null.
+
+Invalid billing returns `400 VALIDATION_FAILED` in the existing Problem Details
+format, with `errors` keyed by `billing.legalName`, `billing.ruc`,
+`billing.fiscalAddress`, `billing.billingEmail`, or `billing.purchaseOrder`.
+A missing or null billing object uses `billing`. Validation happens before any
+order is saved or the payment gateway is called.
+
+```json
+{
+  "status": 400,
+  "code": "VALIDATION_FAILED",
+  "message": "Invalid request fields",
+  "errors": { "billing.ruc": "Must contain exactly 11 digits" }
+}
+```
+
+On success, `201 Created` includes a `Location` for the payment order:
+
+```json
+{
+  "orderId": "00000000-0000-4000-8000-000000000001",
+  "organization": { "id": "00000000-0000-4000-8000-000000000002", "name": "Clínica Ejemplo" },
+  "planCode": "BASIC",
+  "status": "PENDING",
+  "amount": 39.90,
+  "currency": "PEN",
+  "checkoutUrl": "https://checkout.stripe.com/...",
+  "billing": {
+    "legalName": "Clínica Ejemplo S.A.C.",
+    "ruc": "20491823901",
+    "fiscalAddress": "Av. Javier Prado Este 4200, Lima",
+    "billingEmail": "pagos@clinica.pe",
+    "purchaseOrder": "PO-2024-089"
+  }
+}
+```
+
+After request validation, an inactive or missing plan returns `404 PLAN_NOT_FOUND`,
+Enterprise returns `409 PLAN_REQUIRES_SALES_CONTACT`, and an administrator without
+a registered clinic returns `409 ORGANIZATION_REQUIRED`. Provider failures retain
+the existing `503 PAYMENTS_UNAVAILABLE` / `502 PAYMENT_PROVIDER_ERROR` behavior.
+
+`GET /api/v1/subscriptions/payment-orders/{orderId}` returns `200` only to the
+order's owner; foreign or missing orders return `404 PAYMENT_ORDER_NOT_FOUND`.
+Its response includes `orderId`, `organization`, `planCode`, `status`, `amount`,
+`currency`, `createdAt`, `billing` with the same five fields, and `paidAt`.
+It does not include `checkoutUrl`. `paidAt` is null until payment confirmation;
+the signed completed-payment webhook stores the confirmation instant and repeated
+events preserve it. For example, after payment:
+
+```json
+{
+  "orderId": "00000000-0000-4000-8000-000000000001",
+  "organization": { "id": "00000000-0000-4000-8000-000000000002", "name": "Clínica Ejemplo" },
+  "planCode": "BASIC",
+  "status": "PAID",
+  "amount": 39.90,
+  "currency": "PEN",
+  "createdAt": "2026-11-12T16:00:00Z",
+  "paidAt": "2026-11-12T16:05:00Z",
+  "billing": {
+    "legalName": "Clínica Ejemplo S.A.C.",
+    "ruc": "20491823901",
+    "fiscalAddress": "Av. Javier Prado Este 4200, Lima",
+    "billingEmail": "pagos@clinica.pe",
+    "purchaseOrder": null
+  }
+}
+```
+
+Billing is an immutable snapshot on the payment order. Historical orders may
+return `billing: null` and `paidAt: null`; the migration does not invent past data.
+This flow does not issue a fiscal receipt, assign fiscal numbering, or generate a PDF.
+
 ## Shared rules
 
 - HTTP error bodies contain `code` and `message`; IAM, Planning beacon inventory and Analytics also

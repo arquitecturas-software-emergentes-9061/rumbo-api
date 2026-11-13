@@ -18,6 +18,18 @@ public class PaymentOrderJpaEntity {
   private UUID organizationId;
   @Column(name = "organization_name", nullable = false, length = 160)
   private String organizationName;
+  @Column(name = "billing_legal_name", length = 160)
+  private String billingLegalName;
+  @JdbcTypeCode(SqlTypes.CHAR) @Column(name = "billing_ruc", length = 11, columnDefinition = "char(11)")
+  private String billingRuc;
+  @Column(name = "billing_fiscal_address", length = 200)
+  private String billingFiscalAddress;
+  @Column(name = "billing_email", length = 254)
+  private String billingEmail;
+  @Column(name = "billing_purchase_order", length = 40)
+  private String billingPurchaseOrder;
+  @Column(name = "paid_at")
+  private Instant paidAt;
   @Enumerated(EnumType.STRING) @Column(name = "plan_code", nullable = false, length = 30)
   private PlanCode planCode;
   @Column(nullable = false, precision = 10, scale = 2)
@@ -33,6 +45,18 @@ public class PaymentOrderJpaEntity {
   @Column(name = "updated_at")
   private Instant updatedAt;
   public UUID getId() { return id; }
+  public String getBillingLegalName() { return billingLegalName; }
+  public void setBillingLegalName(String value) { billingLegalName = value; }
+  public String getBillingRuc() { return billingRuc; }
+  public void setBillingRuc(String value) { billingRuc = value; }
+  public String getBillingFiscalAddress() { return billingFiscalAddress; }
+  public void setBillingFiscalAddress(String value) { billingFiscalAddress = value; }
+  public String getBillingEmail() { return billingEmail; }
+  public void setBillingEmail(String value) { billingEmail = value; }
+  public String getBillingPurchaseOrder() { return billingPurchaseOrder; }
+  public void setBillingPurchaseOrder(String value) { billingPurchaseOrder = value; }
+  public Instant getPaidAt() { return paidAt; }
+  public void setPaidAt(Instant value) { paidAt = value; }
   public void setId(UUID id) { this.id = id; }
   public UUID getPayerUserId() { return payerUserId; }
   public void setPayerUserId(UUID payerUserId) { this.payerUserId = payerUserId; }

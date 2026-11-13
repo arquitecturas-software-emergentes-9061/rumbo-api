@@ -28,7 +28,17 @@ public class SubscriptionsExceptionHandler {
   public ProblemDetail unavailable() { return ProblemDetails.of(HttpStatus.SERVICE_UNAVAILABLE, "PAYMENTS_UNAVAILABLE", "Payments are unavailable"); }
   @ExceptionHandler(PaymentProviderException.class)
   public ProblemDetail provider() { return ProblemDetails.of(HttpStatus.BAD_GATEWAY, "PAYMENT_PROVIDER_ERROR", "Payment provider failed"); }
-  @ExceptionHandler({MethodArgumentNotValidException.class, MethodArgumentTypeMismatchException.class})
+  @ExceptionHandler(InvalidBillingDetailsException.class)
+  public ProblemDetail invalidBilling(InvalidBillingDetailsException error) {
+    return ProblemDetails.withErrors(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "Invalid request fields", error.errors());
+  }
+  @ExceptionHandler(MethodArgumentNotValidException.class)
+  public ProblemDetail invalidFields(MethodArgumentNotValidException error) {
+    var errors = new java.util.LinkedHashMap<String, String>();
+    error.getBindingResult().getFieldErrors().forEach(field -> errors.putIfAbsent(field.getField(), field.getDefaultMessage()));
+    return ProblemDetails.withErrors(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "Invalid request fields", errors);
+  }
+  @ExceptionHandler(MethodArgumentTypeMismatchException.class)
   public ProblemDetail invalid() { return ProblemDetails.of(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "Invalid request fields"); }
   @ExceptionHandler(HttpMessageNotReadableException.class)
   public ProblemDetail malformed() { return ProblemDetails.of(HttpStatus.BAD_REQUEST, "MALFORMED_REQUEST", "Malformed request"); }

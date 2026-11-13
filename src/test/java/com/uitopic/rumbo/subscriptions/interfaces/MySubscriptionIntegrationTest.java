@@ -29,7 +29,7 @@ class MySubscriptionIntegrationTest extends CheckoutIntegrationSupport {
         new PaymentGateway.CheckoutSession("cs_test", "https://checkout.stripe.com/test"));
     String admin = clinicAdmin();
     String order = mvc.perform(post(CHECKOUT).header(HttpHeaders.AUTHORIZATION, "Bearer " + admin)
-        .contentType(MediaType.APPLICATION_JSON).content("{\"planCode\":\"BASIC\"}"))
+        .contentType(MediaType.APPLICATION_JSON).content(checkoutBody("BASIC")))
         .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
     String orderId = mapper.readTree(order).get("orderId").asText();
     String body = payload("evt_" + UUID.randomUUID(), "checkout.session.completed", orderId, true);

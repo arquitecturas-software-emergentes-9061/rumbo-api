@@ -21,6 +21,10 @@ abstract class CheckoutIntegrationSupport {
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper mapper;
   @Autowired JdbcTemplate jdbc;
+  protected String checkoutBody(String plan) throws Exception {
+    return mapper.writeValueAsString(Map.of("planCode", plan,
+      "billing", com.uitopic.rumbo.subscriptions.support.BillingFixture.fields()));
+  }
   protected String clinicAdmin() throws Exception {
     String admin = token("CLINIC_ADMIN");
     registerClinic(admin, "Checkout Clinic");

@@ -47,7 +47,7 @@ class PaymentConfirmationIntegrationTest extends CheckoutIntegrationSupport {
   }
   UUID order(String token, String plan) throws Exception {
     String response = mvc.perform(post(CHECKOUT).header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of("planCode", plan))))
+        .contentType(MediaType.APPLICATION_JSON).content(checkoutBody(plan)))
         .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
     return UUID.fromString(mapper.readTree(response).get("orderId").asText());
   }
@@ -69,11 +69,23 @@ class PaymentConfirmationIntegrationTest extends CheckoutIntegrationSupport {
     return jdbc.queryForObject("SELECT count(*) FROM subscriptions_subscriptions WHERE owner_user_id = ?", Long.class, owner(order));
   }
   @Test void signedWebhookActivatesAndDuplicatesDoNotRestartPeriod() throws Exception {
-    UUID order = order(clinicAdmin(), "BASIC");
+    String admin = clinicAdmin();
+    UUID order = order(admin, "BASIC");
     String id = eventId();
     String body = payload(id, "checkout.session.completed", order.toString(), true);
     deliver(body);
     assertThat(state(order)).isEqualTo("PAID");
+    String response = mvc.perform(get(ORDERS + order).header(HttpHeaders.AUTHORIZATION, "Bearer " + admin))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PAID"))
+      .andExpect(jsonPath("$.paidAt").exists())
+      .andExpect(jsonPath("$.billing.legalName").value("Clinic Example"))
+      .andExpect(jsonPath("$.billing.ruc").value("20491823901"))
+      .andExpect(jsonPath("$.billing.fiscalAddress").value("Av. Javier Prado 4200, Lima"))
+      .andExpect(jsonPath("$.billing.billingEmail").value("billing@example.test"))
+      .andExpect(jsonPath("$.billing.purchaseOrder").value("PO-2024-089"))
+      .andReturn().getResponse().getContentAsString();
+    var paidAt = jdbc.queryForObject("SELECT paid_at FROM subscriptions_payment_orders WHERE id = ?", java.sql.Timestamp.class, order).toInstant();
+    assertThat(java.time.Instant.parse(mapper.readTree(response).get("paidAt").asText())).isEqualTo(paidAt);
     var first = subscription(order);
     assertThat(first.get("status")).isEqualTo("ACTIVE");
     assertThat(first.get("plan_code")).isEqualTo("BASIC");
@@ -84,6 +96,7 @@ class PaymentConfirmationIntegrationTest extends CheckoutIntegrationSupport {
     deliver(body);
     deliver(payload(eventId(), "checkout.session.completed", order.toString(), true));
     assertThat(subscription(order)).isEqualTo(first);
+    assertThat(jdbc.queryForObject("SELECT paid_at FROM subscriptions_payment_orders WHERE id = ?", java.sql.Timestamp.class, order).toInstant()).isEqualTo(paidAt);
     assertThat(subscriptions(order)).isEqualTo(1);
     assertThat(jdbc.queryForObject("SELECT count(*) FROM subscriptions_processed_payment_events WHERE event_id = ?", Long.class, id)).isEqualTo(1);
     assertThat(applicationEvents.stream(SubscriptionActivatedEvent.class).count()).isEqualTo(1);

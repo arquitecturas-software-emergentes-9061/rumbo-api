@@ -15,7 +15,7 @@ class StripeCheckoutLiveIntegrationTest extends CheckoutIntegrationSupport {
     String admin = clinicAdmin();
     for (String code : new String[]{"BASIC", "PROFESSIONAL"}) {
       String body = mvc.perform(post(CHECKOUT).header(HttpHeaders.AUTHORIZATION, "Bearer " + admin)
-        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(java.util.Map.of("planCode", code))))
+        .contentType(MediaType.APPLICATION_JSON).content(checkoutBody(code)))
         .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
       var json = mapper.readTree(body);
       assertThat(json.get("checkoutUrl").asText()).startsWith("https://checkout.stripe.com/");

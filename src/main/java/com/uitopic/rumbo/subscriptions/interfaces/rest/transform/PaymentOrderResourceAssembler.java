@@ -7,9 +7,9 @@ public final class PaymentOrderResourceAssembler {
   private PaymentOrderResourceAssembler() {}
   public static CheckoutSessionResponse toResource(Result result) {
     var o = result.order();
-    return new CheckoutSessionResponse(o.id(), new OrganizationResponse(o.organization().id(), o.organization().name()), o.planCode(), o.status(), o.amount().amount(), o.amount().currency(), result.checkoutUrl());
+    return new CheckoutSessionResponse(o.id(), new OrganizationResponse(o.organization().id(), o.organization().name()), o.planCode(), o.status(), o.amount().amount(), o.amount().currency(), result.checkoutUrl(), BillingDetailsResource.from(o.billing()));
   }
   public static PaymentOrderResponse toResource(PaymentOrder o) {
-    return new PaymentOrderResponse(o.id(), new OrganizationResponse(o.organization().id(), o.organization().name()), o.planCode(), o.status(), o.amount().amount(), o.amount().currency(), o.createdAt());
+    return new PaymentOrderResponse(o.id(), new OrganizationResponse(o.organization().id(), o.organization().name()), o.planCode(), o.status(), o.amount().amount(), o.amount().currency(), o.createdAt(), BillingDetailsResource.from(o.billing()), o.paidAt());
   }
 }

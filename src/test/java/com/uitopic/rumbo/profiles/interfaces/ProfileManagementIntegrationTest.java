@@ -140,15 +140,25 @@ class ProfileManagementIntegrationTest extends ProfileManagementTestSupport {
     upload(caller, png(), "image/png").andExpect(status().isBadGateway())
         .andExpect(jsonPath("$.code").value("PROFILE_IMAGE_STORAGE_FAILED"));
   }
-  @Test void translatesServletUploadLimitWithGlobalAdvice() throws Exception {
+  @Test void translatesServletUploadLimitOnlyForProfileEndpoints() throws Exception {
     var advice = new com.uitopic.rumbo.profiles.interfaces.rest.ProfileUploadSizeExceptionHandler();
+    org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(new ProfileLimitController())
+        .setControllerAdvice(advice).build().perform(get("/api/v1/profiles/limit"))
+        .andExpect(status().isPayloadTooLarge()).andExpect(jsonPath("$.code").value("IMAGE_TOO_LARGE"));
+    // Other contexts (e.g. floor plans, 25 MiB) keep their own translation of the same servlet limit.
     org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(new LimitController())
         .setControllerAdvice(advice).build().perform(get("/limit"))
-        .andExpect(status().isPayloadTooLarge()).andExpect(jsonPath("$.code").value("IMAGE_TOO_LARGE"));
+        .andExpect(status().isPayloadTooLarge()).andExpect(jsonPath("$.code").doesNotExist());
   }
   @org.springframework.web.bind.annotation.RestController
   @org.springframework.context.annotation.Profile("upload-limit-test")
   static class LimitController {
+    @org.springframework.web.bind.annotation.GetMapping("/limit")
+    void limit() { throw new MaxUploadSizeExceededException(ProfileImageFile.MAX_SIZE_BYTES); }
+  }
+  @org.springframework.context.annotation.Profile("upload-limit-test")
+  static class ProfileLimitController extends com.uitopic.rumbo.profiles.interfaces.rest.ProfilesController {
+    ProfileLimitController() { super(null, null, null); }
     @org.springframework.web.bind.annotation.GetMapping("/limit")
     void limit() { throw new MaxUploadSizeExceededException(ProfileImageFile.MAX_SIZE_BYTES); }
   }

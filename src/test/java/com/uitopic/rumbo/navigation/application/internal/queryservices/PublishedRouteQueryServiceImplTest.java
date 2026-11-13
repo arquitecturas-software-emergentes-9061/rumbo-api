@@ -36,8 +36,8 @@ class PublishedRouteQueryServiceImplTest {
         () -> service.calculate(siteId, start.id(), goal.id(), true));
 
     assertEquals(1, repository.loads);
-    verify(calculator).calculate(graph, start.id(), goal.id(), true);
-    verify(calculator).calculate(graph, start.id(), goal.id(), false);
+    verify(calculator).calculate(graph, start.id(), goal.id(), RouteConstraints.accessibleOnly(true));
+    verify(calculator).calculate(graph, start.id(), goal.id(), RouteConstraints.NONE);
     verifyNoMoreInteractions(calculator);
   }
 
@@ -51,7 +51,7 @@ class PublishedRouteQueryServiceImplTest {
 
     assertEquals(List.of(start, goal), route.nodes());
     assertEquals(1, repository.loads);
-    verify(calculator).calculate(graph, start.id(), goal.id(), false);
+    verify(calculator).calculate(graph, start.id(), goal.id(), RouteConstraints.NONE);
     verifyNoMoreInteractions(calculator);
   }
 
@@ -64,8 +64,8 @@ class PublishedRouteQueryServiceImplTest {
     assertTrue(service.calculate(siteId, start.id(), goal.id(), true).isEmpty());
 
     assertEquals(1, repository.loads);
-    verify(calculator).calculate(graph, start.id(), goal.id(), true);
-    verify(calculator).calculate(graph, start.id(), goal.id(), false);
+    verify(calculator).calculate(graph, start.id(), goal.id(), RouteConstraints.accessibleOnly(true));
+    verify(calculator).calculate(graph, start.id(), goal.id(), RouteConstraints.NONE);
     verifyNoMoreInteractions(calculator);
   }
 
@@ -81,7 +81,7 @@ class PublishedRouteQueryServiceImplTest {
     assertEquals(PublishedSpatialGraph.Accessibility.ACCESSIBLE,
         route.legs().getFirst().accessibility());
     assertEquals(1, repository.loads);
-    verify(calculator).calculate(graph, start.id(), goal.id(), true);
+    verify(calculator).calculate(graph, start.id(), goal.id(), RouteConstraints.accessibleOnly(true));
     verifyNoMoreInteractions(calculator);
   }
 

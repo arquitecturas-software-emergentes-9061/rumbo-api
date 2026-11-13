@@ -8,6 +8,7 @@ import com.uitopic.rumbo.navigation.domain.exceptions.InvalidPublishedGraphExcep
 import com.uitopic.rumbo.navigation.domain.exceptions.NoCompatibleRouteException;
 import com.uitopic.rumbo.navigation.domain.exceptions.RouteNodeOutsideSiteException;
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.PublishedSpatialGraph;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.RouteConstraints;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -32,7 +33,7 @@ public class PublishedRouteQueryServiceImpl implements PublishedRouteQueryServic
   @Override
   @Transactional(readOnly = true)
   public Optional<CalculatedRoute> calculate(UUID siteId, UUID fromNodeId, UUID toNodeId,
-                                             boolean accessibleOnly) {
+                                             RouteConstraints constraints) {
     PublishedSpatialGraph graph;
     try {
       graph = graphs.findCurrentBySite(siteId).orElse(null);
@@ -56,10 +57,10 @@ public class PublishedRouteQueryServiceImpl implements PublishedRouteQueryServic
       return Optional.empty();
     }
     try {
-      Optional<CalculatedRoute> route =
-          calculator.calculate(graph, fromNodeId, toNodeId, accessibleOnly);
-      if (accessibleOnly && route.isEmpty()
-          && calculator.calculate(graph, fromNodeId, toNodeId, false).isPresent()) {
+      Optional<CalculatedRoute> route = calculator.calculate(graph, fromNodeId, toNodeId, constraints);
+      // A route exists but none satisfies the restrictions: the visitor must know it is the preference that blocks it.
+      if (route.isEmpty() && !RouteConstraints.NONE.equals(constraints)
+          && calculator.calculate(graph, fromNodeId, toNodeId, RouteConstraints.NONE).isPresent()) {
         throw new NoCompatibleRouteException();
       }
       return route;

@@ -10,6 +10,9 @@ import com.uitopic.rumbo.subscriptions.infrastructure.persistence.jpa.mappers.Pa
 public class PaymentOrderRepositoryImpl implements PaymentOrderRepository {
   private final SpringDataPaymentOrderRepository repository;
   public PaymentOrderRepositoryImpl(SpringDataPaymentOrderRepository repository) { this.repository = repository; }
+  public Optional<PaymentOrder> findByIdForUpdate(UUID id) {
+    return repository.findByIdForUpdate(id).map(PaymentOrderPersistenceMapper::toDomain);
+  }
   public PaymentOrder save(PaymentOrder order) {
     return PaymentOrderPersistenceMapper.toDomain(repository.save(PaymentOrderPersistenceMapper.toEntity(order)));
   }

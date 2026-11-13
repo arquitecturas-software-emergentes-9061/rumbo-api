@@ -43,8 +43,10 @@ public class PaymentOrder {
   }
   private void transition(PaymentOrderStatus next) { requirePending(); status = next; updatedAt = Instant.now(); }
   public void markFailed() { transition(PaymentOrderStatus.FAILED); }
-  public void markPaid() { transition(PaymentOrderStatus.PAID); }
-  public void markExpired() { transition(PaymentOrderStatus.EXPIRED); }
+  public void markPaid() { markPaid(Instant.now()); }
+  public void markPaid(Instant now) { if (status == PaymentOrderStatus.PENDING) { status = PaymentOrderStatus.PAID; updatedAt = now; } }
+  public void markExpired() { markExpired(Instant.now()); }
+  public void markExpired(Instant now) { if (status == PaymentOrderStatus.PENDING) { status = PaymentOrderStatus.EXPIRED; updatedAt = now; } }
   public void markCancelled() { transition(PaymentOrderStatus.CANCELLED); }
   public UUID id() { return id; }
   public UUID payerUserId() { return payerUserId; }

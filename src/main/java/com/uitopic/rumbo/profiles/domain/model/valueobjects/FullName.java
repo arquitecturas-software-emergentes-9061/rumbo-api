@@ -9,6 +9,7 @@ public record FullName(String value) {
   public static final int MAX_LENGTH = 255;
 
   public FullName {
+    if (value != null) value = value.trim();
     if (value == null || value.isBlank() || value.length() > MAX_LENGTH) {
       throw new IllegalArgumentException("fullName must contain 1 to " + MAX_LENGTH + " characters");
     }

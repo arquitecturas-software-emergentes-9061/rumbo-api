@@ -39,4 +39,15 @@ public record Profile(UUID id, UUID userId, FullName fullName, String role, Phon
   public static Profile initialize(UUID userId, String fullName, String role, Instant now) {
     return new Profile(UUID.randomUUID(), userId, new FullName(fullName), role, null, null, now, now);
   }
+  public Profile updatePersonalData(FullName name, PhoneNumber phone, Instant now) {
+    return new Profile(id, userId, name, role, phone, image, createdAt, now);
+  }
+
+  public Profile replaceImage(ProfileImage replacement, Instant now) {
+    return new Profile(id, userId, fullName, role, phoneNumber, Objects.requireNonNull(replacement), createdAt, now);
+  }
+
+  public Profile removeImage(Instant now) {
+    return new Profile(id, userId, fullName, role, phoneNumber, null, createdAt, now);
+  }
 }

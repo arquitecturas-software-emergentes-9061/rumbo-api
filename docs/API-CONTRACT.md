@@ -423,6 +423,33 @@ Billing is an immutable snapshot on the payment order. Historical orders may
 return `billing: null` and `paidAt: null`; the migration does not invent past data.
 This flow does not issue a fiscal receipt, assign fiscal numbering, or generate a PDF.
 
+## Visitor route preferences (PR-68)
+
+Both endpoints require a JWT; the user ID comes exclusively from that token.
+
+| Method and path | Request | Success |
+| --- | --- | --- |
+| GET `/api/v1/profiles/me/preferences` | No body | 200 with stored preferences |
+| PUT `/api/v1/profiles/me/preferences` | Required boolean fields `avoidStairs`, `simplerRoute`, `voiceGuidance` | 200 with saved preferences |
+
+Both responses contain the three booleans and `configured`. Defaults are provisionally
+all `false`: the design shows example states, not defaults. Initially `configured` is
+`false`; the first and every subsequent PUT records `preferences_updated_at`, so it
+becomes `true`, even when all submitted values are false. Values persist across sign-ins.
+`GET /api/v1/profiles/me` also includes `preferences` with the three booleans,
+alongside all existing profile fields.
+
+Missing or null fields return 400 `VALIDATION_FAILED` with `errors.<field>`.
+Invalid types such as `"avoidStairs":"yes"` return 400 `MALFORMED_REQUEST`.
+Invalid requests do not change the saved row. Both endpoints return 401 without
+a valid token and 404 `PROFILE_NOT_FOUND` if the caller has no profile.
+
+Only `avoidStairs` currently affects route calculation: the client sends
+`accessibleOnly=true` to `GET /api/v1/sites/{siteId}/routes`; no compatible route
+returns 404 `NO_COMPATIBLE_ROUTE` (PR-71). `simplerRoute` is stored but navigation
+does not apply it because no cost criterion exists. `voiceGuidance` controls client TTS.
+Navigation is unchanged.
+
 ## Shared rules
 
 - HTTP error bodies contain `code` and `message`; IAM, Planning beacon inventory and Analytics also

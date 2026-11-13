@@ -98,7 +98,21 @@ class PublishedRoutesControllerIntegrationTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.verticalSections.length()").value(0));
     mvc.perform(route(fixture.siteId(), fixture.startId(), fixture.goalId(), true))
-        .andExpect(status().isNotFound());
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("NO_COMPATIBLE_ROUTE"))
+        .andExpect(jsonPath("$.message")
+            .value("No route satisfies the requested accessibility preference"))
+        .andExpect(jsonPath("$.nodes").doesNotExist())
+        .andExpect(jsonPath("$.links").doesNotExist());
+  }
+
+  @Test
+  void unreachableDestinationRemainsRouteNotFoundWithAccessibilityPreference() throws Exception {
+    Fixture fixture = draft(false, ConnectionAccessibility.ACCESSIBLE, true);
+    publish(fixture);
+    mvc.perform(route(fixture.siteId(), fixture.goalId(), fixture.startId(), true))
+        .andExpect(status().isNotFound())
+        .andExpect(jsonPath("$.code").value("ROUTE_NOT_FOUND"));
   }
 
   @Test

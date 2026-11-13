@@ -1,7 +1,7 @@
 name: API CI
 on:
   push:
-    branches: [main, develop, 'feat/**', 'feature/**', 'release/**', 'hotfix/**']
+    branches: [main, develop, deploy, 'feat/**', 'feature/**', 'release/**', 'hotfix/**']
   pull_request:
     branches: [develop, main]
 jobs:

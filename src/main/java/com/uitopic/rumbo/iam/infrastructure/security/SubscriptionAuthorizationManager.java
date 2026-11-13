@@ -21,7 +21,8 @@ import java.util.function.Supplier;
  * controller has to remember it, and before the site ownership checks of each controller.
  * <ul>
  *   <li>Anonymous request: denied, so the chain answers 401 as for any protected route.</li>
- *   <li>Not an administrator: allowed here; the role rules of the controller answer 403.</li>
+ *   <li>Not an administrator, or a principal that does not come from a Rumbo token: allowed here, as
+ *   {@code authenticated()} would; the role and ownership rules of the controller still decide.</li>
  *   <li>Administrator without an active plan: {@link SubscriptionInactiveException}, answered as 403
  *   {@code SUBSCRIPTION_INACTIVE}.</li>
  *   <li>Subscriptions not deployed yet, or failing: allowed, and a failure is logged.</li>
@@ -41,11 +42,12 @@ public class SubscriptionAuthorizationManager implements AuthorizationManager<Re
   @Override
   public AuthorizationDecision check(Supplier<Authentication> authentication, RequestAuthorizationContext context) {
     Authentication caller = authentication.get();
-    if (caller == null || caller instanceof AnonymousAuthenticationToken || !caller.isAuthenticated()
-      || !(caller.getPrincipal() instanceof AuthenticatedPrincipal principal)) {
+    if (caller == null || caller instanceof AnonymousAuthenticationToken || !caller.isAuthenticated()) {
       return new AuthorizationDecision(false);
     }
-    if (!principal.isClinicAdmin()) return GRANTED;
+    if (!(caller.getPrincipal() instanceof AuthenticatedPrincipal principal) || !principal.isClinicAdmin()) {
+      return GRANTED;
+    }
     SubscriptionStatusReader reader = readers.getIfAvailable();
     if (reader == null) return GRANTED;
     Standing standing;

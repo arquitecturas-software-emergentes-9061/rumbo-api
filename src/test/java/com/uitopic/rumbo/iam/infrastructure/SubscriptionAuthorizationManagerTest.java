@@ -71,6 +71,15 @@ class SubscriptionAuthorizationManagerTest {
   }
 
   @Test
+  void principalsThatDoNotComeFromARumboTokenAreLeftToTheControllerRules() {
+    var springUser = UsernamePasswordAuthenticationToken.authenticated("admin", null,
+      List.of(new SimpleGrantedAuthority("ROLE_CLINIC_ADMIN")));
+
+    assertThat(manager(reader).check(() -> springUser, context).isGranted()).isTrue();
+    verifyNoInteractions(reader);
+  }
+
+  @Test
   void withoutSubscriptionsDeployedNothingIsRestricted() {
     assertThat(manager(null).check(() -> as(UserRole.CLINIC_ADMIN), context).isGranted()).isTrue();
   }

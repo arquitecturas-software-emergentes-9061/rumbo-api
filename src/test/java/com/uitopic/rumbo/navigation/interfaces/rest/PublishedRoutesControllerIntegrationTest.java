@@ -151,7 +151,9 @@ class PublishedRoutesControllerIntegrationTest {
     mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
         .andExpect(jsonPath("$.paths['/api/v1/sites/{siteId}/routes'].get").exists())
         .andExpect(jsonPath("$.paths['/api/v1/sites/{siteId}/routes'].get.parameters.length()")
-            .value(4))
+            .value(6))
+        .andExpect(jsonPath("$.paths['/api/v1/sites/{siteId}/routes'].get.parameters[*].name")
+            .value(org.hamcrest.Matchers.hasItems("avoidStairs", "prioritizeElevators")))
         .andExpect(jsonPath("$.components.schemas.PublishedRouteResponse.properties.verticalSections")
             .exists());
   }

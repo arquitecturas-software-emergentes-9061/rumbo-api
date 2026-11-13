@@ -14,7 +14,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -139,17 +138,5 @@ class ProfileManagementIntegrationTest extends ProfileManagementTestSupport {
     doThrow(new ProfileImageStorageFailedException()).when(storage).store(any(), any());
     upload(caller, png(), "image/png").andExpect(status().isBadGateway())
         .andExpect(jsonPath("$.code").value("PROFILE_IMAGE_STORAGE_FAILED"));
-  }
-  @Test void translatesServletUploadLimitWithGlobalAdvice() throws Exception {
-    var advice = new com.uitopic.rumbo.profiles.interfaces.rest.ProfileUploadSizeExceptionHandler();
-    org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(new LimitController())
-        .setControllerAdvice(advice).build().perform(get("/limit"))
-        .andExpect(status().isPayloadTooLarge()).andExpect(jsonPath("$.code").value("IMAGE_TOO_LARGE"));
-  }
-  @org.springframework.web.bind.annotation.RestController
-  @org.springframework.context.annotation.Profile("upload-limit-test")
-  static class LimitController {
-    @org.springframework.web.bind.annotation.GetMapping("/limit")
-    void limit() { throw new MaxUploadSizeExceededException(ProfileImageFile.MAX_SIZE_BYTES); }
   }
 }

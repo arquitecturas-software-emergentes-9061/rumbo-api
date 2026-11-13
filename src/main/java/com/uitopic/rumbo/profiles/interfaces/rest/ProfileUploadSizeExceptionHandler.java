@@ -8,7 +8,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
-@RestControllerAdvice
+@RestControllerAdvice(basePackageClasses = ProfilesController.class)
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ProfileUploadSizeExceptionHandler {
   @ExceptionHandler(MaxUploadSizeExceededException.class)

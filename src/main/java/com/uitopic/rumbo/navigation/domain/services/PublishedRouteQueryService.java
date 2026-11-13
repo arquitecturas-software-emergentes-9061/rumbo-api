@@ -17,6 +17,16 @@ public interface PublishedRouteQueryService {
     return calculate(siteId, fromNodeId, toNodeId, RouteConstraints.accessibleOnly(accessibleOnly));
   }
 
+  /**
+   * Calculates the route of an identified visitor: the requested restrictions are combined with the ones the visitor
+   * saved in Profiles and Preferences, keeping the strictest of both (TS-29). Without a visitor or saved preferences
+   * it is the same as {@link #calculate(UUID, UUID, UUID, RouteConstraints)}.
+   */
+  default Optional<CalculatedRoute> calculateForVisitor(UUID siteId, UUID fromNodeId, UUID toNodeId,
+                                                        RouteConstraints requested, UUID visitorId) {
+    return calculate(siteId, fromNodeId, toNodeId, requested);
+  }
+
   /** Calculates without an accessibility preference. */
   default Optional<CalculatedRoute> calculate(UUID siteId, UUID fromNodeId, UUID toNodeId) {
     return calculate(siteId, fromNodeId, toNodeId, false);

@@ -8,6 +8,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.uitopic.rumbo.iam.domain.model.valueobjects.UserRole;
+import com.uitopic.rumbo.iam.interfaces.security.AuthenticatedPrincipal;
 import com.uitopic.rumbo.navigation.application.internal.exceptions.RouteNotFoundException;
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.CalculatedRoute;
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.PublishedSpatialGraph;
@@ -29,26 +31,41 @@ class PublishedRoutesControllerConstraintsTest {
   @Test
   void passesEveryRestrictionToTheQueryService() {
     var expected = new RouteConstraints(true, true, true);
-    when(routes.calculate(siteId, from, to, expected)).thenReturn(Optional.of(emptyRoute()));
+    when(routes.calculateForVisitor(siteId, from, to, expected, null)).thenReturn(Optional.of(emptyRoute()));
 
-    assertEquals(200, controller.find(siteId, from, to, true, true, true).getStatusCode().value());
-    verify(routes).calculate(siteId, from, to, expected);
+    assertEquals(200, controller.find(siteId, from, to, true, true, true, null).getStatusCode().value());
+    verify(routes).calculateForVisitor(siteId, from, to, expected, null);
   }
 
   @Test
   void withoutParametersNoRestrictionIsApplied() {
-    when(routes.calculate(siteId, from, to, RouteConstraints.NONE)).thenReturn(Optional.of(emptyRoute()));
+    when(routes.calculateForVisitor(siteId, from, to, RouteConstraints.NONE, null))
+        .thenReturn(Optional.of(emptyRoute()));
 
-    controller.find(siteId, from, to, false, false, false);
+    controller.find(siteId, from, to, false, false, false, null);
 
-    verify(routes).calculate(siteId, from, to, RouteConstraints.NONE);
+    verify(routes).calculateForVisitor(siteId, from, to, RouteConstraints.NONE, null);
   }
 
   @Test
   void noCompatibleRouteAnswersRouteNotFound() {
-    when(routes.calculate(eq(siteId), eq(from), eq(to), any(RouteConstraints.class))).thenReturn(Optional.empty());
+    when(routes.calculateForVisitor(eq(siteId), eq(from), eq(to), any(RouteConstraints.class), any()))
+        .thenReturn(Optional.empty());
 
-    assertThrows(RouteNotFoundException.class, () -> controller.find(siteId, from, to, false, true, false));
+    assertThrows(RouteNotFoundException.class,
+        () -> controller.find(siteId, from, to, false, true, false, null));
+  }
+
+  @Test
+  void theCallerIsPassedAsTheVisitorWhoseSavedPreferencesApply() {
+    UUID userId = UUID.randomUUID();
+    var caller = new AuthenticatedPrincipal(userId, UserRole.PATIENT, UUID.randomUUID(), null);
+    when(routes.calculateForVisitor(siteId, from, to, RouteConstraints.NONE, userId))
+        .thenReturn(Optional.of(emptyRoute()));
+
+    controller.find(siteId, from, to, false, false, false, caller);
+
+    verify(routes).calculateForVisitor(siteId, from, to, RouteConstraints.NONE, userId);
   }
 
   private CalculatedRoute emptyRoute() {

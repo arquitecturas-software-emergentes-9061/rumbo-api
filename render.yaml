@@ -1,0 +1,56 @@
+# Demo deployment from the deploy branch. No real credentials are stored in Git.
+services:
+  - type: web
+    name: rumbo-api-demo
+    runtime: docker
+    plan: free
+    branch: deploy
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: postgres,local
+      - key: RUMBO_SERVER_ADDRESS
+        value: 0.0.0.0
+      - key: RUMBO_DB_HOST
+        fromDatabase:
+          name: rumbo-demo-db
+          property: host
+      - key: RUMBO_DB_PORT
+        fromDatabase:
+          name: rumbo-demo-db
+          property: port
+      - key: RUMBO_DB_NAME
+        fromDatabase:
+          name: rumbo-demo-db
+          property: database
+      - key: RUMBO_DB_USER
+        fromDatabase:
+          name: rumbo-demo-db
+          property: user
+      - key: RUMBO_DB_PASSWORD
+        fromDatabase:
+          name: rumbo-demo-db
+          property: password
+      - key: REDIS_HOST
+        fromService:
+          type: keyvalue
+          name: rumbo-demo-redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: keyvalue
+          name: rumbo-demo-redis
+          property: port
+      - key: JWT_SECRET
+        generateValue: true
+  - type: keyvalue
+    name: rumbo-demo-redis
+    plan: free
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+databases:
+  - name: rumbo-demo-db
+    plan: free
+    postgresMajorVersion: "17"
+    ipAllowList: []

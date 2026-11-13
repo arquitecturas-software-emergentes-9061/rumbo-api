@@ -187,6 +187,7 @@ class PublishedRoutesControllerIntegrationTest {
                         boolean oneWay) {
     UUID siteId = UUID.randomUUID();
     IndoorMap map = new IndoorMap(UUID.randomUUID(), siteId, UUID.randomUUID());
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.enterpriseSite(jdbc, map.siteId());
     UUID floor = UUID.randomUUID();
     UUID plan = UUID.randomUUID();
     map.addPlan(new PlanCoordinateSpace(floor, plan, 100, 100));
@@ -211,6 +212,7 @@ class PublishedRoutesControllerIntegrationTest {
   private Fixture gridDraft(int columns, int rows) {
     UUID siteId = UUID.randomUUID();
     IndoorMap map = new IndoorMap(UUID.randomUUID(), siteId, UUID.randomUUID());
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.enterpriseSite(jdbc, map.siteId());
     UUID floorId = UUID.randomUUID();
     UUID planVersionId = UUID.randomUUID();
     map.addPlan(new PlanCoordinateSpace(floorId, planVersionId, columns, rows));

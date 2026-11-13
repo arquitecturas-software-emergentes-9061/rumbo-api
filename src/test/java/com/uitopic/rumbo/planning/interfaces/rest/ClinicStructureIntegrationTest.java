@@ -40,6 +40,7 @@ class ClinicStructureIntegrationTest {
   @Test
   void preservesLegacySiteAndPersistsClinicAddressAndFloors() throws Exception {
     String owner = token("CLINIC_ADMIN");
+    subscribe(owner, "ENTERPRISE", false);
     String site = createSite(owner, "{\"name\":\"Sede original\"}");
     mvc.perform(as(owner, get(CLINIC))).andExpect(status().isNotFound());
     String clinic = id(mvc.perform(as(owner, put(CLINIC)).contentType(MediaType.APPLICATION_JSON).content(PROFILE))
@@ -64,6 +65,7 @@ class ClinicStructureIntegrationTest {
   @Test
   void warnsOnMatchingAddressesAndHonorsExplicitAcknowledgement() throws Exception {
     String owner = token("CLINIC_ADMIN");
+    subscribe(owner, "ENTERPRISE", false);
     createSite(owner, "{\"name\":\"Primera\",\"address\":\"Av. Central 500\"}");
     mvc.perform(as(owner, post(SITES)).contentType(MediaType.APPLICATION_JSON)
         .content("{\"name\":\"Segunda\",\"address\":\" av.   CENTRAL 500 \"}"))
@@ -77,6 +79,7 @@ class ClinicStructureIntegrationTest {
     String owner = token("CLINIC_ADMIN");
     String other = token("CLINIC_ADMIN");
     String patient = token("PATIENT");
+    subscribe(owner, "ENTERPRISE", false);
     String site = createSite(owner, "{\"name\":\"Sede privada\"}");
     String floors = SITES + "/" + site + "/floors";
     mvc.perform(get(floors)).andExpect(status().isUnauthorized());
@@ -97,6 +100,78 @@ class ClinicStructureIntegrationTest {
     mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
         .andExpect(jsonPath("$.paths['/api/v1/clinics/me'].put.security[0].bearerAuth").isArray())
         .andExpect(jsonPath("$.paths['/api/v1/sites/{siteId}/floors'].post.security[0].bearerAuth").isArray());
+  }
+
+  @Test
+  void basicQuotaStopsTheSecondSiteAndFourthFloor() throws Exception {
+    String owner = token("CLINIC_ADMIN");
+    subscribe(owner, "BASIC", false);
+    String site = createSite(owner, "{\"name\":\"Sede principal\"}");
+    mvc.perform(as(owner, post(SITES)).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Segunda sede\"}"))
+      .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PLAN_QUOTA_EXCEEDED"))
+      .andExpect(jsonPath("$.limit").value(1));
+    mvc.perform(as(owner, get(SITES))).andExpect(jsonPath("$.length()").value(1));
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM indoor_sites WHERE owner_user_id = ?",
+        Integer.class, com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.ownerOf(owner))).isEqualTo(1);
+    String floors = SITES + "/" + site + "/floors";
+    for (int number = 1; number <= 4; number++) {
+      var response = mvc.perform(as(owner, post(floors)).contentType(MediaType.APPLICATION_JSON)
+        .content(json.writeValueAsString(Map.of("number", number, "name", "Piso " + number))));
+      if (number <= 3) response.andExpect(status().isCreated());
+      else response.andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PLAN_QUOTA_EXCEEDED"))
+          .andExpect(jsonPath("$.limit").value(3));
+    }
+    mvc.perform(as(owner, get(floors))).andExpect(jsonPath("$.length()").value(3));
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM planning_floors WHERE site_id = ?",
+        Integer.class, UUID.fromString(site))).isEqualTo(3);
+  }
+
+  @Test
+  void missingAndExpiredSubscriptionsCannotCreateSites() throws Exception {
+    String owner = token("CLINIC_ADMIN");
+    for (boolean expired : new boolean[] {false, true}) {
+      if (expired) subscribe(owner, "BASIC", true);
+      mvc.perform(as(owner, post(SITES)).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Sede\"}"))
+        .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("SUBSCRIPTION_REQUIRED"));
+      mvc.perform(as(owner, get(SITES))).andExpect(jsonPath("$.length()").value(0));
+      assertThat(jdbc.queryForObject("SELECT count(*) FROM indoor_sites WHERE owner_user_id = ?",
+          Integer.class, com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.ownerOf(owner))).isZero();
+    }
+  }
+
+  @Test
+  void missingExpiredAndCancelledSubscriptionsCannotCreateFloors() throws Exception {
+    String owner = token("CLINIC_ADMIN");
+    subscribe(owner, "ENTERPRISE", false);
+    String site = createSite(owner, "{\"name\":\"Existing site\"}");
+    UUID ownerId = com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.ownerOf(owner);
+    jdbc.update("DELETE FROM subscriptions_subscriptions WHERE owner_user_id = ?", ownerId);
+    for (String state : new String[] {"MISSING", "EXPIRED", "CANCELLED"}) {
+      if (!state.equals("MISSING")) {
+        subscribe(owner, "BASIC", state.equals("EXPIRED"));
+        if (state.equals("CANCELLED")) jdbc.update(
+            "UPDATE subscriptions_subscriptions SET status = 'CANCELLED' WHERE owner_user_id = ?", ownerId);
+      }
+      mvc.perform(as(owner, post(SITES + "/" + site + "/floors")).contentType(MediaType.APPLICATION_JSON).content(FLOOR))
+          .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("SUBSCRIPTION_REQUIRED"));
+      assertThat(jdbc.queryForObject("SELECT count(*) FROM planning_floors WHERE site_id = ?",
+          Integer.class, UUID.fromString(site))).isZero();
+    }
+  }
+
+  @Test
+  void professionalAllowsASecondSite() throws Exception {
+    String owner = token("CLINIC_ADMIN");
+    subscribe(owner, "PROFESSIONAL", false);
+    createSite(owner, "{\"name\":\"First site\"}");
+    createSite(owner, "{\"name\":\"Second site\"}");
+    assertThat(jdbc.queryForObject("SELECT count(*) FROM indoor_sites WHERE owner_user_id = ?",
+        Integer.class, com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.ownerOf(owner))).isEqualTo(2);
+  }
+
+  private void subscribe(String token, String plan, boolean expired) {
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.subscription(jdbc,
+        com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.ownerOf(token), plan, expired);
   }
 
   private String createSite(String token, String body) throws Exception {

@@ -28,7 +28,7 @@ public class GetMySubscriptionQueryHandler {
     var plan = plans.findByCode(subscription.planCode()).orElseThrow(PlanNotFoundException::new);
     var now = clock.instant();
     var status = subscription.status();
-    if (status == SubscriptionStatus.ACTIVE && subscription.currentPeriodEnd().isBefore(now))
+    if (status == SubscriptionStatus.ACTIVE && !subscription.isActiveAt(now))
       status = SubscriptionStatus.EXPIRED;
     return new SubscriptionView(status, plan, subscription.currentPeriodStart(), subscription.currentPeriodEnd(),
         Math.max(0, Duration.between(now, subscription.currentPeriodEnd()).toDays()));

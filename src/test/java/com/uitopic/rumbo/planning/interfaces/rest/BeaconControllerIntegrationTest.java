@@ -47,6 +47,7 @@ class BeaconControllerIntegrationTest {
         INSERT INTO identity_users (id, email, password_hash, role, status, created_at, updated_at)
         VALUES (?, ?, ?, 'CLINIC_ADMIN', 'ACTIVE', now(), now())
         """, user, "beacons-" + user + "@example.com", "test-only-not-a-real-password-hash");
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.activeEnterprise(jdbc, user);
     String payload = mvc.perform(post("/api/v1/sites").with(caller(user, UserRole.CLINIC_ADMIN))
         .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Centro Medico\"}"))
       .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
@@ -63,6 +64,53 @@ class BeaconControllerIntegrationTest {
         (plan_version_id, model_version_id, floor_id, width_units, height_units)
         VALUES (?, ?, ?, 100, 100)
         """, UUID.randomUUID(), modelVersionId, floorId);
+    }
+  }
+
+  @Test void basicRejectsTheSixteenthBeaconWithoutInsertingIt() throws Exception {
+    UUID owner = UUID.randomUUID(), siteId = site(owner), floor = UUID.randomUUID();
+    draft(siteId, floor);
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.subscription(jdbc, owner, "BASIC", false);
+    for (int number = 1; number <= 16; number++) {
+      var result = mvc.perform(post("/api/v1/sites/" + siteId + "/beacons")
+          .with(caller(owner, UserRole.CLINIC_ADMIN)).contentType(MediaType.APPLICATION_JSON)
+          .content(json.writeValueAsString(java.util.Map.of("identifier", "quota-beacon-" + number,
+              "floorId", floor, "x", 1, "y", 2))));
+      if (number <= 15) result.andExpect(status().isCreated());
+      else result.andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PLAN_QUOTA_EXCEEDED"))
+          .andExpect(jsonPath("$.limit").value(15));
+    }
+    org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject(
+        "SELECT count(*) FROM positioning_beacons WHERE site_id = ?", Integer.class, siteId)).isEqualTo(15);
+  }
+
+  @Test void enterpriseAllowsMoreThanFiftyBeacons() throws Exception {
+    UUID owner = UUID.randomUUID(), siteId = site(owner), floor = UUID.randomUUID();
+    draft(siteId, floor);
+    for (int number = 1; number <= 51; number++) {
+      mvc.perform(post("/api/v1/sites/" + siteId + "/beacons")
+          .with(caller(owner, UserRole.CLINIC_ADMIN)).contentType(MediaType.APPLICATION_JSON)
+          .content(json.writeValueAsString(java.util.Map.of("identifier", "enterprise-beacon-" + number,
+              "floorId", floor, "x", 1, "y", 2))))
+          .andExpect(status().isCreated());
+    }
+    org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject(
+        "SELECT count(*) FROM positioning_beacons WHERE site_id = ?", Integer.class, siteId)).isEqualTo(51);
+  }
+
+  @Test void missingAndExpiredSubscriptionsRejectBeaconsWithoutInserting() throws Exception {
+    UUID owner = UUID.randomUUID(), siteId = site(owner), floor = UUID.randomUUID();
+    draft(siteId, floor);
+    jdbc.update("DELETE FROM subscriptions_subscriptions WHERE owner_user_id = ?", owner);
+    for (boolean expired : new boolean[] {false, true}) {
+      if (expired) com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.subscription(jdbc, owner, "BASIC", true);
+      mvc.perform(post("/api/v1/sites/" + siteId + "/beacons")
+          .with(caller(owner, UserRole.CLINIC_ADMIN)).contentType(MediaType.APPLICATION_JSON)
+          .content(json.writeValueAsString(java.util.Map.of("identifier", "rejected-beacon",
+              "floorId", floor, "x", 1, "y", 2))))
+          .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("SUBSCRIPTION_REQUIRED"));
+      org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject(
+          "SELECT count(*) FROM positioning_beacons WHERE site_id = ?", Integer.class, siteId)).isZero();
     }
   }
 

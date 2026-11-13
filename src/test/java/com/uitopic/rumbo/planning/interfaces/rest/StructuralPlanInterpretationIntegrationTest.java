@@ -209,6 +209,8 @@ class StructuralPlanInterpretationIntegrationTest {
 
   private Plan plan(String name, String mime, byte[] bytes) throws Exception {
     String token = token();
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.activeEnterprise(jdbc,
+        com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.ownerOf(token));
     String siteBody = mvc.perform(post("/api/v1/sites").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
         .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Mapper Test Site\"}"))
       .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();

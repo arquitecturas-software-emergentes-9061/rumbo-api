@@ -180,6 +180,7 @@ class IndoorMapsControllerIntegrationTest {
 
   private IndoorMap draft(UUID siteId, UUID mapId, UUID versionId, boolean connected) {
     IndoorMap map = new IndoorMap(mapId, siteId, versionId);
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.enterpriseSite(jdbc, map.siteId());
     UUID floorId = UUID.randomUUID();
     UUID planVersionId = UUID.randomUUID();
     PlanCoordinateSpace space = new PlanCoordinateSpace(floorId, planVersionId, 100, 100);

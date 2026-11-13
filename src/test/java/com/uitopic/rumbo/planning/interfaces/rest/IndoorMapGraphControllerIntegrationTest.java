@@ -60,6 +60,7 @@ class IndoorMapGraphControllerIntegrationTest {
   }
 
   @Autowired MockMvc mvc;
+  @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
   @Autowired IndoorMapRepository store;
   @Autowired ObjectMapper json;
   @MockitoBean SiteOwnerGuard siteOwnerGuard;
@@ -430,6 +431,7 @@ class IndoorMapGraphControllerIntegrationTest {
   private IndoorMap draft() {
     UUID versionId = UUID.randomUUID();
     IndoorMap map = new IndoorMap(UUID.randomUUID(), UUID.randomUUID(), versionId);
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.enterpriseSite(jdbc, map.siteId());
     UUID floorId = UUID.randomUUID();
     UUID planVersionId = UUID.randomUUID();
     PlanCoordinateSpace space = new PlanCoordinateSpace(floorId, planVersionId, 100, 100);

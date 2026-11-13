@@ -205,6 +205,7 @@ class MapVersionLifecycleIntegrationTest {
     UUID floorId = UUID.randomUUID();
     UUID planId = UUID.randomUUID();
     IndoorMap map = new IndoorMap(mapId, siteId, versionId);
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.enterpriseSite(jdbc, map.siteId());
     map.addPlan(new PlanCoordinateSpace(floorId, planId, 20, 20));
     map.setScale(new MapScale(floorId, planId, 0.5));
     UUID accessId = UUID.randomUUID();

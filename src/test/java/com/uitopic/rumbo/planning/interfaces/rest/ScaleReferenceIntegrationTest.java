@@ -44,6 +44,7 @@ class ScaleReferenceIntegrationTest {
       VALUES (?, ?, ?, 'CLINIC_ADMIN', 'ACTIVE', now(), now())
       """, id, "calibration-" + id + "@example.com", "test-only");
     jdbc.update("INSERT INTO indoor_sites (id,owner_user_id,name) VALUES (?,?,?)",site,id,"Test Clinic");
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.activeEnterprise(jdbc, id);
     return site;
   }
   private void draft(UUID siteId, UUID floorId, UUID planVersionId) {

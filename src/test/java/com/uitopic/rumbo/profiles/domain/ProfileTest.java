@@ -46,4 +46,26 @@ class ProfileTest {
   void rejectsUnknownRole() {
     assertThatIllegalArgumentException().isThrownBy(() -> Profile.initialize(UUID.randomUUID(), "Ana", "GUEST", NOW));
   }
+  @Test
+  void immutableChangesPreserveIdentityAndCreationTime() {
+    Profile original = Profile.initialize(UUID.randomUUID(), "Ana", "PATIENT", NOW);
+    Instant later = NOW.plusSeconds(10);
+    var name = new com.uitopic.rumbo.profiles.domain.model.valueobjects.FullName("  Maria  ");
+    var phone = new com.uitopic.rumbo.profiles.domain.model.valueobjects.PhoneNumber("+51 123456");
+    var image = new com.uitopic.rumbo.profiles.domain.model.valueobjects.ProfileImage("https://example.com/image", "key");
+    Profile updated = original.updatePersonalData(name, phone, later);
+    Profile replaced = updated.replaceImage(image, later);
+    Profile removed = replaced.removeImage(later);
+    for (Profile changed : java.util.List.of(updated, replaced, removed)) {
+      assertThat(changed.id()).isEqualTo(original.id());
+      assertThat(changed.userId()).isEqualTo(original.userId());
+      assertThat(changed.createdAt()).isEqualTo(NOW);
+      assertThat(changed.updatedAt()).isEqualTo(later);
+    }
+    assertThat(updated.fullName().value()).isEqualTo("Maria");
+    assertThat(updated.phoneNumber()).isEqualTo(phone);
+    assertThat(replaced.image()).isEqualTo(image);
+    assertThat(removed.image()).isNull();
+    assertThat(original.image()).isNull();
+  }
 }

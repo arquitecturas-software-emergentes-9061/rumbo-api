@@ -484,6 +484,27 @@ The provisional WA14/WA14B defaults require team confirmation: BASIC has 1 site,
 3 floors and 15 beacons; PROFESSIONAL has 3 sites, 10 floors and 50 beacons;
 ENTERPRISE has unlimited resources.
 
+## Subscription usage (PR-94)
+
+`GET /api/v1/subscriptions/me` includes `usage` for the authenticated owner,
+alongside `plan.quota`, the effective status and the current period:
+
+```json
+"usage": {
+  "sites": {"used": 1, "limit": 1},
+  "floors": {"used": 2, "limit": 3},
+  "beacons": {"used": 4, "limit": 15}
+}
+```
+
+Counters include all of that owner's sites, floors and beacons across sites;
+another owner's resources are excluded. An owner without a clinic has zero usage.
+Each `limit` comes from the subscription plan's configured quota; JSON `null`
+means unlimited, including all three limits for ENTERPRISE. Usage remains present
+when the effective status is `EXPIRED`, so clients can still display consumption
+in restricted mode. These are current stored counts, not a historical snapshot.
+`GET /api/v1/subscriptions/plans` continues to include `quota` for each plan.
+
 ## Registration quotas (PR-93)
 
 Site, floor and beacon registrations count the authenticated owner's total usage

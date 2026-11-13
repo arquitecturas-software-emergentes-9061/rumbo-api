@@ -1,6 +1,7 @@
 package com.uitopic.rumbo.subscriptions.application;
 
 import com.uitopic.rumbo.subscriptions.application.queryhandlers.*;
+import com.uitopic.rumbo.subscriptions.application.ports.*;
 import com.uitopic.rumbo.subscriptions.domain.exceptions.SubscriptionNotFoundException;
 import com.uitopic.rumbo.subscriptions.domain.model.aggregates.*;
 import com.uitopic.rumbo.subscriptions.domain.model.queries.GetMySubscriptionQuery;
@@ -18,8 +19,10 @@ class GetMySubscriptionQueryHandlerTest {
   private final UUID owner = UUID.randomUUID();
   private final SubscriptionRepository subscriptions = mock(SubscriptionRepository.class);
   private final PlanRepository plans = mock(PlanRepository.class);
+  private final PlanQuotaCatalog quotas = code -> new PlanQuota(1, 3, 15);
+  private final ResourceUsageDirectory usage = mock(ResourceUsageDirectory.class);
   private final GetMySubscriptionQueryHandler handler = new GetMySubscriptionQueryHandler(
-      subscriptions, plans, Clock.fixed(NOW, ZoneOffset.UTC));
+      subscriptions, plans, Clock.fixed(NOW, ZoneOffset.UTC), quotas, usage);
   private final Plan plan = new Plan(UUID.randomUUID(), PlanCode.BASIC, "Básico",
       new Money(new BigDecimal("39.90"), "PEN"), BillingInterval.MONTH, PurchaseMode.CHECKOUT, 1, false);
 
@@ -29,6 +32,7 @@ class GetMySubscriptionQueryHandlerTest {
         start, end, "sub_private", start, start);
     when(subscriptions.findByOwnerUserId(owner)).thenReturn(Optional.of(subscription));
     when(plans.findByCode(PlanCode.BASIC)).thenReturn(Optional.of(plan));
+    when(usage.usageOf(owner)).thenReturn(new ResourceUsageDirectory.ResourceUsage(1, 2, 4));
     return subscription;
   }
 
@@ -40,6 +44,9 @@ class GetMySubscriptionQueryHandlerTest {
     assertThat(view.currentPeriodStart()).isEqualTo(subscription.currentPeriodStart());
     assertThat(view.currentPeriodEnd()).isEqualTo(subscription.currentPeriodEnd());
     assertThat(view.daysRemaining()).isEqualTo(30);
+    assertThat(view.quota()).isEqualTo(new PlanQuota(1, 3, 15));
+    assertThat(view.usage()).isEqualTo(new UsageView(new UsageView.ResourceUsageView(1, 1),
+        new UsageView.ResourceUsageView(2, 3), new UsageView.ResourceUsageView(4, 15)));
     verify(subscriptions, never()).save(any());
   }
 
@@ -48,6 +55,7 @@ class GetMySubscriptionQueryHandlerTest {
     var view = handler.handle(new GetMySubscriptionQuery(owner));
     assertThat(view.status()).isEqualTo(SubscriptionStatus.EXPIRED);
     assertThat(view.daysRemaining()).isZero();
+    assertThat(view.usage().beacons()).isEqualTo(new UsageView.ResourceUsageView(4, 15));
     assertThat(subscription.status()).isEqualTo(SubscriptionStatus.ACTIVE);
     verify(subscriptions, never()).save(any());
   }

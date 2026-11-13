@@ -3,6 +3,8 @@ package com.uitopic.rumbo.analytics.infrastructure;
 import com.uitopic.rumbo.TestcontainersConfiguration;
 import com.uitopic.rumbo.analytics.domain.model.valueobjects.DateRange;
 import com.uitopic.rumbo.analytics.domain.model.valueobjects.DestinationUsage;
+import com.uitopic.rumbo.analytics.domain.model.valueobjects.HeatmapCell;
+import com.uitopic.rumbo.analytics.domain.model.valueobjects.NavigationHeatmap;
 import com.uitopic.rumbo.analytics.domain.model.valueobjects.NavigationMetrics;
 import com.uitopic.rumbo.analytics.infrastructure.persistence.jdbc.JdbcNavigationMetricsReader;
 import org.junit.jupiter.api.Test;
@@ -130,6 +132,57 @@ class JdbcNavigationMetricsReaderIntegrationTest {
     event(siteId, UUID.randomUUID(), "DEVIATION_DETECTED", 10, "{}");
     assertThat(reader.summarize(siteId, PERIOD)).isSameAs(NavigationMetrics.EMPTY);
     assertThat(reader.summarize(siteId, new DateRange(FROM, FROM))).isSameAs(NavigationMetrics.EMPTY);
+  }
+
+  @Test
+  void ranksLocatedEventsAndCountsUnlocatedEventsInTheRequestedSiteAndPeriod() {
+    UUID firstFloor = UUID.randomUUID();
+    UUID secondFloor = UUID.randomUUID();
+    heatmapEvent(siteId, firstFloor, "a", "DEVIATION_DETECTED", 0);
+    heatmapEvent(siteId, firstFloor, "a", "DEVIATION_DETECTED", 1);
+    heatmapEvent(siteId, firstFloor, "a", "ROUTE_RECALCULATED", 2);
+    heatmapEvent(siteId, secondFloor, "a", "ROUTE_RECALCULATED", 3);
+    heatmapEvent(siteId, null, "a", "DEVIATION_DETECTED", 4);
+    heatmapEvent(siteId, firstFloor, null, "ROUTE_RECALCULATED", 5);
+    heatmapEvent(siteId, firstFloor, "ignored", "NAVIGATION_STARTED", 6);
+    heatmapEvent(siteId, firstFloor, "ignored", "NAVIGATION_FINISHED", 7);
+    heatmapEvent(siteId, firstFloor, "ignored", "DEVIATION_DETECTED", 3600);
+    heatmapEvent(UUID.randomUUID(), firstFloor, "ignored", "DEVIATION_DETECTED", 0);
+
+    var result = reader.heatmap(siteId, PERIOD);
+
+    assertThat(result.cells()).containsExactly(new HeatmapCell(firstFloor, "a", 2, 1),
+      new HeatmapCell(secondFloor, "a", 0, 1));
+    assertThat(result.discardedEvents()).isEqualTo(2);
+    assertThat(reader.heatmap(UUID.randomUUID(), PERIOD)).isSameAs(NavigationHeatmap.EMPTY);
+  }
+
+  @Test
+  void keepsTheHighestRankedCellsWhenTheLimitIsExceeded() {
+    UUID floor = UUID.randomUUID();
+    jdbc.update("""
+      INSERT INTO navigation_events
+        (id, navigation_session_id, site_id, floor_id, node_reference, event_type, occurred_at, received_at, metadata)
+      SELECT gen_random_uuid(), gen_random_uuid(), ?, ?, lpad(node::text, 3, '0'),
+        'DEVIATION_DETECTED', ?, ?, '{}'::jsonb
+      FROM generate_series(1, 501) AS series(node)
+      """, siteId, floor, Timestamp.from(FROM), Timestamp.from(FROM));
+    heatmapEvent(siteId, floor, "501", "DEVIATION_DETECTED", 1);
+
+    var cells = reader.heatmap(siteId, PERIOD).cells();
+
+    assertThat(cells).hasSize(500);
+    assertThat(cells.getFirst()).isEqualTo(new HeatmapCell(floor, "501", 2, 0));
+    assertThat(cells.getLast().nodeReference()).isEqualTo("499");
+  }
+
+  private void heatmapEvent(UUID site, UUID floor, String node, String type, long seconds) {
+    Timestamp timestamp = Timestamp.from(FROM.plusSeconds(seconds));
+    jdbc.update("""
+      INSERT INTO navigation_events
+        (id, navigation_session_id, site_id, floor_id, node_reference, event_type, occurred_at, received_at, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}'::jsonb)
+      """, UUID.randomUUID(), UUID.randomUUID(), site, floor, node, type, timestamp, timestamp);
   }
 
   private UUID start(String destination, long seconds) {

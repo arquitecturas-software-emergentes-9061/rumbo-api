@@ -3,12 +3,15 @@ package com.uitopic.rumbo.analytics.infrastructure.persistence.jdbc;
 import com.uitopic.rumbo.analytics.application.ports.NavigationMetricsReader;
 import com.uitopic.rumbo.analytics.domain.model.valueobjects.DateRange;
 import com.uitopic.rumbo.analytics.domain.model.valueobjects.DestinationUsage;
+import com.uitopic.rumbo.analytics.domain.model.valueobjects.HeatmapCell;
+import com.uitopic.rumbo.analytics.domain.model.valueobjects.NavigationHeatmap;
 import com.uitopic.rumbo.analytics.domain.model.valueobjects.NavigationMetrics;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -54,10 +57,52 @@ public class JdbcNavigationMetricsReader implements NavigationMetricsReader {
     LIMIT :limit
     """;
 
+  private static final String HEATMAP = """
+    WITH events AS (
+      SELECT floor_id, node_reference, event_type FROM navigation_events
+      WHERE site_id = :siteId AND occurred_at >= :from AND occurred_at < :to
+        AND event_type IN ('DEVIATION_DETECTED', 'ROUTE_RECALCULATED')
+    ), cells AS (
+      SELECT floor_id, node_reference,
+        count(*) FILTER (WHERE event_type = 'DEVIATION_DETECTED') AS deviations,
+        count(*) FILTER (WHERE event_type = 'ROUTE_RECALCULATED') AS recalculations
+      FROM events
+      WHERE floor_id IS NOT NULL AND node_reference IS NOT NULL
+      GROUP BY floor_id, node_reference
+      ORDER BY deviations DESC, recalculations DESC, floor_id, node_reference
+      LIMIT :limit
+    ), discarded AS (
+      SELECT count(*) AS total FROM events WHERE floor_id IS NULL OR node_reference IS NULL
+    )
+    SELECT cells.*, discarded.total FROM discarded LEFT JOIN cells ON true
+    ORDER BY deviations DESC, recalculations DESC, floor_id, node_reference
+    """;
+
   private final NamedParameterJdbcTemplate jdbc;
 
   public JdbcNavigationMetricsReader(NamedParameterJdbcTemplate jdbc) {
     this.jdbc = jdbc;
+  }
+
+  @Override
+  public NavigationHeatmap heatmap(UUID siteId, DateRange period) {
+    var parameters = new MapSqlParameterSource("siteId", siteId)
+      .addValue("from", Timestamp.from(period.from()))
+      .addValue("to", Timestamp.from(period.to()))
+      .addValue("limit", HEATMAP_MAX_CELLS);
+    return jdbc.query(HEATMAP, parameters, rs -> {
+      var cells = new ArrayList<HeatmapCell>();
+      long discarded = 0;
+      while (rs.next()) {
+        discarded = rs.getLong("total");
+        UUID floorId = rs.getObject("floor_id", UUID.class);
+        if (floorId != null) {
+          cells.add(new HeatmapCell(floorId, rs.getString("node_reference"),
+            rs.getLong("deviations"), rs.getLong("recalculations")));
+        }
+      }
+      return cells.isEmpty() && discarded == 0 ? NavigationHeatmap.EMPTY : new NavigationHeatmap(cells, discarded);
+    });
   }
 
   @Override

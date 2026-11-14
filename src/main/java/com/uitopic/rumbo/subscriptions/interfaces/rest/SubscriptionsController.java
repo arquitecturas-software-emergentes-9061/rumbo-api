@@ -1,7 +1,6 @@
 package com.uitopic.rumbo.subscriptions.interfaces.rest;
 
 import com.uitopic.rumbo.iam.interfaces.security.AuthenticatedPrincipal;
-import com.uitopic.rumbo.subscriptions.application.ports.PlanQuotaCatalog;
 import com.uitopic.rumbo.subscriptions.application.queryhandlers.GetMySubscriptionQueryHandler;
 import com.uitopic.rumbo.subscriptions.domain.model.queries.GetMySubscriptionQuery;
 import com.uitopic.rumbo.subscriptions.interfaces.rest.resources.MySubscriptionResponse;
@@ -16,16 +15,13 @@ import org.springframework.web.bind.annotation.*;
 public class SubscriptionsController {
   private final GetMySubscriptionQueryHandler handler;
 
-  private final PlanQuotaCatalog quotas;
-
-  public SubscriptionsController(GetMySubscriptionQueryHandler handler, PlanQuotaCatalog quotas) {
+  public SubscriptionsController(GetMySubscriptionQueryHandler handler) {
     this.handler = handler;
-    this.quotas = quotas;
   }
 
   @GetMapping("/me")
   public MySubscriptionResponse get(@AuthenticationPrincipal AuthenticatedPrincipal principal) {
     var view = handler.handle(new GetMySubscriptionQuery(principal.userId()));
-    return MySubscriptionResourceAssembler.toResource(view, quotas.quotaFor(view.plan().code()));
+    return MySubscriptionResourceAssembler.toResource(view);
   }
 }

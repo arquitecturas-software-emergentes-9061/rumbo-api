@@ -465,6 +465,15 @@ Navigation is unchanged.
 - Clients pass node identifiers, not destination display names, when requesting routes.
 - `demo` fixtures are not a production data source.
 
+### Internal payment receipt
+
+The payment order response includes a nullable receipt. A paid order with a recorded
+payment timestamp returns the receipt number (RA- followed by the order UUID) and
+issuedAt (the recorded payment timestamp). The order supplies billing, plan, amount
+and currency. The number is stable across repeat requests and webhook retries.
+Unpaid orders and historical orders without a payment timestamp return a null receipt.
+This receipt is an internal payment record and has no fiscal validity.
+
 ## Plan quotas (PR-91)
 
 The plan catalog includes quota and the current subscription includes plan.quota.
@@ -488,3 +497,4 @@ matching the current subscription query; instants after it are expired.
 An exhausted quota returns HTTP 409 with code `PLAN_QUOTA_EXCEEDED`, integer
 `limit` and message `Your plan allows at most N sites` (or `floors` / `beacons`).
 Rejected registrations insert no row. Reads, edits and deletions retain their behavior.
+An empty property and its JSON null represent an unlimited resource.

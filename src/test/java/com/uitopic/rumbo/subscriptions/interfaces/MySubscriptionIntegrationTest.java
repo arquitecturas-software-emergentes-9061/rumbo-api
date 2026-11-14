@@ -51,7 +51,10 @@ class MySubscriptionIntegrationTest extends CheckoutIntegrationSupport {
         .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
     var json = mapper.readTree(response);
     assertThat(json.size()).isEqualTo(5);
-    assertThat(json.get("plan").size()).isEqualTo(4);
+    assertThat(json.get("plan").size()).isEqualTo(5);
+    assertThat(json.at("/plan/quota/sites").asInt()).isEqualTo(1);
+    assertThat(json.at("/plan/quota/floors").asInt()).isEqualTo(3);
+    assertThat(json.at("/plan/quota/beacons").asInt()).isEqualTo(15);
     var start = ((java.sql.Timestamp) persisted.get("current_period_start")).toInstant();
     var end = ((java.sql.Timestamp) persisted.get("current_period_end")).toInstant();
     assertThat(Instant.parse(json.get("currentPeriodStart").asText())).isEqualTo(start);

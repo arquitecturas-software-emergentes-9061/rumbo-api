@@ -133,6 +133,54 @@ class PaymentConfirmationIntegrationTest extends CheckoutIntegrationSupport {
     assertThat(state(order)).isEqualTo("PENDING");
     assertThat(subscriptions(order)).isZero();
   }
+  @Test void signedDenialsLeaveNewOrderPendingAndPermitASuccessfulRetry() throws Exception {
+    String token = clinicAdmin();
+    UUID pending = order(token, "BASIC");
+    deliver(declinedIntent(pending));
+    deliver(payload(eventId(), "checkout.session.async_payment_failed", pending.toString(), false));
+
+    assertThat(subscriptions(pending)).isZero();
+    mvc.perform(get("/api/v1/subscriptions/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+      .andExpect(status().isNotFound());
+    assertOrderStatus(token, pending, "PENDING");
+
+    deliver(payload(eventId(), "checkout.session.completed", pending.toString(), true));
+    assertOrderStatus(token, pending, "PAID");
+    assertThat(subscription(pending).get("plan_code")).isEqualTo("BASIC");
+  }
+
+  @Test void signedDenialsAndExpirationPreserveExistingPlanAndPeriod() throws Exception {
+    String token = clinicAdmin();
+    UUID active = order(token, "BASIC");
+    deliver(payload(eventId(), "checkout.session.completed", active.toString(), true));
+    var previous = subscription(active);
+    UUID pending = order(token, "PROFESSIONAL");
+
+    deliver(declinedIntent(pending));
+    deliver(payload(eventId(), "checkout.session.async_payment_failed", pending.toString(), false));
+    assertOrderStatus(token, pending, "PENDING");
+    assertThat(subscription(active)).isEqualTo(previous);
+
+    deliver(payload(eventId(), "checkout.session.expired", pending.toString(), false));
+    assertOrderStatus(token, pending, "EXPIRED");
+    assertThat(subscription(active)).isEqualTo(previous);
+    mvc.perform(get("/api/v1/subscriptions/me").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.plan.code").value("BASIC"));
+  }
+
+  private String declinedIntent(UUID pending) {
+    return """
+      {"id":"%s","object":"event","api_version":"2020-08-27","type":"payment_intent.payment_failed",
+       "data":{"object":{"id":"pi_test","object":"payment_intent",
+       "last_payment_error":{"code":"card_declined"},"metadata":{"orderId":"%s"}}}}
+      """.formatted(eventId(), pending);
+  }
+
+  private void assertOrderStatus(String token, UUID order, String expected) throws Exception {
+    mvc.perform(get(ORDERS + order).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.status").value(expected));
+  }
+
   @Test void secondPaidOrderReplacesPlanOnSameSubscription() throws Exception {
     String token = clinicAdmin();
     UUID first = order(token, "BASIC");

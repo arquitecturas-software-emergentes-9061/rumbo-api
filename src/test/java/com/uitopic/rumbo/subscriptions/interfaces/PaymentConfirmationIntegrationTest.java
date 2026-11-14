@@ -78,6 +78,8 @@ class PaymentConfirmationIntegrationTest extends CheckoutIntegrationSupport {
     String response = mvc.perform(get(ORDERS + order).header(HttpHeaders.AUTHORIZATION, "Bearer " + admin))
       .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PAID"))
       .andExpect(jsonPath("$.paidAt").exists())
+      .andExpect(jsonPath("$.receipt.number").value("RA-" + order))
+      .andExpect(jsonPath("$.receipt.issuedAt").exists())
       .andExpect(jsonPath("$.billing.legalName").value("Clinic Example"))
       .andExpect(jsonPath("$.billing.ruc").value("20491823901"))
       .andExpect(jsonPath("$.billing.fiscalAddress").value("Av. Javier Prado 4200, Lima"))
@@ -85,7 +87,9 @@ class PaymentConfirmationIntegrationTest extends CheckoutIntegrationSupport {
       .andExpect(jsonPath("$.billing.purchaseOrder").value("PO-2024-089"))
       .andReturn().getResponse().getContentAsString();
     var paidAt = jdbc.queryForObject("SELECT paid_at FROM subscriptions_payment_orders WHERE id = ?", java.sql.Timestamp.class, order).toInstant();
-    assertThat(java.time.Instant.parse(mapper.readTree(response).get("paidAt").asText())).isEqualTo(paidAt);
+    var paidOrder = mapper.readTree(response);
+    assertThat(java.time.Instant.parse(paidOrder.get("paidAt").asText())).isEqualTo(paidAt);
+    assertThat(java.time.Instant.parse(paidOrder.at("/receipt/issuedAt").asText())).isEqualTo(paidAt);
     var first = subscription(order);
     assertThat(first.get("status")).isEqualTo("ACTIVE");
     assertThat(first.get("plan_code")).isEqualTo("BASIC");

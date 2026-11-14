@@ -471,3 +471,11 @@ The plan catalog includes quota and the current subscription includes plan.quota
 Each limit is a total per clinic. Configure limits under
 rumbo.subscriptions.quotas.<PLAN>.sites, .floors and .beacons.
 An empty property and its JSON null represent an unlimited resource.
+
+## Navigation heatmap
+
+GET /api/v1/analytics/navigation-heatmap?siteId=<uuid>&from=<instant>&to=<instant>
+requires the CLINIC_ADMIN who owns the site. It uses the same date validation and
+half-open interval as the navigation summary. Returns cells with floorId,
+nodeReference, deviations and recalculations as absolute counts, plus
+discardedEvents for relevant events without a floor or node.

@@ -142,6 +142,22 @@ class NavigationDataIntegrationTest {
     assertThat(storedForSite()).isZero();
   }
 
+  @Test
+  void theOwnerCanReadTheHeatmapForItsSiteOnly() throws Exception {
+    mvc.perform(get("/api/v1/analytics/navigation-heatmap")
+        .header(HttpHeaders.AUTHORIZATION, "Bearer " + owner).param("siteId", siteId.toString())
+        .param("from", FROM.toString()).param("to", TO.toString()))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.cells").isEmpty())
+      .andExpect(jsonPath("$.discardedEvents").value(0));
+    verify(reader).heatmap(siteId, new DateRange(FROM, TO));
+
+    mvc.perform(get("/api/v1/analytics/navigation-heatmap")
+        .header(HttpHeaders.AUTHORIZATION, "Bearer " + owner).param("siteId", UUID.randomUUID().toString())
+        .param("from", FROM.toString()).param("to", TO.toString()))
+      .andExpect(status().isForbidden());
+  }
+
   private ResultActions summary(Instant from, Instant to) throws Exception {
     return mvc.perform(get("/api/v1/analytics/navigation-summary")
       .header(HttpHeaders.AUTHORIZATION, "Bearer " + owner).param("siteId", siteId.toString())

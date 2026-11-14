@@ -30,7 +30,6 @@ from .skeleton import collapse_degree_two, merge_close_nodes, prune_spurs, rdp, 
 TURN_TOLERANCE_M = 0.35
 MERGE_M = 0.7
 SPUR_M = 1.2
-COLLINEAR_COS = -0.94  # ~160 degrees
 SNAP_M = 0.5  # how far a node may sit from the rasterized free space and still be bridged
 BRIDGE_MAX_M = 40.0  # longest geodesic repair; beyond it a fragment stays flagged for review
 SEMANTIC_KINDS = ("door", "entrance", "room", "connector")
@@ -73,6 +72,7 @@ class GraphBuilder:
         self._simplify()
         self.dropped_crossing = self._drop_crossing_edges()
         self.bridged_components = self._bridge_components(allowed)
+        self._simplify()  # bridging can add bends that a direct, wall-safe edge makes unnecessary
         return NavigationGraph(nodes=list(self.nodes.values()), edges=list(self.edges.values()))
 
     # ---- connectivity repair -------------------------------------------------------------
@@ -478,7 +478,7 @@ class GraphBuilder:
 
     # ---- final simplification --------------------------------------------------------------
     def _simplify(self) -> None:
-        """Remove collinear degree-2 waypoints when the merged edge stays wall-free."""
+        """Remove degree-2 waypoints whenever the direct edge stays inside free space."""
         changed = True
         while changed:
             changed = False
@@ -494,12 +494,6 @@ class GraphBuilder:
                 if frozenset((a, b)) in self.edges:
                     continue  # contracting this triangle would erase an alternative route
                 na, nb = self.nodes[a], self.nodes[b]
-                va = np.array([na.x - node.x, na.y - node.y])
-                vb = np.array([nb.x - node.x, nb.y - node.y])
-                denom = np.linalg.norm(va) * np.linalg.norm(vb)
-                cosine = float(va @ vb / denom) if denom else 1.0
-                if cosine > COLLINEAR_COS:
-                    continue
                 if not self._visible((na.x, na.y), (nb.x, nb.y)):
                     continue
                 kind = self.edges[frozenset((a, node.id))].kind

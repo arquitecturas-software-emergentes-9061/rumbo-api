@@ -64,11 +64,16 @@ public class StructuralMapperPlanInterpreter implements StructuralPlanInterprete
   @Override
   public Optional<SvgPlanPreview.Topology> propose(byte[] original, FloorPlanFile.Format format,
                                                    OriginalPlanBounds bounds, Double metersPerUnit) {
+    long started = System.nanoTime();
     try {
       JsonNode scene = http.post().uri("/analyze").contentType(MediaType.MULTIPART_FORM_DATA)
         .body(parts(original, format, bounds, metersPerUnit, useMl)).retrieve().body(JsonNode.class);
       if (scene == null) return Optional.empty();
-      return Optional.of(MapperSceneTopologyMapper.toTopology(scene, bounds, metersPerUnit != null));
+      long interpreted = System.nanoTime();
+      var topology = MapperSceneTopologyMapper.toTopology(scene, bounds, metersPerUnit != null);
+      log.debug("Structural interpretation requestMs={} conversionMs={}",
+        (interpreted - started) / 1_000_000, (System.nanoTime() - interpreted) / 1_000_000);
+      return Optional.of(topology);
     } catch (RestClientException | IllegalArgumentException failure) {
       log.warn("The structural mapper could not interpret a {} plan; it stays a preview: {}", format,
         failure.getMessage());

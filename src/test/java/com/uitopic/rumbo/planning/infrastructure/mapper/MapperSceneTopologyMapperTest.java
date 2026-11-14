@@ -2,6 +2,8 @@ package com.uitopic.rumbo.planning.infrastructure.mapper;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.CandidateNode;
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.CandidateLink;
 import com.uitopic.rumbo.planning.application.internal.models.SvgPlanPreview.Door;
@@ -32,8 +34,41 @@ class MapperSceneTopologyMapperTest {
     }
   }
 
+  @Test
+  void recognizedDoorsOnThePiso2PlanBecomeEditableAndKeepTheirRoutes() throws IOException {
+    JsonNode source;
+    try (InputStream in = getClass().getResourceAsStream("/mapper/piso2-scene.json")) {
+      source = JSON.readTree(in);
+    }
+    Topology topology = MapperSceneTopologyMapper.toTopology(source, new OriginalPlanBounds(768, 576), false);
+    assertThat(topology.doors()).hasSize(10);
+    assertThat(topology.wallCandidates().size()).isLessThan(170);
+    assertThat(topology.nodes().size()).isLessThanOrEqualTo(32);
+    assertThat(topology.nodes().stream().filter(node -> node.role().equals("ROOM")).count()).isEqualTo(8);
+    assertThat(topology.zones()).hasSize(11);
+    assertThat(topology.doors()).allSatisfy(door ->
+      assertThat(door.x1() == door.x2() || door.y1() == door.y2()).isTrue());
+    assertThat(topology.warnings()).isEmpty();
+  }
+
   private static JsonNode synthetic(String json) throws IOException {
     return JSON.readTree(json);
+  }
+
+  @Test
+  void coincidentAuxiliaryNodesAreMergedEvenWithoutAnEdgeBetweenThem() throws IOException {
+    Topology result = MapperSceneTopologyMapper.toTopology(synthetic("""
+      {"image_size":{"width":100,"height":100},
+       "walkable":[{"polygon":{"outer":[[0,0],[100,0],[100,100],[0,100]]}}],
+       "graph":{"nodes":[{"id":"start","kind":"entrance","x":10,"y":10},
+         {"id":"a","x":50,"y":10},{"id":"b","x":50,"y":10},
+         {"id":"room","kind":"room","x":90,"y":10}],
+         "edges":[{"from":"start","to":"a"},{"from":"b","to":"room"}]},
+       "validation":{"status":"ok"}}
+      """), new OriginalPlanBounds(100, 100), true);
+    assertThat(result.nodes()).extracting(CandidateNode::id).containsExactly("start", "room");
+    assertThat(result.connections()).singleElement().satisfies(link ->
+      assertThat(Set.of(link.fromNodeId(), link.toNodeId())).containsExactlyInAnyOrder("start", "room"));
   }
 
   @Test
@@ -76,19 +111,85 @@ class MapperSceneTopologyMapperTest {
       assertThat(link.fromNodeId()).isNotEqualTo(link.toNodeId());
       assertThat(link.bidirectional()).isTrue();
     });
-    assertThat(topology.connections().get(0).distanceUnits())
-      .isCloseTo(scene.path("graph").path("edges").get(0).path("length_px").asDouble() * 0.5, within(1e-9));
+    var nodesById = topology.nodes().stream().collect(Collectors.toMap(CandidateNode::id, node -> node));
+    assertThat(topology.connections()).allSatisfy(link -> {
+      var from = nodesById.get(link.fromNodeId());
+      var to = nodesById.get(link.toNodeId());
+      assertThat(link.distanceUnits()).isCloseTo(Math.hypot(to.x() - from.x(), to.y() - from.y()), within(0.015));
+    });
   }
 
   @Test
-  void openingsBecomeSegmentsAsWideAsTheOpening() throws IOException {
+  void duplicateRecognitionsDoNotCreateDuplicateNodesOrLinks() throws IOException {
+    ObjectNode source = (ObjectNode) scene();
+    ObjectNode graph = (ObjectNode) source.path("graph");
+    ArrayNode nodes = (ArrayNode) graph.path("nodes");
+    ArrayNode edges = (ArrayNode) graph.path("edges");
+    nodes.add(nodes.get(0).deepCopy());
+    edges.add(edges.get(0).deepCopy());
+    Topology topology = MapperSceneTopologyMapper.toTopology(source, HALF, true);
+    assertThat(topology.nodes().stream().map(CandidateNode::id).collect(Collectors.toSet()))
+      .hasSize(topology.nodes().size());
+    assertThat(topology.connections().stream().map(link ->
+      Set.of(link.fromNodeId(), link.toNodeId())).collect(Collectors.toSet()))
+      .hasSize(topology.connections().size());
+  }
+
+  @Test
+  void simplificationKeepsTheBendWhenTheStraightShortcutWouldCrossAnObstacle() throws IOException {
+    Topology topology = MapperSceneTopologyMapper.toTopology(synthetic("""
+      {"image_size":{"width":100,"height":100},
+       "obstacles":[{"outer":[[40,40],[60,40],[60,60],[40,60]]}],
+       "walkable":[{"polygon":{"outer":[[0,0],[100,0],[100,100],[0,100]]}}],
+       "graph":{"nodes":[{"id":"a","kind":"entrance","x":20,"y":50},
+         {"id":"near","x":22,"y":49},{"id":"bend","x":50,"y":20},{"id":"b","kind":"room","x":80,"y":50}],
+         "edges":[{"from":"a","to":"near"},{"from":"near","to":"bend"},{"from":"bend","to":"b"}]},
+       "validation":{"status":"ok","issues":[]}}
+      """), new OriginalPlanBounds(100, 100), true);
+    assertThat(topology.nodes()).extracting(CandidateNode::id).containsExactly("a", "bend", "b");
+    assertThat(topology.connections()).hasSize(2).allSatisfy(link ->
+      assertThat(Set.of(link.fromNodeId(), link.toNodeId())).contains("bend"));
+  }
+
+  @Test
+  void projectsAnOpeningOntoItsWallAndKeepsARealDiagonal() throws IOException {
+    Topology topology = MapperSceneTopologyMapper.toTopology(synthetic("""
+      {"image_size":{"width":100,"height":100},
+       "walls":[{"outer":[[10,10],[90,90]]}],
+       "openings":[{"id":"door","axis":[[40,40.2],[60,59.8]],"confidence":0.9}],
+       "validation":{"status":"ok","issues":[]}}
+      """), new OriginalPlanBounds(100, 100), true);
+    assertThat(topology.doors()).singleElement().satisfies(door -> {
+      assertThat(door.x1()).isCloseTo(door.y1(), within(1e-9));
+      assertThat(door.x2()).isCloseTo(door.y2(), within(1e-9));
+      assertThat(door.x2() - door.x1()).isGreaterThan(19);
+    });
+  }
+
+  @Test
+  void eightyMislabelledDoorwaysYieldOneCorridorAndNoWarningFlood() throws IOException {
+    ObjectNode source = (ObjectNode) synthetic("""
+      {"image_size":{"width":100,"height":100},
+       "spaces":[{"id":"room","kind":"room","polygon":{"outer":[[0,0],[100,0],[100,100],[0,100]]}}],
+       "walkable":[{"polygon":{"outer":[[0,0],[100,0],[100,100],[0,100]],"holes":[]}}],
+       "walls":[],"openings":[],
+       "graph":{"nodes":[{"id":"a","x":20,"y":50},{"id":"b","x":80,"y":50}],"edges":[]},
+       "validation":{"status":"ok","issues":[]}}
+      """);
+    ArrayNode edges = (ArrayNode) source.path("graph").path("edges");
+    for (int index = 0; index < 80; index++)
+      edges.add(JSON.createObjectNode().put("from", "a").put("to", "b").put("kind", "doorway").put("length_px", 60));
+    Topology topology = MapperSceneTopologyMapper.toTopology(source, new OriginalPlanBounds(100, 100), true);
+    assertThat(topology.connections()).extracting(CandidateLink::kind).containsExactly("CORRIDOR");
+    assertThat(topology.warnings()).isEmpty();
+  }
+
+  @Test
+  void openingsWithoutACompatibleWallAreNotPresentedAsEditableDoors() throws IOException {
     JsonNode scene = scene();
     Topology topology = MapperSceneTopologyMapper.toTopology(scene, HALF, false);
-
-    assertThat(topology.doors()).hasSize(scene.path("openings").size());
-    Door first = topology.doors().get(0);
-    double length = Math.hypot(first.x2() - first.x1(), first.y2() - first.y1());
-    assertThat(length).isCloseTo(scene.path("openings").get(0).path("width_px").asDouble() * 0.5, within(1e-9));
+    assertThat(topology.doors()).isEmpty();
+    assertThat(topology.warnings()).anyMatch(message -> message.contains("puertas no verificadas"));
   }
 
   @Test
@@ -103,13 +204,13 @@ class MapperSceneTopologyMapperTest {
   }
 
   @Test
-  void theProposalAlwaysSaysItIsNotPublishedAndWarnsAboutAnEstimatedScale() throws IOException {
+  void provisionalScaleIsReportedByPlanStatusRatherThanAProposalError() throws IOException {
     Topology estimated = MapperSceneTopologyMapper.toTopology(scene(), HALF, false);
     Topology calibrated = MapperSceneTopologyMapper.toTopology(scene(), HALF, true);
 
-    assertThat(estimated.warnings()).anyMatch(text -> text.contains("escala se estimó"));
+    assertThat(estimated.warnings()).noneMatch(text -> text.contains("escala se estimó"));
     assertThat(calibrated.warnings()).noneMatch(text -> text.contains("escala se estimó"));
-    assertThat(calibrated.warnings()).last().asString().contains("no publicada");
+    assertThat(calibrated.warnings()).noneMatch(text -> text.contains("no publicada"));
   }
 
   @Test
@@ -142,8 +243,6 @@ class MapperSceneTopologyMapperTest {
 
     assertThat(topology.zones()).isEmpty();
     assertThat(topology.warnings()).anyMatch(text -> text.contains("No se reconocieron ambientes"))
-      .anyMatch(text -> text.startsWith("No se detectó ninguna entrada"))
-      .anyMatch(text -> text.startsWith("3 nodos no se alcanzan"))
       .contains("Texto propio").doesNotContain("noise");
   }
 
@@ -161,13 +260,13 @@ class MapperSceneTopologyMapperTest {
     Topology certain = MapperSceneTopologyMapper.toTopology(synthetic(scene.formatted("0.9")),
       new OriginalPlanBounds(100, 100), true);
     assertThat(certain.doors()).hasSize(1);
-    assertThat(certain.wallCandidates()).hasSize(2);
+    assertThat(certain.wallCandidates()).hasSize(1);
     assertThat(certain.connections()).extracting(CandidateLink::kind).containsExactly("DOORWAY");
 
     Topology uncertain = MapperSceneTopologyMapper.toTopology(synthetic(scene.formatted("0.3")),
       new OriginalPlanBounds(100, 100), true);
-    assertThat(uncertain.doors()).hasSize(1);
-    assertThat(uncertain.wallCandidates()).hasSize(2);
+    assertThat(uncertain.doors()).isEmpty();
+    assertThat(uncertain.wallCandidates()).hasSize(1);
     assertThat(uncertain.connections()).isEmpty();
     assertThat(uncertain.warnings()).anyMatch(text -> text.contains("detección incierta"))
       .anyMatch(text -> text.contains("fuera de una puerta"));
@@ -194,11 +293,11 @@ class MapperSceneTopologyMapperTest {
        "graph":{"nodes":[],"edges":[]},"validation":{"status":"warnings","issues":[]}}
       """), new OriginalPlanBounds(100, 100), true);
     assertThat(topology.doors()).isEmpty();
-    assertThat(topology.warnings()).anyMatch(text -> text.contains("puerta detectada no tiene una geometría interpretable"));
+    assertThat(topology.warnings()).anyMatch(text -> text.contains("geometría no interpretable"));
   }
 
   @Test
-  void aDetectedButUnassignedDoorStaysVisibleWithoutAuthorizingADoorway() throws IOException {
+  void anUnverifiedDoorDoesNotBecomePartOfTheProposalOrAuthorizeADoorway() throws IOException {
     Topology topology = MapperSceneTopologyMapper.toTopology(synthetic("""
       {"image_size":{"width":100,"height":100},"spaces":[],
        "walls":[{"outer":[[50,0],[50,100]]}],
@@ -209,9 +308,9 @@ class MapperSceneTopologyMapperTest {
          "edges":[{"from":"a","to":"b","kind":"doorway","length_px":60}]},
        "validation":{"status":"warnings","issues":[]}}
       """), new OriginalPlanBounds(100, 100), true);
-    assertThat(topology.doors()).hasSize(1);
+    assertThat(topology.doors()).isEmpty();
     assertThat(topology.connections()).isEmpty();
-    assertThat(topology.warnings()).anyMatch(text -> text.contains("no se identificaron ambos lados"));
+    assertThat(topology.warnings()).anyMatch(text -> text.contains("asociación incierta"));
   }
 
   @Test
@@ -223,7 +322,7 @@ class MapperSceneTopologyMapperTest {
          {"id":"right","kind":"room","polygon":{"outer":[[50,0],[100,0],[100,100],[50,100]]}}],
        "walls":[{"outer":[[50,0],[50,45]]},{"outer":[[50,55],[50,100]]}],
        "walkable":[{"polygon":{"outer":[[0,0],[100,0],[100,100],[0,100]],"holes":[]}}],
-       "openings":[{"id":"door","kind":"door","axis":[[50,45],[50,55]],"confidence":0.9,
+       "openings":[{"id":"door","kind":"door","axis":[[50,45],[50,55]],"confidence":0.6,
          "spaces":["left","right"]}],
        "graph":{"nodes":[{"id":"a","x":20,"y":50},{"id":"b","x":80,"y":50}],
          "edges":[{"from":"a","to":"b","kind":"corridor","length_px":60}]},
@@ -259,7 +358,7 @@ class MapperSceneTopologyMapperTest {
     assertThat(zone.polygon().holes()).hasSize(1);
     assertThat(zone.polygon().holes().getFirst()).contains(new PlanPoint(15, 15));
     assertThat(zone.labelPosition()).isEqualTo(new PlanPoint(10, 30));
-    assertThat(topology.doors()).containsExactly(new Door("diagonal", 20, 20, 25, 25));
+    assertThat(topology.doors()).isEmpty();
     assertThat(topology.barriers()).extracting(barrier -> barrier.kind()).containsExactly("WALL", "OBSTACLE", "WINDOW");
     assertThat(topology.walkable()).hasSize(1);
     JsonNode response = JSON.valueToTree(topology);

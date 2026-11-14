@@ -8,6 +8,7 @@ import com.uitopic.rumbo.planning.domain.repositories.BeaconRepository;
 import com.uitopic.rumbo.planning.domain.repositories.PlanSpatialReferenceRepository;
 import com.uitopic.rumbo.planning.domain.repositories.SiteRepository;
 import com.uitopic.rumbo.planning.domain.services.BeaconCommandService;
+import com.uitopic.rumbo.subscriptions.interfaces.acl.QuotaResource;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,8 +20,11 @@ public class BeaconCommandServiceImpl implements BeaconCommandService {
   private final PlanSpatialReferenceRepository plans;
   private final BeaconRepository beacons;
 
+  private final PlanningQuotaGuard quotas;
+
   public BeaconCommandServiceImpl(SiteRepository sites, PlanSpatialReferenceRepository plans,
-                                  BeaconRepository beacons) {
+                                  BeaconRepository beacons, PlanningQuotaGuard quotas) {
+    this.quotas = quotas;
     this.sites = sites;
     this.plans = plans;
     this.beacons = beacons;
@@ -33,6 +37,7 @@ public class BeaconCommandServiceImpl implements BeaconCommandService {
     boolean placed = command.x() != null;
     Beacon beacon = build(UUID.randomUUID(), siteId, command, placed);
     requireAnchor(beacon);
+    quotas.check(ownerUserId, QuotaResource.BEACON);
     return beacons.create(beacon);
   }
 
@@ -59,6 +64,7 @@ public class BeaconCommandServiceImpl implements BeaconCommandService {
     if (active && !current.placed()) {
       throw new IllegalArgumentException("An unplaced beacon cannot be active");
     }
+    if (active) requireAnchor(current);
     if (!beacons.updateActive(siteId, beaconId, active)) throw new PlanningSiteNotFoundException();
     return beacons.findBySiteAndId(siteId, beaconId).orElseThrow(PlanningSiteNotFoundException::new);
   }

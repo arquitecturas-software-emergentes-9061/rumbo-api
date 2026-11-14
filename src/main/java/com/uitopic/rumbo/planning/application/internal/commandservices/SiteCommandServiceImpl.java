@@ -7,6 +7,7 @@ import com.uitopic.rumbo.planning.domain.model.aggregates.Clinic;
 import com.uitopic.rumbo.planning.domain.exceptions.ClinicStructureConflictException;
 import com.uitopic.rumbo.planning.application.internal.exceptions.PlanningSiteNotFoundException;
 import com.uitopic.rumbo.planning.domain.services.SiteCommandService;
+import com.uitopic.rumbo.subscriptions.interfaces.acl.QuotaResource;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,7 +18,10 @@ public class SiteCommandServiceImpl implements SiteCommandService {
   private final SiteRepository sites;
   private final ClinicStructureRepository structure;
 
-  public SiteCommandServiceImpl(SiteRepository sites, ClinicStructureRepository structure) {
+  private final PlanningQuotaGuard quotas;
+
+  public SiteCommandServiceImpl(SiteRepository sites, ClinicStructureRepository structure, PlanningQuotaGuard quotas) {
+    this.quotas = quotas;
     this.sites = sites; this.structure = structure;
   }
 
@@ -30,6 +34,7 @@ public class SiteCommandServiceImpl implements SiteCommandService {
   @Override @Transactional
   public Site create(UUID ownerUserId, String name, String address, boolean allowDuplicateAddress) {
     if (ownerUserId == null) throw new IllegalArgumentException("Authenticated user required");
+    quotas.check(ownerUserId, QuotaResource.SITE);
     Site site = new Site(UUID.randomUUID(), name, address,
         structure.findClinicByOwner(ownerUserId).map(Clinic::id).orElse(null));
     checkAddress(ownerUserId, site, allowDuplicateAddress);

@@ -1,5 +1,6 @@
 import networkx as nx
 from shapely.geometry import LineString, Polygon, box
+from shapely.prepared import prep
 
 from mapper.contracts import GraphNode, Opening, Scale, WallElement
 from mapper.graph.build import GraphBuilder
@@ -67,3 +68,18 @@ def test_a_wall_without_an_opening_keeps_fragments_apart_for_review():
     assert builder._bridge_components([box(5, 10, 195, 50).difference(wall.polygon)]) == 0
 
     assert sorted(len(c) for c in _components(builder)) == [1, 1]
+
+
+def test_visible_bend_is_removed_but_a_wall_blocking_the_shortcut_keeps_it():
+    for walls, expected in ([], False), ([WallElement(box(40, 35, 60, 55))], True):
+        builder = GraphBuilder(Scale(10, "calibrated"), (100, 100), walls)
+        builder.allowed = prep(box(0, 0, 100, 100))
+        builder.nodes = {
+            "a": GraphNode("a", 20, 20, "room"),
+            "bend": GraphNode("bend", 20, 70, "waypoint"),
+            "b": GraphNode("b", 80, 70, "room"),
+        }
+        builder._add_edge("a", "bend", "corridor")
+        builder._add_edge("bend", "b", "corridor")
+        builder._simplify()
+        assert ("bend" in builder.nodes) is expected

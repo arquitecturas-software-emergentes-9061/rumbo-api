@@ -7,6 +7,7 @@ import com.uitopic.rumbo.planning.domain.repositories.ClinicStructureRepository;
 import com.uitopic.rumbo.planning.domain.repositories.SiteRepository;
 import com.uitopic.rumbo.planning.domain.services.ClinicStructureCommandService;
 import java.util.Objects;
+import com.uitopic.rumbo.subscriptions.interfaces.acl.QuotaResource;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,7 +16,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class ClinicStructureCommandServiceImpl implements ClinicStructureCommandService {
   private final ClinicStructureRepository structure;
   private final SiteRepository sites;
-  public ClinicStructureCommandServiceImpl(ClinicStructureRepository structure, SiteRepository sites) {
+  private final PlanningQuotaGuard quotas;
+
+  public ClinicStructureCommandServiceImpl(ClinicStructureRepository structure, SiteRepository sites, PlanningQuotaGuard quotas) {
+    this.quotas = quotas;
     this.structure = structure; this.sites = sites;
   }
 
@@ -29,6 +33,7 @@ public class ClinicStructureCommandServiceImpl implements ClinicStructureCommand
   @Override @Transactional
   public Floor createFloor(UUID owner, UUID siteId, int number, String name, String description) {
     if (!sites.isOwnedBy(siteId, owner)) throw new PlanningSiteNotFoundException();
+    quotas.check(owner, QuotaResource.FLOOR);
     return structure.createFloor(new Floor(UUID.randomUUID(), siteId, number, name, description));
   }
 }

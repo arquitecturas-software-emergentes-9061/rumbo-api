@@ -47,6 +47,7 @@ class BeaconControllerIntegrationTest {
         INSERT INTO identity_users (id, email, password_hash, role, status, created_at, updated_at)
         VALUES (?, ?, ?, 'CLINIC_ADMIN', 'ACTIVE', now(), now())
         """, user, "beacons-" + user + "@example.com", "test-only-not-a-real-password-hash");
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.activeEnterprise(jdbc, user);
     String payload = mvc.perform(post("/api/v1/sites").with(caller(user, UserRole.CLINIC_ADMIN))
         .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Centro Medico\"}"))
       .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
@@ -63,6 +64,53 @@ class BeaconControllerIntegrationTest {
         (plan_version_id, model_version_id, floor_id, width_units, height_units)
         VALUES (?, ?, ?, 100, 100)
         """, UUID.randomUUID(), modelVersionId, floorId);
+    }
+  }
+
+  @Test void basicRejectsTheSixteenthBeaconWithoutInsertingIt() throws Exception {
+    UUID owner = UUID.randomUUID(), siteId = site(owner), floor = UUID.randomUUID();
+    draft(siteId, floor);
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.subscription(jdbc, owner, "BASIC", false);
+    for (int number = 1; number <= 16; number++) {
+      var result = mvc.perform(post("/api/v1/sites/" + siteId + "/beacons")
+          .with(caller(owner, UserRole.CLINIC_ADMIN)).contentType(MediaType.APPLICATION_JSON)
+          .content(json.writeValueAsString(java.util.Map.of("identifier", "quota-beacon-" + number,
+              "floorId", floor, "x", 1, "y", 2))));
+      if (number <= 15) result.andExpect(status().isCreated());
+      else result.andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("PLAN_QUOTA_EXCEEDED"))
+          .andExpect(jsonPath("$.limit").value(15));
+    }
+    org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject(
+        "SELECT count(*) FROM positioning_beacons WHERE site_id = ?", Integer.class, siteId)).isEqualTo(15);
+  }
+
+  @Test void enterpriseAllowsMoreThanFiftyBeacons() throws Exception {
+    UUID owner = UUID.randomUUID(), siteId = site(owner), floor = UUID.randomUUID();
+    draft(siteId, floor);
+    for (int number = 1; number <= 51; number++) {
+      mvc.perform(post("/api/v1/sites/" + siteId + "/beacons")
+          .with(caller(owner, UserRole.CLINIC_ADMIN)).contentType(MediaType.APPLICATION_JSON)
+          .content(json.writeValueAsString(java.util.Map.of("identifier", "enterprise-beacon-" + number,
+              "floorId", floor, "x", 1, "y", 2))))
+          .andExpect(status().isCreated());
+    }
+    org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject(
+        "SELECT count(*) FROM positioning_beacons WHERE site_id = ?", Integer.class, siteId)).isEqualTo(51);
+  }
+
+  @Test void missingAndExpiredSubscriptionsRejectBeaconsWithoutInserting() throws Exception {
+    UUID owner = UUID.randomUUID(), siteId = site(owner), floor = UUID.randomUUID();
+    draft(siteId, floor);
+    jdbc.update("DELETE FROM subscriptions_subscriptions WHERE owner_user_id = ?", owner);
+    for (boolean expired : new boolean[] {false, true}) {
+      if (expired) com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.subscription(jdbc, owner, "BASIC", true);
+      mvc.perform(post("/api/v1/sites/" + siteId + "/beacons")
+          .with(caller(owner, UserRole.CLINIC_ADMIN)).contentType(MediaType.APPLICATION_JSON)
+          .content(json.writeValueAsString(java.util.Map.of("identifier", "rejected-beacon",
+              "floorId", floor, "x", 1, "y", 2))))
+          .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("SUBSCRIPTION_REQUIRED"));
+      org.assertj.core.api.Assertions.assertThat(jdbc.queryForObject(
+          "SELECT count(*) FROM positioning_beacons WHERE site_id = ?", Integer.class, siteId)).isZero();
     }
   }
 
@@ -172,13 +220,14 @@ class BeaconControllerIntegrationTest {
   }
 
   @Test void registersUnplacedBeaconWithMetadataEditsItAndBlocksActivationUntilPlaced() throws Exception {
-    UUID admin = UUID.randomUUID(), siteId = site(admin), floor = UUID.randomUUID();
-    draft(siteId, floor);
+    UUID admin = UUID.randomUUID(), siteId = site(admin);
+    UUID firstFloor = UUID.randomUUID(), secondFloor = UUID.randomUUID();
+    draft(siteId, firstFloor, secondFloor);
     String base = "/api/v1/sites/" + siteId + "/beacons";
     String uuid = UUID.randomUUID().toString();
     String payload = mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
         .contentType(MediaType.APPLICATION_JSON)
-        .content("{\"floorId\":\"" + floor + "\",\"name\":\"B-05\",\"proximityUuid\":\"" + uuid
+        .content("{\"floorId\":\"" + firstFloor + "\",\"name\":\"B-05\",\"proximityUuid\":\"" + uuid
           + "\",\"major\":100,\"minor\":5,\"txPowerDbm\":-59}"))
       .andExpect(status().isCreated())
       .andExpect(jsonPath("$.identifier").value(uuid + ":100:5"))
@@ -195,13 +244,52 @@ class BeaconControllerIntegrationTest {
 
     mvc.perform(put(base + "/" + beaconId).with(caller(admin, UserRole.CLINIC_ADMIN))
         .contentType(MediaType.APPLICATION_JSON)
-        .content("{\"floorId\":\"" + floor + "\",\"name\":\"B-05\",\"proximityUuid\":\"" + uuid
-          + "\",\"major\":100,\"minor\":5,\"txPowerDbm\":-59,\"x\":42.8,\"y\":18.2}"))
-      .andExpect(status().isOk()).andExpect(jsonPath("$.x").value(42.8));
+        .content("{\"floorId\":\"" + secondFloor + "\",\"name\":\"B-05\",\"proximityUuid\":\"" + uuid
+          + "\",\"major\":100,\"minor\":5,\"txPowerDbm\":-59,\"x\":100,\"y\":100}"))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.floorId").value(secondFloor.toString()))
+      .andExpect(jsonPath("$.x").value(100)).andExpect(jsonPath("$.y").value(100));
+
+    mvc.perform(get(base + "/" + beaconId).with(caller(admin, UserRole.CLINIC_ADMIN)))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.floorId").value(secondFloor.toString()))
+      .andExpect(jsonPath("$.x").value(100)).andExpect(jsonPath("$.y").value(100));
+    mvc.perform(get(base).with(caller(admin, UserRole.CLINIC_ADMIN))
+        .param("floorId", secondFloor.toString()))
+      .andExpect(status().isOk()).andExpect(jsonPath("$", hasSize(1)))
+      .andExpect(jsonPath("$[0].id").value(beaconId.toString()));
 
     mvc.perform(patch(base + "/" + beaconId + "/status").with(caller(admin, UserRole.CLINIC_ADMIN))
         .contentType(MediaType.APPLICATION_JSON).content("{\"active\":true}"))
       .andExpect(status().isOk()).andExpect(jsonPath("$.active").value(true));
+
+    mvc.perform(put(base + "/" + beaconId).with(caller(admin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"floorId\":\"" + secondFloor + "\",\"name\":\"B-05\",\"proximityUuid\":\"" + uuid
+          + "\",\"major\":100,\"minor\":5,\"txPowerDbm\":-59}"))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.active").value(false))
+      .andExpect(jsonPath("$.x").doesNotExist()).andExpect(jsonPath("$.y").doesNotExist());
+    mvc.perform(patch(base + "/" + beaconId + "/status").with(caller(admin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON).content("{\"active\":true}"))
+      .andExpect(status().isUnprocessableEntity())
+      .andExpect(jsonPath("$.code").value("INVALID_BEACON"));
+  }
+
+  @Test void activationRevalidatesCoordinatesAgainstTheCurrentPlanBounds() throws Exception {
+    UUID admin = UUID.randomUUID(), siteId = site(admin), floor = UUID.randomUUID();
+    draft(siteId, floor);
+    String base = "/api/v1/sites/" + siteId + "/beacons";
+    String payload = mvc.perform(post(base).with(caller(admin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"identifier\":\"stale-anchor\",\"floorId\":\"" + floor + "\",\"x\":90,\"y\":90}"))
+      .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+    UUID beaconId = UUID.fromString(json.readTree(payload).get("id").asText());
+    mvc.perform(patch(base + "/" + beaconId + "/status").with(caller(admin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON).content("{\"active\":false}"))
+      .andExpect(status().isOk());
+    jdbc.update("UPDATE plan_coordinate_spaces SET width_units = 50, height_units = 50 WHERE floor_id = ?", floor);
+    mvc.perform(patch(base + "/" + beaconId + "/status").with(caller(admin, UserRole.CLINIC_ADMIN))
+        .contentType(MediaType.APPLICATION_JSON).content("{\"active\":true}"))
+      .andExpect(status().isUnprocessableEntity())
+      .andExpect(jsonPath("$.code").value("INVALID_SPATIAL_ANCHOR"));
   }
 
   @Test void rejectsDuplicateIbeaconTripletAndOutOfRangeMajor() throws Exception {

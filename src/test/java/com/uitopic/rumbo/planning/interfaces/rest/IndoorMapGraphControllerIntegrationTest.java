@@ -12,6 +12,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.uitopic.rumbo.TestcontainersConfiguration;
 import com.uitopic.rumbo.iam.infrastructure.security.SiteOwnerGuard;
 import com.uitopic.rumbo.planning.domain.repositories.IndoorMapRepository;
 import com.uitopic.rumbo.planning.domain.model.aggregates.IndoorMap;
@@ -24,7 +26,10 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.SpatialCoordinate;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapWall;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapDoor;
 import com.uitopic.rumbo.planning.interfaces.rest.resources.GraphUpdateResource;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -32,13 +37,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.springframework.context.annotation.Import;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -49,17 +52,12 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
     "rumbo.planning.publication.enabled=true"})
 @AutoConfigureMockMvc
 @ActiveProfiles("postgres")
-@EnabledIfEnvironmentVariable(named = "RUMBO_TEST_DB_URL", matches = ".+")
+@Import(TestcontainersConfiguration.class)
 @WithMockUser(roles = "CLINIC_ADMIN")
 class IndoorMapGraphControllerIntegrationTest {
-  @DynamicPropertySource
-  static void databaseProperties(DynamicPropertyRegistry properties) {
-    properties.add("spring.datasource.url", () -> System.getenv("RUMBO_TEST_DB_URL"));
-    properties.add("spring.datasource.username", () -> System.getenv("RUMBO_TEST_DB_USER"));
-    properties.add("spring.datasource.password", () -> System.getenv("RUMBO_TEST_DB_PASSWORD"));
-  }
 
   @Autowired MockMvc mvc;
+  @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
   @Autowired IndoorMapRepository store;
   @Autowired ObjectMapper json;
   @MockitoBean SiteOwnerGuard siteOwnerGuard;
@@ -87,6 +85,70 @@ class IndoorMapGraphControllerIntegrationTest {
       .andExpect(jsonPath("$.doors[0].wallId").value(wall.toString()));
     mvc.perform(get(url)).andExpect(status().isOk())
       .andExpect(jsonPath("$.doors[0].id").value(door.toString()));
+  }
+
+  @Test
+  void savesAndReloadsAllVerticalTypesAndAccessibilityWithoutLosingTheExistingGraph() throws Exception {
+    IndoorMap map = draft();
+    UUID otherFloor = UUID.randomUUID(), otherPlan = UUID.randomUUID();
+    PlanCoordinateSpace space = new PlanCoordinateSpace(otherFloor, otherPlan, 100, 100);
+    map.addPlan(space);
+    map.setScale(new MapScale(otherFloor, otherPlan, .25));
+    UUID wall = UUID.randomUUID(), door = UUID.randomUUID();
+    UUID otherWall = UUID.randomUUID(), otherDoor = UUID.randomUUID();
+    map.addWall(new MapWall(wall, map.plans().getFirst().floorId(),
+        map.plans().getFirst().planVersionId(), 50, 0, 50, 100));
+    map.addDoor(new MapDoor(door, wall, .4, .6));
+    map.addWall(new MapWall(otherWall, otherFloor, otherPlan, 80, 0, 80, 100));
+    map.addDoor(new MapDoor(otherDoor, otherWall, .2, .3));
+    var nodes = new ArrayList<>(nodeInputs(map));
+    var connections = new ArrayList<>(connectionInputs(map));
+    ConnectionType[] types = {ConnectionType.ELEVATOR, ConnectionType.STAIRS, ConnectionType.RAMP};
+    ConnectionAccessibility[] access = {ConnectionAccessibility.UNKNOWN,
+        ConnectionAccessibility.ACCESSIBLE, ConnectionAccessibility.INACCESSIBLE};
+    for (int i = 0; i < types.length; i++) {
+      UUID remote = UUID.randomUUID();
+      nodes.add(new GraphUpdateResource.NodeInputResource(remote, otherFloor, otherPlan,
+          2.0 + i, 2.0, NodeType.VERTICAL_LINK));
+      connections.add(new GraphUpdateResource.ConnectionInputResource(UUID.randomUUID(),
+          map.nodes().getFirst().id(), remote, types[i], 4.0 + i, 6.0 + i,
+          2.0 + i, access[i], true));
+    }
+    store.saveDraft(map);
+    var update = new GraphUpdateResource(nodes, connections, List.of(),
+        List.of(new GraphUpdateResource.WallInputResource(wall, map.plans().getFirst().floorId(),
+            map.plans().getFirst().planVersionId(), 50.0, 0.0, 50.0, 100.0),
+            new GraphUpdateResource.WallInputResource(otherWall, otherFloor, otherPlan,
+                80.0, 0.0, 80.0, 100.0)),
+        List.of(new GraphUpdateResource.DoorInputResource(door, wall, .4, .6),
+            new GraphUpdateResource.DoorInputResource(otherDoor, otherWall, .2, .3)));
+    String body = json.writeValueAsString(update);
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"").contentType("application/json")
+        .content(body)).andExpect(status().isOk()).andExpect(header().string("ETag", "\"rev-1\""))
+        .andExpect(jsonPath("$.connections.length()").value(4));
+    String reloaded = mvc.perform(get(url(map))).andExpect(status().isOk())
+        .andExpect(jsonPath("$.walls.length()").value(2))
+        .andExpect(jsonPath("$.doors.length()").value(2))
+        .andExpect(jsonPath("$.nodes.length()").value(5))
+        .andReturn().getResponse().getContentAsString();
+    JsonNode savedConnections = json.readTree(reloaded).path("connections");
+    assertTrue(savedConnections.isArray());
+    assertEquals(4, savedConnections.size());
+    for (int i = 0; i < types.length; i++) {
+      boolean found = false;
+      for (JsonNode saved : savedConnections) {
+        if (saved.path("type").asText().equals(types[i].name())
+            && saved.path("accessibility").asText().equals(access[i].name())
+            && saved.path("verticalPenalty").asDouble() == 2.0 + i
+            && saved.path("distanceMeters").asDouble() == 4.0 + i
+            && saved.path("weight").asDouble() == 6.0 + i) found = true;
+      }
+      assertTrue(found, "The saved connector must retain its type, mobility class and costs");
+    }
+    assertTrue(savedConnections.toString().contains("CORRIDOR"));
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"").contentType("application/json")
+        .content(body)).andExpect(status().isPreconditionFailed());
+    assertEquals(4, store.findDraft(map.id(), map.modelVersionId()).orElseThrow().connections().size());
   }
 
   @Test
@@ -430,6 +492,7 @@ class IndoorMapGraphControllerIntegrationTest {
   private IndoorMap draft() {
     UUID versionId = UUID.randomUUID();
     IndoorMap map = new IndoorMap(UUID.randomUUID(), UUID.randomUUID(), versionId);
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.enterpriseSite(jdbc, map.siteId());
     UUID floorId = UUID.randomUUID();
     UUID planVersionId = UUID.randomUUID();
     PlanCoordinateSpace space = new PlanCoordinateSpace(floorId, planVersionId, 100, 100);

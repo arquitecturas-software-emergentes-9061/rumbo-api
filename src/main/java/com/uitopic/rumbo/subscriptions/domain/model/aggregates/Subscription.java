@@ -42,6 +42,9 @@ public class Subscription {
     this.updatedAt = now;
   }
   private static Instant periodEnd(Instant now) { return now.atZone(ZoneOffset.UTC).plusMonths(1).toInstant(); }
+  public boolean isActiveAt(Instant now) {
+    return status == SubscriptionStatus.ACTIVE && !currentPeriodEnd.isBefore(now);
+  }
   public UUID id() { return id; }
   public UUID ownerUserId() { return ownerUserId; }
   public PlanCode planCode() { return planCode; }

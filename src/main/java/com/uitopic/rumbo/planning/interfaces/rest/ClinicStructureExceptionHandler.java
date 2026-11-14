@@ -17,7 +17,9 @@ public class ClinicStructureExceptionHandler {
   ProblemDetail notFound() { return ProblemDetails.of(HttpStatus.NOT_FOUND,"PLANNING_RESOURCE_NOT_FOUND","Site not found"); }
   @ExceptionHandler(ClinicStructureConflictException.class)
   ProblemDetail conflict(ClinicStructureConflictException error) {
-    return ProblemDetails.of(HttpStatus.CONFLICT,error.code(),error.getMessage());
+    var problem = ProblemDetails.of(HttpStatus.CONFLICT,error.code(),error.getMessage());
+    if (error.limit() != null) problem.setProperty("limit", error.limit());
+    return problem;
   }
   @ExceptionHandler({IllegalArgumentException.class,MethodArgumentNotValidException.class})
   ProblemDetail invalid(Exception error) {

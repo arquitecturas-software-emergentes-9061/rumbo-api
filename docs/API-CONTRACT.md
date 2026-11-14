@@ -465,6 +465,15 @@ Navigation is unchanged.
 - Clients pass node identifiers, not destination display names, when requesting routes.
 - `demo` fixtures are not a production data source.
 
+### Internal payment receipt
+
+The payment order response includes a nullable receipt. A paid order with a recorded
+payment timestamp returns the receipt number (RA- followed by the order UUID) and
+issuedAt (the recorded payment timestamp). The order supplies billing, plan, amount
+and currency. The number is stable across repeat requests and webhook retries.
+Unpaid orders and historical orders without a payment timestamp return a null receipt.
+This receipt is an internal payment record and has no fiscal validity.
+
 ## Plan quotas (PR-91)
 
 The plan catalog includes quota and the current subscription includes plan.quota.
@@ -479,3 +488,21 @@ requires the CLINIC_ADMIN who owns the site. It uses the same date validation an
 half-open interval as the navigation summary. Returns cells with floorId,
 nodeReference, deviations and recalculations as absolute counts, plus
 discardedEvents for relevant events without a floor or node.
+The provisional WA14/WA14B defaults require team confirmation: BASIC has 1 site,
+3 floors and 15 beacons; PROFESSIONAL has 3 sites, 10 floors and 50 beacons;
+ENTERPRISE has unlimited resources.
+
+## Registration quotas (PR-93)
+
+Site, floor and beacon registrations count the authenticated owner's total usage
+across sites before inserting. Concurrent registrations for that owner are serialized.
+An absent, expired or cancelled subscription returns HTTP 409 with code
+`SUBSCRIPTION_REQUIRED` and message
+`An active subscription is required to register sites, floors or beacons`.
+Requiring a subscription even for the first registration is a provisional assumption
+consistent with WA14B restricted mode. The exact period end remains active,
+matching the current subscription query; instants after it are expired.
+An exhausted quota returns HTTP 409 with code `PLAN_QUOTA_EXCEEDED`, integer
+`limit` and message `Your plan allows at most N sites` (or `floors` / `beacons`).
+Rejected registrations insert no row. Reads, edits and deletions retain their behavior.
+An empty property and its JSON null represent an unlimited resource.

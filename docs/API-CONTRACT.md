@@ -464,3 +464,10 @@ Navigation is unchanged.
 - Cross-floor links must be explicit vertical connectors in the published graph.
 - Clients pass node identifiers, not destination display names, when requesting routes.
 - `demo` fixtures are not a production data source.
+
+## Plan quotas (PR-91)
+
+The plan catalog includes quota and the current subscription includes plan.quota.
+Each limit is a total per clinic. Configure limits under
+rumbo.subscriptions.quotas.<PLAN>.sites, .floors and .beacons.
+An empty property and its JSON null represent an unlimited resource.

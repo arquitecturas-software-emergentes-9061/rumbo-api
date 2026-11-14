@@ -1,6 +1,7 @@
 package com.uitopic.rumbo.analytics.application.ports;
 
 import com.uitopic.rumbo.analytics.domain.model.valueobjects.DateRange;
+import com.uitopic.rumbo.analytics.domain.model.valueobjects.NavigationHeatmap;
 import com.uitopic.rumbo.analytics.domain.model.valueobjects.NavigationMetrics;
 
 import java.util.UUID;
@@ -22,5 +23,13 @@ import java.util.UUID;
 public interface NavigationMetricsReader {
   int TOP_DESTINATIONS = 5;
 
+  int HEATMAP_MAX_CELLS = 500;
+
   NavigationMetrics summarize(UUID siteId, DateRange period);
+
+  /** Counts deviations and recalculations by floor and node in the site's half-open period.
+   * Returns at most 500 cells ranked by deviations, recalculations, floor and node.
+   * Events missing either location field are counted separately.
+   */
+  NavigationHeatmap heatmap(UUID siteId, DateRange period);
 }

@@ -258,7 +258,7 @@ The TS-12 calculator reads only the current published graph through the `navigat
 - `404 Not Found`: a node or published model is missing, or no compatible route exists. Never return a partial route.
 - `422 Unprocessable Entity`: a published model exists but its data is invalid for route calculation. Publication should prevent this state; this response is defensive.
 
-Error bodies contain `code` and `message`: `INVALID_ROUTE_REQUEST` for `400`, `ROUTE_NOT_FOUND` for `404`, and `INVALID_PUBLISHED_MODEL` for `422`. A foreign-site node produces `400` only when it belongs to another site's current published version; an unknown or unpublished node produces `404`.
+Error bodies contain `code` and `message`: `INVALID_ROUTE_REQUEST` for `400`, `ROUTE_NOT_FOUND` for `404` when a node or published model is missing or no route exists even without the accessibility restriction, `NO_COMPATIBLE_ROUTE` for `404` when `accessibleOnly=true` and only an unrestricted route exists (message: "No route satisfies the requested accessibility preference"; the incompatible route is never returned), and `INVALID_PUBLISHED_MODEL` for `422`. A foreign-site node produces `400` only when it belongs to another site's current published version; an unknown or unpublished node produces `404`.
 
 Example `200` response:
 
@@ -312,6 +312,143 @@ An address matching another site in the same account returns 409
 `SITE_ADDRESS_EXISTS` unless explicitly acknowledged. Duplicate floor levels
 return 409 `FLOOR_NUMBER_EXISTS`. Invalid fields return 400, unauthenticated
 requests return 401, other roles return 403, and foreign or missing sites return 404.
+
+## Personal profile
+
+`GET /api/v1/profiles/me` reads the authenticated caller's stored profile. The user ID
+comes exclusively from the JWT. No request body or client-supplied user ID is required.
+
+- `200 OK`: the same `ProfileResponse` as `PUT /api/v1/profiles/me`, containing
+  `userId`, `fullName`, `role`, nullable `phoneNumber`, and nullable `imageUrl`.
+  The response never includes `storageKey`. Later sign-ins retrieve the latest saved data.
+- `401 Unauthorized`: no valid authentication token.
+- `404 Not Found`: the authenticated account has no profile; `code: "PROFILE_NOT_FOUND"`.
+
+## Subscription checkout and payment orders (PR-79 v3)
+
+Both endpoints require a `CLINIC_ADMIN` JWT. The payer and contracting clinic are
+resolved from that JWT; clients cannot supply an owner or organization ID.
+
+`POST /api/v1/subscriptions/checkout-sessions`
+
+```json
+{
+  "planCode": "BASIC",
+  "billing": {
+    "legalName": "Clínica Ejemplo S.A.C.",
+    "ruc": "20491823901",
+    "fiscalAddress": "Av. Javier Prado Este 4200, Lima",
+    "billingEmail": "pagos@clinica.pe",
+    "purchaseOrder": "PO-2024-089"
+  }
+}
+```
+
+All billing strings are trimmed before validation and storage. `billing` is
+required. `legalName` requires 2–160 characters, `ruc` exactly 11 digits (no
+prefix or checksum validation), `fiscalAddress` 5–200 characters, and
+`billingEmail` a valid email address of at most 254 characters. `purchaseOrder`
+is optional, at most 40 characters; omission, null or whitespace becomes null.
+
+Invalid billing returns `400 VALIDATION_FAILED` in the existing Problem Details
+format, with `errors` keyed by `billing.legalName`, `billing.ruc`,
+`billing.fiscalAddress`, `billing.billingEmail`, or `billing.purchaseOrder`.
+A missing or null billing object uses `billing`. Validation happens before any
+order is saved or the payment gateway is called.
+
+```json
+{
+  "status": 400,
+  "code": "VALIDATION_FAILED",
+  "message": "Invalid request fields",
+  "errors": { "billing.ruc": "Must contain exactly 11 digits" }
+}
+```
+
+On success, `201 Created` includes a `Location` for the payment order:
+
+```json
+{
+  "orderId": "00000000-0000-4000-8000-000000000001",
+  "organization": { "id": "00000000-0000-4000-8000-000000000002", "name": "Clínica Ejemplo" },
+  "planCode": "BASIC",
+  "status": "PENDING",
+  "amount": 39.90,
+  "currency": "PEN",
+  "checkoutUrl": "https://checkout.stripe.com/...",
+  "billing": {
+    "legalName": "Clínica Ejemplo S.A.C.",
+    "ruc": "20491823901",
+    "fiscalAddress": "Av. Javier Prado Este 4200, Lima",
+    "billingEmail": "pagos@clinica.pe",
+    "purchaseOrder": "PO-2024-089"
+  }
+}
+```
+
+After request validation, an inactive or missing plan returns `404 PLAN_NOT_FOUND`,
+Enterprise returns `409 PLAN_REQUIRES_SALES_CONTACT`, and an administrator without
+a registered clinic returns `409 ORGANIZATION_REQUIRED`. Provider failures retain
+the existing `503 PAYMENTS_UNAVAILABLE` / `502 PAYMENT_PROVIDER_ERROR` behavior.
+
+`GET /api/v1/subscriptions/payment-orders/{orderId}` returns `200` only to the
+order's owner; foreign or missing orders return `404 PAYMENT_ORDER_NOT_FOUND`.
+Its response includes `orderId`, `organization`, `planCode`, `status`, `amount`,
+`currency`, `createdAt`, `billing` with the same five fields, and `paidAt`.
+It does not include `checkoutUrl`. `paidAt` is null until payment confirmation;
+the signed completed-payment webhook stores the confirmation instant and repeated
+events preserve it. For example, after payment:
+
+```json
+{
+  "orderId": "00000000-0000-4000-8000-000000000001",
+  "organization": { "id": "00000000-0000-4000-8000-000000000002", "name": "Clínica Ejemplo" },
+  "planCode": "BASIC",
+  "status": "PAID",
+  "amount": 39.90,
+  "currency": "PEN",
+  "createdAt": "2026-11-12T16:00:00Z",
+  "paidAt": "2026-11-12T16:05:00Z",
+  "billing": {
+    "legalName": "Clínica Ejemplo S.A.C.",
+    "ruc": "20491823901",
+    "fiscalAddress": "Av. Javier Prado Este 4200, Lima",
+    "billingEmail": "pagos@clinica.pe",
+    "purchaseOrder": null
+  }
+}
+```
+
+Billing is an immutable snapshot on the payment order. Historical orders may
+return `billing: null` and `paidAt: null`; the migration does not invent past data.
+This flow does not issue a fiscal receipt, assign fiscal numbering, or generate a PDF.
+
+## Visitor route preferences (PR-68)
+
+Both endpoints require a JWT; the user ID comes exclusively from that token.
+
+| Method and path | Request | Success |
+| --- | --- | --- |
+| GET `/api/v1/profiles/me/preferences` | No body | 200 with stored preferences |
+| PUT `/api/v1/profiles/me/preferences` | Required boolean fields `avoidStairs`, `simplerRoute`, `voiceGuidance` | 200 with saved preferences |
+
+Both responses contain the three booleans and `configured`. Defaults are provisionally
+all `false`: the design shows example states, not defaults. Initially `configured` is
+`false`; the first and every subsequent PUT records `preferences_updated_at`, so it
+becomes `true`, even when all submitted values are false. Values persist across sign-ins.
+`GET /api/v1/profiles/me` also includes `preferences` with the three booleans,
+alongside all existing profile fields.
+
+Missing or null fields return 400 `VALIDATION_FAILED` with `errors.<field>`.
+Invalid types such as `"avoidStairs":"yes"` return 400 `MALFORMED_REQUEST`.
+Invalid requests do not change the saved row. Both endpoints return 401 without
+a valid token and 404 `PROFILE_NOT_FOUND` if the caller has no profile.
+
+Only `avoidStairs` currently affects route calculation: the client sends
+`accessibleOnly=true` to `GET /api/v1/sites/{siteId}/routes`; no compatible route
+returns 404 `NO_COMPATIBLE_ROUTE` (PR-71). `simplerRoute` is stored but navigation
+does not apply it because no cost criterion exists. `voiceGuidance` controls client TTS.
+Navigation is unchanged.
 
 ## Shared rules
 

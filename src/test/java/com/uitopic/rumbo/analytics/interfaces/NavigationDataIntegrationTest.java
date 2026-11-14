@@ -64,6 +64,8 @@ class NavigationDataIntegrationTest {
         .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
       .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
     owner = mapper.readTree(body).get("accessToken").asText();
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.activeEnterprise(jdbc,
+        com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.ownerOf(owner)); // sites require an active plan (PR-93)
     siteId = UUID.fromString(mapper.readTree(mvc.perform(post("/api/v1/sites")
         .header(HttpHeaders.AUTHORIZATION, "Bearer " + owner).contentType(MediaType.APPLICATION_JSON)
         .content("{\"name\":\"Sede Central\"}"))

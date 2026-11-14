@@ -480,3 +480,21 @@ The plan catalog includes quota and the current subscription includes plan.quota
 Each limit is a total per clinic. Configure limits under
 rumbo.subscriptions.quotas.<PLAN>.sites, .floors and .beacons.
 An empty property and its JSON null represent an unlimited resource.
+The provisional WA14/WA14B defaults require team confirmation: BASIC has 1 site,
+3 floors and 15 beacons; PROFESSIONAL has 3 sites, 10 floors and 50 beacons;
+ENTERPRISE has unlimited resources.
+
+## Registration quotas (PR-93)
+
+Site, floor and beacon registrations count the authenticated owner's total usage
+across sites before inserting. Concurrent registrations for that owner are serialized.
+An absent, expired or cancelled subscription returns HTTP 409 with code
+`SUBSCRIPTION_REQUIRED` and message
+`An active subscription is required to register sites, floors or beacons`.
+Requiring a subscription even for the first registration is a provisional assumption
+consistent with WA14B restricted mode. The exact period end remains active,
+matching the current subscription query; instants after it are expired.
+An exhausted quota returns HTTP 409 with code `PLAN_QUOTA_EXCEEDED`, integer
+`limit` and message `Your plan allows at most N sites` (or `floors` / `beacons`).
+Rejected registrations insert no row. Reads, edits and deletions retain their behavior.
+An empty property and its JSON null represent an unlimited resource.

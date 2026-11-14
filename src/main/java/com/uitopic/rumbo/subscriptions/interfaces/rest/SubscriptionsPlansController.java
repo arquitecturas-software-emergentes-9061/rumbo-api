@@ -1,5 +1,6 @@
 package com.uitopic.rumbo.subscriptions.interfaces.rest;
 
+import com.uitopic.rumbo.subscriptions.application.ports.PlanQuotaCatalog;
 import com.uitopic.rumbo.subscriptions.application.queryhandlers.GetPlansQueryHandler;
 import com.uitopic.rumbo.subscriptions.domain.model.queries.GetPlansQuery;
 import com.uitopic.rumbo.subscriptions.interfaces.rest.resources.PlanResponse;
@@ -22,12 +23,17 @@ import java.util.List;
 public class SubscriptionsPlansController {
   private final GetPlansQueryHandler getPlans;
 
-  public SubscriptionsPlansController(GetPlansQueryHandler getPlans) { this.getPlans = getPlans; }
+  private final PlanQuotaCatalog quotas;
+
+  public SubscriptionsPlansController(GetPlansQueryHandler getPlans, PlanQuotaCatalog quotas) {
+    this.getPlans = getPlans;
+    this.quotas = quotas;
+  }
 
   @GetMapping("/plans")
   @PreAuthorize("hasRole('CLINIC_ADMIN')")
   @Operation(summary = "List active monthly subscription plans in display order")
   public List<PlanResponse> plans() {
-    return getPlans.handle(new GetPlansQuery()).stream().map(PlanResourceAssembler::toResource).toList();
+    return getPlans.handle(new GetPlansQuery()).stream().map(plan -> PlanResourceAssembler.toResource(plan, quotas.quotaFor(plan.code()))).toList();
   }
 }

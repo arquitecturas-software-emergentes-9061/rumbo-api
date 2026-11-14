@@ -473,3 +473,10 @@ issuedAt (the recorded payment timestamp). The order supplies billing, plan, amo
 and currency. The number is stable across repeat requests and webhook retries.
 Unpaid orders and historical orders without a payment timestamp return a null receipt.
 This receipt is an internal payment record and has no fiscal validity.
+
+## Plan quotas (PR-91)
+
+The plan catalog includes quota and the current subscription includes plan.quota.
+Each limit is a total per clinic. Configure limits under
+rumbo.subscriptions.quotas.<PLAN>.sites, .floors and .beacons.
+An empty property and its JSON null represent an unlimited resource.

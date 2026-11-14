@@ -42,6 +42,14 @@ class CandidateRouteGeometryTest {
     assertTrue(unknown.review(p(20, 50), p(80, 50), "CORRIDOR").warning().contains("espacio transitable"));
   }
 
+  @Test void aMislabelledDoorwayOnOpenFloorBecomesACorridor() {
+    var geometry = new CandidateRouteGeometry(List.of(), List.of(), List.of(),
+      List.of(square(0, 0, 100, 100)), false);
+    var decision = geometry.review(p(20, 50), p(80, 50), "DOORWAY");
+    assertTrue(decision.accepted());
+    assertEquals("CORRIDOR", decision.kind());
+  }
+
   @Test void routeAlongAWallIsNotMistakenForOpenFloor() {
     var geometry = new CandidateRouteGeometry(List.of(line(20, 50, 80, 50)), List.of(), List.of(),
       List.of(square(0, 0, 100, 100)), false);
@@ -58,5 +66,14 @@ class CandidateRouteGeometryTest {
       List.of(line(40, 0, 40, 100), line(60, 0, 60, 100))));
     assertFalse(CandidateRouteGeometry.openingFitsWallGap(line(50, 45, 50, 55),
       List.of(line(50, 0, 50, 100))));
+  }
+
+  @Test void aRasterizedWallGapAcceptsOnlyAnOpeningWithFreeInteriorAndTwoNearbyJambs() {
+    var walls = List.of(line(49, 0, 49, 31), line(51, 69, 51, 100));
+    var opening = line(50, 35, 50, 65);
+    assertTrue(CandidateRouteGeometry.openingBridgesWallGap(opening, walls, List.of()));
+    assertFalse(CandidateRouteGeometry.openingBridgesWallGap(opening, walls,
+      List.of(square(45, 45, 55, 55))));
+    assertFalse(CandidateRouteGeometry.openingBridgesWallGap(line(65, 35, 65, 65), walls, List.of()));
   }
 }

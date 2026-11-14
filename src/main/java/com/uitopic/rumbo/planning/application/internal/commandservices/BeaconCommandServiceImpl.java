@@ -59,6 +59,7 @@ public class BeaconCommandServiceImpl implements BeaconCommandService {
     if (active && !current.placed()) {
       throw new IllegalArgumentException("An unplaced beacon cannot be active");
     }
+    if (active) requireAnchor(current);
     if (!beacons.updateActive(siteId, beaconId, active)) throw new PlanningSiteNotFoundException();
     return beacons.findBySiteAndId(siteId, beaconId).orElseThrow(PlanningSiteNotFoundException::new);
   }

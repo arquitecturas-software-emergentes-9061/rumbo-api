@@ -11,6 +11,31 @@ from mapper.reconstruction.semantic import cut_semantic_openings
 from mapper.graph.build import GraphBuilder
 
 
+def test_calibrated_wide_entrance_is_kept_as_learned_evidence():
+    shape = (120, 200)
+    wall = np.zeros(shape, bool)
+    wall[50:65, 10:190] = True
+    door = np.zeros(shape, bool)
+    door[55:59, 55:145] = True
+    scale = Scale(20, 'calibrated')
+    masks = StructuralMasks(wall, door, np.zeros(shape, bool), semantic_geometry=True)
+    openings = detect_openings(masks, reconstruct_walls(masks, scale), scale, shape)
+    assert len(openings) == 1
+    assert openings[0].sources == ('ml',)
+    assert openings[0].width_px > scale.px(3.2)
+
+
+def test_semantic_wall_closes_raster_break_without_sealing_a_door_sized_gap():
+    wall = np.zeros((100, 160), bool)
+    wall[45:55, 10:150] = True
+    wall[45:55, 40:43] = False
+    wall[45:55, 80:106] = False
+    masks = StructuralMasks(wall, np.zeros_like(wall), np.zeros_like(wall), semantic_geometry=True)
+    barriers = unary_union([element.polygon for element in reconstruct_walls(masks, Scale(20, 'calibrated'))])
+    assert barriers.contains(Point(41, 50))
+    assert not barriers.intersects(LineString([(90, 40), (90, 60)]))
+
+
 def test_joint_parser_keeps_door_evidence_inside_wall_and_ignores_furniture():
     wall = np.zeros((100, 160), bool)
     wall[45:55, :] = True

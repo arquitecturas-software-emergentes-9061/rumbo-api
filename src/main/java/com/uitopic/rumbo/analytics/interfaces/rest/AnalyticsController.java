@@ -1,7 +1,10 @@
 package com.uitopic.rumbo.analytics.interfaces.rest;
 
 import com.uitopic.rumbo.analytics.application.commandhandlers.RecordNavigationEventsCommandHandler;
+import com.uitopic.rumbo.analytics.application.queryhandlers.GetNavigationHeatmapQueryHandler;
 import com.uitopic.rumbo.analytics.application.queryhandlers.GetNavigationSummaryQueryHandler;
+import com.uitopic.rumbo.analytics.domain.model.queries.GetNavigationHeatmapQuery;
+import com.uitopic.rumbo.analytics.domain.model.valueobjects.NavigationHeatmap;
 import com.uitopic.rumbo.analytics.domain.model.commands.RecordNavigationEventsCommand;
 import com.uitopic.rumbo.analytics.domain.model.queries.GetNavigationSummaryQuery;
 import com.uitopic.rumbo.analytics.domain.model.valueobjects.DateRange;
@@ -37,11 +40,14 @@ import java.util.UUID;
 public class AnalyticsController {
   private final RecordNavigationEventsCommandHandler recordEvents;
   private final GetNavigationSummaryQueryHandler getSummary;
+  private final GetNavigationHeatmapQueryHandler getHeatmap;
 
   public AnalyticsController(RecordNavigationEventsCommandHandler recordEvents,
-                             GetNavigationSummaryQueryHandler getSummary) {
+                             GetNavigationSummaryQueryHandler getSummary,
+                             GetNavigationHeatmapQueryHandler getHeatmap) {
     this.recordEvents = recordEvents;
     this.getSummary = getSummary;
+    this.getHeatmap = getHeatmap;
   }
 
   @PostMapping(value = "/navigation-events", consumes = MediaType.APPLICATION_JSON_VALUE)
@@ -70,4 +76,14 @@ public class AnalyticsController {
         .map(usage -> new DestinationUsageResponse(usage.destinationNodeReference(), usage.sessionCount()))
         .toList());
   }
+
+  @GetMapping("/navigation-heatmap")
+  @PreAuthorize("hasRole('CLINIC_ADMIN') and @siteOwnerGuard.isOwner(authentication, #siteId)")
+  @Operation(summary = "Navigation deviations and recalculations by floor and node")
+  public NavigationHeatmap navigationHeatmap(@RequestParam UUID siteId,
+                                             @RequestParam @DateTimeFormat(iso = ISO.DATE_TIME) Instant from,
+                                             @RequestParam @DateTimeFormat(iso = ISO.DATE_TIME) Instant to) {
+    return getHeatmap.handle(new GetNavigationHeatmapQuery(siteId, new DateRange(from, to)));
+  }
+
 }

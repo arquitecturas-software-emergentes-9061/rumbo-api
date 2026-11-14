@@ -47,7 +47,7 @@ class PaymentConfirmationIntegrationTest extends CheckoutIntegrationSupport {
   }
   UUID order(String token, String plan) throws Exception {
     String response = mvc.perform(post(CHECKOUT).header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-        .contentType(MediaType.APPLICATION_JSON).content(mapper.writeValueAsString(Map.of("planCode", plan))))
+        .contentType(MediaType.APPLICATION_JSON).content(checkoutBody(plan)))
         .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
     return UUID.fromString(mapper.readTree(response).get("orderId").asText());
   }
@@ -69,11 +69,23 @@ class PaymentConfirmationIntegrationTest extends CheckoutIntegrationSupport {
     return jdbc.queryForObject("SELECT count(*) FROM subscriptions_subscriptions WHERE owner_user_id = ?", Long.class, owner(order));
   }
   @Test void signedWebhookActivatesAndDuplicatesDoNotRestartPeriod() throws Exception {
-    UUID order = order(token("CLINIC_ADMIN"), "BASIC");
+    String admin = clinicAdmin();
+    UUID order = order(admin, "BASIC");
     String id = eventId();
     String body = payload(id, "checkout.session.completed", order.toString(), true);
     deliver(body);
     assertThat(state(order)).isEqualTo("PAID");
+    String response = mvc.perform(get(ORDERS + order).header(HttpHeaders.AUTHORIZATION, "Bearer " + admin))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PAID"))
+      .andExpect(jsonPath("$.paidAt").exists())
+      .andExpect(jsonPath("$.billing.legalName").value("Clinic Example"))
+      .andExpect(jsonPath("$.billing.ruc").value("20491823901"))
+      .andExpect(jsonPath("$.billing.fiscalAddress").value("Av. Javier Prado 4200, Lima"))
+      .andExpect(jsonPath("$.billing.billingEmail").value("billing@example.test"))
+      .andExpect(jsonPath("$.billing.purchaseOrder").value("PO-2024-089"))
+      .andReturn().getResponse().getContentAsString();
+    var paidAt = jdbc.queryForObject("SELECT paid_at FROM subscriptions_payment_orders WHERE id = ?", java.sql.Timestamp.class, order).toInstant();
+    assertThat(java.time.Instant.parse(mapper.readTree(response).get("paidAt").asText())).isEqualTo(paidAt);
     var first = subscription(order);
     assertThat(first.get("status")).isEqualTo("ACTIVE");
     assertThat(first.get("plan_code")).isEqualTo("BASIC");
@@ -84,12 +96,13 @@ class PaymentConfirmationIntegrationTest extends CheckoutIntegrationSupport {
     deliver(body);
     deliver(payload(eventId(), "checkout.session.completed", order.toString(), true));
     assertThat(subscription(order)).isEqualTo(first);
+    assertThat(jdbc.queryForObject("SELECT paid_at FROM subscriptions_payment_orders WHERE id = ?", java.sql.Timestamp.class, order).toInstant()).isEqualTo(paidAt);
     assertThat(subscriptions(order)).isEqualTo(1);
     assertThat(jdbc.queryForObject("SELECT count(*) FROM subscriptions_processed_payment_events WHERE event_id = ?", Long.class, id)).isEqualTo(1);
     assertThat(applicationEvents.stream(SubscriptionActivatedEvent.class).count()).isEqualTo(1);
   }
   @Test void invalidMissingAndExpiredSignaturesDoNotChangeDatabase() throws Exception {
-    UUID order = order(token("CLINIC_ADMIN"), "BASIC");
+    UUID order = order(clinicAdmin(), "BASIC");
     String id = eventId();
     String body = payload(id, "checkout.session.completed", order.toString(), true);
     for (String header : new String[]{signature(body, randomSecret()), signature(body, SECRET, java.time.Instant.now().minusSeconds(600).getEpochSecond())}) {
@@ -103,14 +116,14 @@ class PaymentConfirmationIntegrationTest extends CheckoutIntegrationSupport {
     assertThat(jdbc.queryForObject("SELECT count(*) FROM subscriptions_processed_payment_events WHERE event_id = ?", Long.class, id)).isZero();
   }
   @Test void expirationDoesNotActivateAndLaterPaymentCannotChangeTerminalOrder() throws Exception {
-    UUID order = order(token("CLINIC_ADMIN"), "BASIC");
+    UUID order = order(clinicAdmin(), "BASIC");
     deliver(payload(eventId(), "checkout.session.expired", order.toString(), false));
     deliver(payload(eventId(), "checkout.session.completed", order.toString(), true));
     assertThat(state(order)).isEqualTo("EXPIRED");
     assertThat(subscriptions(order)).isZero();
   }
   @Test void unpaidIgnoredAndUnknownOrdersAreAcknowledgedAndRecorded() throws Exception {
-    UUID order = order(token("CLINIC_ADMIN"), "BASIC");
+    UUID order = order(clinicAdmin(), "BASIC");
     for (String type : new String[]{"checkout.session.completed", "invoice.paid", "customer.subscription.updated"}) {
       String id = eventId();
       deliver(payload(id, type, order.toString(), false));
@@ -121,7 +134,7 @@ class PaymentConfirmationIntegrationTest extends CheckoutIntegrationSupport {
     assertThat(subscriptions(order)).isZero();
   }
   @Test void secondPaidOrderReplacesPlanOnSameSubscription() throws Exception {
-    String token = token("CLINIC_ADMIN");
+    String token = clinicAdmin();
     UUID first = order(token, "BASIC");
     deliver(payload(eventId(), "checkout.session.completed", first.toString(), true));
     var before = subscription(first);
@@ -139,7 +152,7 @@ class PaymentConfirmationIntegrationTest extends CheckoutIntegrationSupport {
         .andExpect(status().isUnauthorized());
   }
   @Test void rollbackIncludesEventOrderAndSubscriptionAndAllowsRetry() throws Exception {
-    UUID order = order(token("CLINIC_ADMIN"), "BASIC");
+    UUID order = order(clinicAdmin(), "BASIC");
     String id = eventId();
     String body = payload(id, "checkout.session.completed", order.toString(), true);
     var event = verifier.verify(body, signature(body, SECRET));
@@ -155,14 +168,14 @@ class PaymentConfirmationIntegrationTest extends CheckoutIntegrationSupport {
     assertThat(subscriptions(order)).isEqualTo(1);
   }
   @Test void concurrentDuplicateDeliveriesActivateOnce() throws Exception {
-    UUID order = order(token("CLINIC_ADMIN"), "BASIC");
+    UUID order = order(clinicAdmin(), "BASIC");
     String body = payload(eventId(), "checkout.session.completed", order.toString(), true);
     concurrentDeliveries(body, body);
     assertThat(state(order)).isEqualTo("PAID");
     assertThat(subscriptions(order)).isEqualTo(1);
   }
   @Test void concurrentOrdersForSameOwnerCreateOneSubscription() throws Exception {
-    String token = token("CLINIC_ADMIN");
+    String token = clinicAdmin();
     UUID first = order(token, "BASIC");
     UUID second = order(token, "PROFESSIONAL");
     concurrentDeliveries(payload(eventId(), "checkout.session.completed", first.toString(), true),

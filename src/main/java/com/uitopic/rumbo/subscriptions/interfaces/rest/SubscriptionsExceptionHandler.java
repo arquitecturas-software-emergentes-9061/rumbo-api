@@ -16,6 +16,8 @@ public class SubscriptionsExceptionHandler {
   public ProblemDetail subscriptionNotFound() { return ProblemDetails.of(HttpStatus.NOT_FOUND, "SUBSCRIPTION_NOT_FOUND", "Subscription not found"); }
   @ExceptionHandler(InvalidWebhookSignatureException.class)
   public ProblemDetail signature() { return ProblemDetails.of(HttpStatus.BAD_REQUEST, "INVALID_WEBHOOK_SIGNATURE", "Invalid webhook signature"); }
+  @ExceptionHandler(OrganizationRequiredException.class)
+  public ProblemDetail organizationRequired() { return ProblemDetails.of(HttpStatus.CONFLICT, "ORGANIZATION_REQUIRED", "Register a clinic before checkout"); }
   @ExceptionHandler(PlanNotFoundException.class)
   public ProblemDetail planNotFound() { return ProblemDetails.of(HttpStatus.NOT_FOUND, "PLAN_NOT_FOUND", "Plan not found"); }
   @ExceptionHandler(PaymentOrderNotFoundException.class)
@@ -26,7 +28,17 @@ public class SubscriptionsExceptionHandler {
   public ProblemDetail unavailable() { return ProblemDetails.of(HttpStatus.SERVICE_UNAVAILABLE, "PAYMENTS_UNAVAILABLE", "Payments are unavailable"); }
   @ExceptionHandler(PaymentProviderException.class)
   public ProblemDetail provider() { return ProblemDetails.of(HttpStatus.BAD_GATEWAY, "PAYMENT_PROVIDER_ERROR", "Payment provider failed"); }
-  @ExceptionHandler({MethodArgumentNotValidException.class, MethodArgumentTypeMismatchException.class})
+  @ExceptionHandler(InvalidBillingDetailsException.class)
+  public ProblemDetail invalidBilling(InvalidBillingDetailsException error) {
+    return ProblemDetails.withErrors(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "Invalid request fields", error.errors());
+  }
+  @ExceptionHandler(MethodArgumentNotValidException.class)
+  public ProblemDetail invalidFields(MethodArgumentNotValidException error) {
+    var errors = new java.util.LinkedHashMap<String, String>();
+    error.getBindingResult().getFieldErrors().forEach(field -> errors.putIfAbsent(field.getField(), field.getDefaultMessage()));
+    return ProblemDetails.withErrors(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "Invalid request fields", errors);
+  }
+  @ExceptionHandler(MethodArgumentTypeMismatchException.class)
   public ProblemDetail invalid() { return ProblemDetails.of(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "Invalid request fields"); }
   @ExceptionHandler(HttpMessageNotReadableException.class)
   public ProblemDetail malformed() { return ProblemDetails.of(HttpStatus.BAD_REQUEST, "MALFORMED_REQUEST", "Malformed request"); }

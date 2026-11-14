@@ -6,6 +6,7 @@ import com.uitopic.rumbo.subscriptions.domain.model.valueobjects.PurchaseMode;
 import com.uitopic.rumbo.subscriptions.domain.repositories.*;
 import com.uitopic.rumbo.subscriptions.domain.exceptions.*;
 import com.uitopic.rumbo.subscriptions.application.ports.PaymentGateway;
+import com.uitopic.rumbo.subscriptions.application.ports.OrganizationDirectory;
 import com.uitopic.rumbo.subscriptions.application.exceptions.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -17,20 +18,23 @@ public class CreateCheckoutSessionCommandHandler {
   private final PlanRepository plans;
   private final PaymentOrderRepository orders;
   private final PaymentGateway gateway;
+  private final OrganizationDirectory organizations;
   private final TransactionTemplate transaction;
   public CreateCheckoutSessionCommandHandler(PlanRepository plans, PaymentOrderRepository orders,
-      PaymentGateway gateway, PlatformTransactionManager manager) {
-    this.plans = plans; this.orders = orders; this.gateway = gateway;
+      PaymentGateway gateway, OrganizationDirectory organizations, PlatformTransactionManager manager) {
+    this.plans = plans; this.orders = orders; this.gateway = gateway; this.organizations = organizations;
     transaction = new TransactionTemplate(manager);
     transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
   }
   // Suspend even a caller's transaction while invoking the external provider.
   @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
   public Result handle(CreateCheckoutSessionCommand command) {
+    var billing = com.uitopic.rumbo.subscriptions.domain.model.valueobjects.BillingDetails.required(command.billing());
     PaymentOrder order = transaction.execute(status -> {
       var plan = plans.findByCode(command.planCode()).filter(p -> p.active()).orElseThrow(PlanNotFoundException::new);
       if (plan.purchaseMode() == PurchaseMode.CONTACT_SALES) throw new PlanRequiresSalesContactException();
-      return orders.save(PaymentOrder.create(command.payerUserId(), plan.code(), plan.price()));
+      var organization = organizations.findOrganizationOf(command.payerUserId()).orElseThrow(OrganizationRequiredException::new);
+      return orders.save(PaymentOrder.create(command.payerUserId(), organization, billing, plan.code(), plan.price()));
     });
     PaymentGateway.CheckoutSession session;
     try {

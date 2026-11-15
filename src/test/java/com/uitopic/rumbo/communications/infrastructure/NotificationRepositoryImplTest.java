@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
@@ -47,8 +48,9 @@ class NotificationRepositoryImplTest {
     assertThat(loaded.deliveryAttempts()).isEqualTo(1);
     assertThat(loaded.lastAttemptAt()).isEqualTo(T0.plusSeconds(5));
     assertThat(loaded.readAt()).isNull();
-    // PostgreSQL keeps microseconds; the auditing instant can carry nanoseconds on some platforms
-    assertThat(loaded.createdAt()).isEqualTo(saved.createdAt().truncatedTo(ChronoUnit.MICROS));
+    // PostgreSQL rounds to microseconds while the auditing instant can carry nanoseconds on some platforms
+    assertThat(Duration.between(saved.createdAt(), loaded.createdAt()).abs())
+      .isLessThanOrEqualTo(Duration.of(1, ChronoUnit.MICROS));
   }
 
   @Test

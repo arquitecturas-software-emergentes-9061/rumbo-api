@@ -2,6 +2,7 @@ package com.uitopic.rumbo.navigation.domain.services;
 
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.CalculatedRoute;
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.PublishedSpatialGraph;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.RouteConstraints;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -18,9 +19,8 @@ import java.util.UUID;
 
 /** Finds a minimum-cost route using persisted weights and vertical penalties. */
 public final class AStarRouteCalculationDomainService {
-  private record Traversal(UUID from, UUID to, PublishedSpatialGraph.Link link) {
-    double cost() { return link.weight() + link.verticalPenalty(); }
-  }
+  /** {@code cost} is the search cost under the active {@link RouteConstraints}. */
+  private record Traversal(UUID from, UUID to, PublishedSpatialGraph.Link link, double cost) {}
 
   private record Candidate(UUID nodeId, double cost, double estimatedTotal) {}
 
@@ -38,12 +38,23 @@ public final class AStarRouteCalculationDomainService {
   public Optional<CalculatedRoute> calculate(PublishedSpatialGraph graph,
                                              UUID fromNodeId, UUID toNodeId,
                                              boolean accessibleOnly) {
+    return calculate(graph, fromNodeId, toNodeId, RouteConstraints.accessibleOnly(accessibleOnly));
+  }
+
+  /**
+   * Applies the visitor's mobility restrictions (TS-29): disallowed connections are skipped and, when elevators are
+   * prioritized, stairs and ramps cost more during the search. The reported cost is always the published one.
+   */
+  public Optional<CalculatedRoute> calculate(PublishedSpatialGraph graph,
+                                             UUID fromNodeId, UUID toNodeId,
+                                             RouteConstraints constraints) {
+    Objects.requireNonNull(constraints, "constraints are required");
     Objects.requireNonNull(graph, "graph is required");
     Objects.requireNonNull(fromNodeId, "fromNodeId is required");
     Objects.requireNonNull(toNodeId, "toNodeId is required");
     Map<UUID, PublishedSpatialGraph.Plan> plans = plansById(graph);
     Map<UUID, PublishedSpatialGraph.Node> nodes = nodesById(graph, plans);
-    Map<UUID, List<Traversal>> adjacency = adjacency(graph, nodes, accessibleOnly);
+    Map<UUID, List<Traversal>> adjacency = adjacency(graph, nodes, constraints);
     if (!nodes.containsKey(fromNodeId) || !nodes.containsKey(toNodeId)) {
       throw new IllegalArgumentException("Both route nodes must belong to the published model");
     }
@@ -68,7 +79,7 @@ public final class AStarRouteCalculationDomainService {
       if (current.cost() > best.getOrDefault(current.nodeId(), Double.POSITIVE_INFINITY)) continue;
       if (current.nodeId().equals(toNodeId)) {
         return Optional.of(reconstruct(graph, nodes, previous, fromNodeId, toNodeId,
-            current.cost()));
+            current.cost(), constraints.prioritizeElevators()));
       }
       for (Traversal traversal : adjacency.get(current.nodeId())) {
         double nextCost = current.cost() + traversal.cost();
@@ -122,7 +133,7 @@ public final class AStarRouteCalculationDomainService {
   }
 
   private Map<UUID, List<Traversal>> adjacency(PublishedSpatialGraph graph,
-      Map<UUID, PublishedSpatialGraph.Node> nodes, boolean accessibleOnly) {
+      Map<UUID, PublishedSpatialGraph.Node> nodes, RouteConstraints constraints) {
     Map<UUID, List<Traversal>> adjacency = new HashMap<>();
     nodes.keySet().forEach(id -> adjacency.put(id, new ArrayList<>()));
     Set<UUID> linkIds = new HashSet<>();
@@ -151,14 +162,15 @@ public final class AStarRouteCalculationDomainService {
       if (!crossesFloor && link.verticalPenalty() != 0) {
         throw new IllegalArgumentException("Same-floor connection has a vertical penalty");
       }
-      if (accessibleOnly && link.accessibility() != PublishedSpatialGraph.Accessibility.ACCESSIBLE) {
+      if (!constraints.allows(link)) {
         continue;
       }
+      double cost = constraints.searchCost(link);
       adjacency.get(link.sourceNodeId()).add(new Traversal(link.sourceNodeId(),
-          link.targetNodeId(), link));
+          link.targetNodeId(), link, cost));
       if (link.bidirectional()) {
         adjacency.get(link.targetNodeId()).add(new Traversal(link.targetNodeId(),
-            link.sourceNodeId(), link));
+            link.sourceNodeId(), link, cost));
       }
     }
     return adjacency;
@@ -196,10 +208,11 @@ public final class AStarRouteCalculationDomainService {
 
   private CalculatedRoute reconstruct(PublishedSpatialGraph graph,
       Map<UUID, PublishedSpatialGraph.Node> nodes, Map<UUID, Traversal> previous,
-      UUID start, UUID goal, double totalCost) {
+      UUID start, UUID goal, double searchCost, boolean searchCostWasAdjusted) {
     List<PublishedSpatialGraph.Node> orderedNodes = new ArrayList<>();
     List<CalculatedRoute.Leg> orderedLegs = new ArrayList<>();
     double totalDistance = 0;
+    double publishedCost = 0;
     UUID cursor = goal;
     orderedNodes.add(nodes.get(cursor));
     while (!cursor.equals(start)) {
@@ -210,11 +223,13 @@ public final class AStarRouteCalculationDomainService {
           link.kind(), link.distanceMeters(), link.weight(), link.verticalPenalty(),
           link.accessibility()));
       totalDistance += link.distanceMeters();
+      publishedCost += link.weight() + link.verticalPenalty();
       cursor = traversal.from();
       orderedNodes.add(nodes.get(cursor));
     }
     Collections.reverse(orderedNodes);
     Collections.reverse(orderedLegs);
+    double totalCost = searchCostWasAdjusted ? publishedCost : searchCost;
     return new CalculatedRoute(graph.siteId(), graph.modelVersionId(), orderedNodes,
         orderedLegs, totalDistance, totalCost);
   }

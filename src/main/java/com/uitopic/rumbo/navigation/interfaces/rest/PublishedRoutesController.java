@@ -2,6 +2,7 @@ package com.uitopic.rumbo.navigation.interfaces.rest;
 
 import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configuration.OpenApiConfiguration;
 import com.uitopic.rumbo.navigation.application.internal.exceptions.RouteNotFoundException;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.RouteConstraints;
 import com.uitopic.rumbo.navigation.domain.services.PublishedRouteQueryService;
 import com.uitopic.rumbo.navigation.interfaces.rest.resources.PublishedRouteResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,7 +44,8 @@ public class PublishedRoutesController {
   @Operation(summary = "Calculate an indoor route for a site",
       description = "Uses the current PUBLISHED model and identifies cross-floor traversals "
           + "in verticalSections. accessibleOnly excludes connections without confirmed "
-          + "accessibility. Disabled until site authorization is available.")
+          + "accessibility and stairs; avoidStairs excludes stairs; prioritizeElevators makes "
+          + "stairs and ramps cost more. A 404 means no route satisfies every restriction.")
   @ApiResponses({
       @ApiResponse(responseCode = "200", description = "Route found",
           content = @Content(schema = @Schema(implementation = PublishedRouteResponse.class),
@@ -85,8 +87,13 @@ public class PublishedRoutesController {
       @Parameter(description = "Origin node ID") @RequestParam(name = "from") UUID fromNodeId,
       @Parameter(description = "Destination node ID") @RequestParam(name = "to") UUID toNodeId,
       @Parameter(description = "Require confirmed accessibility on every link")
-      @RequestParam(defaultValue = "false") boolean accessibleOnly) {
+      @RequestParam(defaultValue = "false") boolean accessibleOnly,
+      @Parameter(description = "Never use stairs")
+      @RequestParam(defaultValue = "false") boolean avoidStairs,
+      @Parameter(description = "Prefer elevators over stairs and ramps")
+      @RequestParam(defaultValue = "false") boolean prioritizeElevators) {
+    RouteConstraints constraints = new RouteConstraints(avoidStairs, accessibleOnly, prioritizeElevators);
     return ResponseEntity.ok(PublishedRouteResponse.from(routes.calculate(siteId,
-        fromNodeId, toNodeId, accessibleOnly).orElseThrow(RouteNotFoundException::new)));
+        fromNodeId, toNodeId, constraints).orElseThrow(RouteNotFoundException::new)));
   }
 }

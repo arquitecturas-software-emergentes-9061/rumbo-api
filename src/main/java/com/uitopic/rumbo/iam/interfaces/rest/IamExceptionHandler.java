@@ -9,6 +9,7 @@ import com.uitopic.rumbo.iam.domain.exceptions.EmailAlreadyRegisteredException;
 import com.uitopic.rumbo.iam.domain.exceptions.IamException;
 import com.uitopic.rumbo.iam.domain.exceptions.InvalidCredentialsException;
 import com.uitopic.rumbo.iam.domain.exceptions.InvalidRefreshTokenException;
+import com.uitopic.rumbo.iam.domain.exceptions.PrivacyConsentRequiredException;
 import com.uitopic.rumbo.iam.domain.exceptions.UserAccountNotFoundException;
 import com.uitopic.rumbo.iam.domain.exceptions.WeakPasswordException;
 import com.uitopic.rumbo.shared.interfaces.rest.ProblemDetails;
@@ -67,6 +68,12 @@ public class IamExceptionHandler {
   ProblemDetail weakPassword(WeakPasswordException exception) {
     return ProblemDetails.withErrors(HttpStatus.BAD_REQUEST, exception.code(), exception.getMessage(),
       Map.of("password", exception.getMessage()));
+  }
+
+  @ExceptionHandler(PrivacyConsentRequiredException.class)
+  ProblemDetail consentRequired(PrivacyConsentRequiredException exception) {
+    return ProblemDetails.withErrors(HttpStatus.BAD_REQUEST, exception.code(), exception.getMessage(),
+      Map.of("privacyConsent", exception.getMessage()));
   }
 
   @ExceptionHandler(EmailAlreadyRegisteredException.class)

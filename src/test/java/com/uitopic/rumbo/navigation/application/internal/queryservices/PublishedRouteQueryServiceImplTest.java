@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import com.uitopic.rumbo.navigation.domain.exceptions.NoCompatibleRouteException;
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.PublishedSpatialGraph;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.RouteConstraints;
 import com.uitopic.rumbo.navigation.domain.repositories.PublishedSpatialGraphRepository;
 import com.uitopic.rumbo.navigation.domain.services.AStarRouteCalculationDomainService;
 import java.util.List;
@@ -83,6 +84,33 @@ class PublishedRouteQueryServiceImplTest {
     assertEquals(1, repository.loads);
     verify(calculator).calculate(graph, start.id(), goal.id(), RouteConstraints.accessibleOnly(true));
     verifyNoMoreInteractions(calculator);
+  }
+
+  @Test
+  void avoidingTheOnlyStairsReportsNoCompatibleRoute() {
+    var stairs = new PublishedSpatialGraph.Link(UUID.randomUUID(), start.id(), goal.id(),
+        PublishedSpatialGraph.LinkKind.STAIRS, 1, 1, 0, PublishedSpatialGraph.Accessibility.ACCESSIBLE, false);
+    var graph = new PublishedSpatialGraph(siteId, UUID.randomUUID(), UUID.randomUUID(),
+        List.of(new PublishedSpatialGraph.Plan(floorId, planId, 10, 10, 1)), List.of(start, goal), List.of(stairs));
+    var service = new PublishedRouteQueryServiceImpl(new FakeGraphs(graph), calculator);
+    var avoidStairs = new RouteConstraints(true, false, false);
+
+    assertThrows(NoCompatibleRouteException.class,
+        () -> service.calculate(siteId, start.id(), goal.id(), avoidStairs));
+
+    verify(calculator).calculate(graph, start.id(), goal.id(), avoidStairs);
+    verify(calculator).calculate(graph, start.id(), goal.id(), RouteConstraints.NONE);
+    verifyNoMoreInteractions(calculator);
+  }
+
+  @Test
+  void prioritizingElevatorsNeverTurnsAnExistingRouteIntoAnError() {
+    var graph = graph(true, PublishedSpatialGraph.Accessibility.UNKNOWN);
+    var service = new PublishedRouteQueryServiceImpl(new FakeGraphs(graph), calculator);
+
+    var route = service.calculate(siteId, start.id(), goal.id(), new RouteConstraints(false, false, true));
+
+    assertEquals(List.of(start, goal), route.orElseThrow().nodes());
   }
 
   private PublishedSpatialGraph.Node node(double x) {

@@ -324,6 +324,40 @@ comes exclusively from the JWT. No request body or client-supplied user ID is re
 - `401 Unauthorized`: no valid authentication token.
 - `404 Not Found`: the authenticated account has no profile; `code: "PROFILE_NOT_FOUND"`.
 
+## Notification center
+
+Communications stores one in-app notification per relevant platform event and exposes them to the account that
+receives them. Every endpoint requires a JWT, and the user ID comes only from it: no endpoint accepts a user ID, and a
+notification of another account answers `404 NOTIFICATION_NOT_FOUND`, the same as a missing one.
+
+Notifications are created after the originating transaction commits, from these events:
+
+| `type` | Event | `detail` |
+|---|---|---|
+| `WELCOME` | account registered | `null` |
+| `ACCOUNT_LOCKED` | failed sign-in threshold reached | ISO instant when the account unlocks |
+| `PASSWORD_CHANGED` | password recovered or changed | `null` |
+| `SUBSCRIPTION_ACTIVATED` | payment activated a plan | plan code |
+
+`detail` is a datum, never display text: clients localize the message from `type`. A failure creating a
+notification is logged and never affects the sign-up, lock, password change or payment that caused it.
+
+| Request | Response |
+|---|---|
+| `GET /api/v1/notifications?unread=false&page=0&size=20` | `200`: `items[]`, `page`, `size`, `total`, `unread`. Newest first; `size` is limited to 1–100 and out-of-range paging is clamped. `unread` counts every unread notification, ignoring the `unread` filter. |
+| `GET /api/v1/notifications/{id}` | `200`: `id`, `type`, `channel`, `detail`, `read`, `readAt`, `createdAt`. |
+| `GET /api/v1/notifications/{id}/delivery` | `200`: `notificationId`, `channel`, `status`, `finalState`, `attempts`, `lastAttemptAt`. |
+| `POST /api/v1/notifications/{id}/read` | `200`: the notification, read. Idempotent: the first read instant is kept. |
+| `POST /api/v1/notifications/read-all` | `200`: `{ "updated": n }`, only for the caller's unread notifications. |
+
+Delivery `status` is `PENDING` (no attempt yet), `SENT`, `RETRY_PENDING` (an attempt failed and another is scheduled)
+or `FAILED` (three attempts failed). `SENT` and `FAILED` are final. The only channel today is `IN_APP`, which is
+delivered when it is stored, so every notification currently reports `SENT` after one attempt; the other states exist
+in the model for the email and push channels, which are not implemented yet.
+
+Not covered yet: notifications addressed to a whole organization (map publication, beacon incidents, navigation
+problems), because those events do not exist in the other contexts, and email or push delivery.
+
 ## Subscription checkout and payment orders (PR-79 v3)
 
 Both endpoints require a `CLINIC_ADMIN` JWT. The payer and contracting clinic are

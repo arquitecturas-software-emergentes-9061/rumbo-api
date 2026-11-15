@@ -6,6 +6,9 @@ import com.uitopic.rumbo.iam.domain.model.commands.SubmitOnboardingRequestComman
 import com.uitopic.rumbo.iam.interfaces.rest.resources.OnboardingRequestResponse;
 import com.uitopic.rumbo.iam.interfaces.rest.resources.OnboardingRequestSubmission;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
@@ -30,6 +33,10 @@ public class OnboardingRequestsController {
 
   @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
   @Operation(summary = "Store a demo or onboarding request; it needs the privacy consent of the requester")
+  @ApiResponses({
+    @ApiResponse(responseCode = "201", description = "Request stored; the body is its receipt"),
+    @ApiResponse(responseCode = "400", description = "Invalid field or missing privacy consent", content = @Content)
+  })
   public ResponseEntity<OnboardingRequestResponse> submit(@Valid @RequestBody OnboardingRequestSubmission body) {
     OnboardingRequest request = submit.handle(new SubmitOnboardingRequestCommand(body.type(), body.fullName(),
       body.email(), body.clinicName(), body.role(), body.sitesRange(), body.message(), body.privacyConsent()));

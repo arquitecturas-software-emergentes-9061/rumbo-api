@@ -12,10 +12,13 @@ import com.uitopic.rumbo.navigation.domain.model.valueobjects.PublishedSpatialGr
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.RouteConstraints;
 import com.uitopic.rumbo.navigation.domain.repositories.PublishedSpatialGraphRepository;
 import com.uitopic.rumbo.navigation.domain.services.AStarRouteCalculationDomainService;
+import com.uitopic.rumbo.navigation.domain.repositories.VisitorRoutePreferencesRepository;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 
 /** Uses real A* calculations and a single-snapshot repository fake. */
 class PublishedRouteQueryServiceImplTest {
@@ -31,7 +34,7 @@ class PublishedRouteQueryServiceImplTest {
   void unknownAccessibilityReportsNoCompatibleRouteUsingTheSameLoadedGraph() {
     var graph = graph(true, PublishedSpatialGraph.Accessibility.UNKNOWN);
     var repository = new FakeGraphs(graph);
-    var service = new PublishedRouteQueryServiceImpl(repository, calculator);
+    var service = new PublishedRouteQueryServiceImpl(repository, calculator, noSavedPreferences());
 
     assertThrows(NoCompatibleRouteException.class,
         () -> service.calculate(siteId, start.id(), goal.id(), true));
@@ -46,7 +49,7 @@ class PublishedRouteQueryServiceImplTest {
   void unknownAccessibilityReturnsRouteWithoutRestriction() {
     var graph = graph(true, PublishedSpatialGraph.Accessibility.UNKNOWN);
     var repository = new FakeGraphs(graph);
-    var service = new PublishedRouteQueryServiceImpl(repository, calculator);
+    var service = new PublishedRouteQueryServiceImpl(repository, calculator, noSavedPreferences());
 
     var route = service.calculate(siteId, start.id(), goal.id(), false).orElseThrow();
 
@@ -60,7 +63,7 @@ class PublishedRouteQueryServiceImplTest {
   void disconnectedNodesReturnEmptyEvenWithAccessibilityPreference() {
     var graph = graph(false, PublishedSpatialGraph.Accessibility.ACCESSIBLE);
     var repository = new FakeGraphs(graph);
-    var service = new PublishedRouteQueryServiceImpl(repository, calculator);
+    var service = new PublishedRouteQueryServiceImpl(repository, calculator, noSavedPreferences());
 
     assertTrue(service.calculate(siteId, start.id(), goal.id(), true).isEmpty());
 
@@ -74,7 +77,7 @@ class PublishedRouteQueryServiceImplTest {
   void accessibleRouteIsReturnedWithoutRecalculation() {
     var graph = graph(true, PublishedSpatialGraph.Accessibility.ACCESSIBLE);
     var repository = new FakeGraphs(graph);
-    var service = new PublishedRouteQueryServiceImpl(repository, calculator);
+    var service = new PublishedRouteQueryServiceImpl(repository, calculator, noSavedPreferences());
 
     var route = service.calculate(siteId, start.id(), goal.id(), true).orElseThrow();
 
@@ -92,7 +95,7 @@ class PublishedRouteQueryServiceImplTest {
         PublishedSpatialGraph.LinkKind.STAIRS, 1, 1, 0, PublishedSpatialGraph.Accessibility.ACCESSIBLE, false);
     var graph = new PublishedSpatialGraph(siteId, UUID.randomUUID(), UUID.randomUUID(),
         List.of(new PublishedSpatialGraph.Plan(floorId, planId, 10, 10, 1)), List.of(start, goal), List.of(stairs));
-    var service = new PublishedRouteQueryServiceImpl(new FakeGraphs(graph), calculator);
+    var service = new PublishedRouteQueryServiceImpl(new FakeGraphs(graph), calculator, noSavedPreferences());
     var avoidStairs = new RouteConstraints(true, false, false);
 
     assertThrows(NoCompatibleRouteException.class,
@@ -106,11 +109,15 @@ class PublishedRouteQueryServiceImplTest {
   @Test
   void prioritizingElevatorsNeverTurnsAnExistingRouteIntoAnError() {
     var graph = graph(true, PublishedSpatialGraph.Accessibility.UNKNOWN);
-    var service = new PublishedRouteQueryServiceImpl(new FakeGraphs(graph), calculator);
+    var service = new PublishedRouteQueryServiceImpl(new FakeGraphs(graph), calculator, noSavedPreferences());
 
     var route = service.calculate(siteId, start.id(), goal.id(), new RouteConstraints(false, false, true));
 
     assertEquals(List.of(start, goal), route.orElseThrow().nodes());
+  }
+
+  private static ObjectProvider<VisitorRoutePreferencesRepository> noSavedPreferences() {
+    return new DefaultListableBeanFactory().getBeanProvider(VisitorRoutePreferencesRepository.class);
   }
 
   private PublishedSpatialGraph.Node node(double x) {

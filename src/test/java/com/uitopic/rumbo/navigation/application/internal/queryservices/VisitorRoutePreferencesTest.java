@@ -1,12 +1,13 @@
 package com.uitopic.rumbo.navigation.application.internal.queryservices;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.uitopic.rumbo.navigation.domain.exceptions.NoCompatibleRouteException;
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.CalculatedRoute;
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.PublishedSpatialGraph;
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.PublishedSpatialGraph.Accessibility;
@@ -93,14 +94,14 @@ class VisitorRoutePreferencesTest {
   }
 
   @Test
-  void savedPreferencesThatNoConnectionSatisfiesGiveNoRoute() {
+  void savedPreferencesThatNoConnectionSatisfiesAreReportedAsIncompatible() {
     when(saved.findByVisitorId(visitorId)).thenReturn(Optional.of(new RouteConstraints(true, false, false)));
     var onlyStairs = new PublishedSpatialGraph(siteId, UUID.randomUUID(), UUID.randomUUID(), plans(),
         List.of(lobby, cardiology), List.of(stairs));
     when(graphs.findCurrentBySite(siteId)).thenReturn(Optional.of(onlyStairs));
 
-    assertTrue(service(saved, false).calculateForVisitor(siteId, lobby.id(), cardiology.id(),
-        RouteConstraints.NONE, visitorId).isEmpty());
+    assertThrows(NoCompatibleRouteException.class, () -> service(saved, false).calculateForVisitor(siteId,
+        lobby.id(), cardiology.id(), RouteConstraints.NONE, visitorId));
   }
 
   private PublishedRouteQueryServiceImpl service(VisitorRoutePreferencesRepository repository) {

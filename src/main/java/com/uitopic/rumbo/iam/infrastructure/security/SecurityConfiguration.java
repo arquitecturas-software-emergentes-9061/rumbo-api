@@ -38,7 +38,9 @@ public class SecurityConfiguration {
     "/error"
   };
   static final String[] PUBLIC_AUTH_ENDPOINTS = {
-    "/api/v1/auth/sign-up", "/api/v1/auth/sign-in", "/api/v1/auth/refresh"
+    "/api/v1/auth/sign-up", "/api/v1/auth/sign-in", "/api/v1/auth/refresh",
+    // The landing page sends demo and onboarding requests before the clinic has an account (PR-4).
+    "/api/v1/onboarding-requests"
   };
   /**
    * Administrative writes that need an active plan (TS-28): everything a clinic changes on its sites. Registering the

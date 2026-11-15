@@ -10,7 +10,7 @@ import com.uitopic.rumbo.iam.application.ports.SubscriptionStatusReader;
 import com.uitopic.rumbo.iam.application.ports.SubscriptionStatusReader.Standing;
 import com.uitopic.rumbo.iam.domain.model.valueobjects.UserRole;
 import com.uitopic.rumbo.iam.infrastructure.security.SubscriptionAuthorizationManager;
-import com.uitopic.rumbo.iam.infrastructure.security.SubscriptionInactiveException;
+import com.uitopic.rumbo.iam.infrastructure.security.SubscriptionRequiredException;
 import com.uitopic.rumbo.iam.interfaces.security.AuthenticatedPrincipal;
 import java.util.List;
 import java.util.UUID;
@@ -42,8 +42,8 @@ class SubscriptionAuthorizationManagerTest {
     when(reader.standingOf(adminId)).thenReturn(Standing.EXPIRED);
 
     assertThatThrownBy(() -> manager(reader).check(() -> as(UserRole.CLINIC_ADMIN), context))
-      .isInstanceOf(SubscriptionInactiveException.class)
-      .satisfies(error -> assertThat(((SubscriptionInactiveException) error).standing()).isEqualTo(Standing.EXPIRED));
+      .isInstanceOf(SubscriptionRequiredException.class)
+      .satisfies(error -> assertThat(((SubscriptionRequiredException) error).standing()).isEqualTo(Standing.EXPIRED));
   }
 
   @Test
@@ -51,7 +51,7 @@ class SubscriptionAuthorizationManagerTest {
     when(reader.standingOf(adminId)).thenReturn(Standing.NONE);
 
     assertThatThrownBy(() -> manager(reader).check(() -> as(UserRole.CLINIC_ADMIN), context))
-      .isInstanceOf(SubscriptionInactiveException.class)
+      .isInstanceOf(SubscriptionRequiredException.class)
       .hasMessageContaining("no subscription");
   }
 
@@ -94,7 +94,8 @@ class SubscriptionAuthorizationManagerTest {
   private SubscriptionAuthorizationManager manager(SubscriptionStatusReader available) {
     StaticListableBeanFactory factory = new StaticListableBeanFactory();
     if (available != null) factory.addBean("reader", available);
-    return new SubscriptionAuthorizationManager(factory.getBeanProvider(SubscriptionStatusReader.class));
+    return new SubscriptionAuthorizationManager(factory.getBeanProvider(SubscriptionStatusReader.class),
+        factory.getBeanProvider(com.uitopic.rumbo.iam.infrastructure.security.SiteOwnerGuard.class));
   }
 
   private Authentication as(UserRole role) {

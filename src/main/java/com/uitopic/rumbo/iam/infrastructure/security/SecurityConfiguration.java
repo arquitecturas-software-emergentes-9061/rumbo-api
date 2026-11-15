@@ -46,6 +46,14 @@ public class SecurityConfiguration {
    * choose or renew its plan.
    */
   static final String[] SUBSCRIPTION_BOUND_WRITES = {"/api/v1/sites", "/api/v1/sites/**"};
+  /**
+   * Creations that the quota guard of Planning already decides together with the plan limits (PlanningQuotaGuard,
+   * 409 {@code SUBSCRIPTION_REQUIRED} or {@code PLAN_QUOTA_EXCEEDED}). They skip the IAM check, so one request never
+   * gets two different answers for the same missing plan.
+   */
+  static final String[] QUOTA_DECIDED_CREATIONS = {
+    "/api/v1/sites", "/api/v1/sites/*/floors", "/api/v1/sites/*/beacons"
+  };
 
   @Bean
   SecurityFilterChain apiSecurity(HttpSecurity http, TokenProvider tokenProvider, SessionRevocationService revocation,
@@ -64,6 +72,7 @@ public class SecurityConfiguration {
         .requestMatchers(HttpMethod.POST, PUBLIC_AUTH_ENDPOINTS).permitAll()
         .requestMatchers(HttpMethod.POST, "/api/v1/subscriptions/stripe/webhook").permitAll()
         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
+        .requestMatchers(HttpMethod.POST, QUOTA_DECIDED_CREATIONS).authenticated()
         .requestMatchers(HttpMethod.POST, SUBSCRIPTION_BOUND_WRITES).access(subscriptions)
         .requestMatchers(HttpMethod.PUT, SUBSCRIPTION_BOUND_WRITES).access(subscriptions)
         .requestMatchers(HttpMethod.PATCH, SUBSCRIPTION_BOUND_WRITES).access(subscriptions)

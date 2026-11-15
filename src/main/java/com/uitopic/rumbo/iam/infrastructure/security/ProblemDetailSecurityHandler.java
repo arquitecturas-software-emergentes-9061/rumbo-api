@@ -37,8 +37,8 @@ public class ProblemDetailSecurityHandler implements AuthenticationEntryPoint, A
   @Override
   public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException exception)
     throws IOException {
-    if (exception instanceof SubscriptionInactiveException inactive) {
-      ProblemDetail problem = ProblemDetails.of(HttpStatus.FORBIDDEN, SubscriptionInactiveException.CODE,
+    if (exception instanceof SubscriptionRequiredException inactive) {
+      ProblemDetail problem = ProblemDetails.of(HttpStatus.FORBIDDEN, SubscriptionRequiredException.CODE,
         inactive.getMessage());
       problem.setProperty("standing", inactive.standing());
       write(request, response, problem);

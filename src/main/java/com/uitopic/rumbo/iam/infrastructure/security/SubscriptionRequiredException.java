@@ -8,11 +8,11 @@ import org.springframework.security.access.AccessDeniedException;
  * {@link AccessDeniedException}, so the security chain answers it; {@link ProblemDetailSecurityHandler} gives it the
  * {@value #CODE} code and the {@code standing}, so clients can tell it apart from a missing permission.
  */
-public class SubscriptionInactiveException extends AccessDeniedException {
-  public static final String CODE = "SUBSCRIPTION_INACTIVE";
+public class SubscriptionRequiredException extends AccessDeniedException {
+  public static final String CODE = "SUBSCRIPTION_REQUIRED";
   private final Standing standing;
 
-  public SubscriptionInactiveException(Standing standing) {
+  public SubscriptionRequiredException(Standing standing) {
     super(standing == Standing.NONE
       ? "The clinic has no subscription; choose a plan to manage its sites"
       : "The clinic's subscription is not active; renew the plan to manage its sites");

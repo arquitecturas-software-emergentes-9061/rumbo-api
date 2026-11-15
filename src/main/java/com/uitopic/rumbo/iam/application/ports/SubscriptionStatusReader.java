@@ -6,7 +6,7 @@ import java.util.UUID;
  * Outbound port to Subscriptions and Payments (TS-28, WI-TS28-02): tells IAM whether the clinic of an administrator
  * may run administrative operations. IAM never reads subscription tables; the implementation is an adapter over the
  * public facade of Subscriptions.
- * <p>Contract for the adapter, so authorization works unchanged when it arrives:
+ * <p>Contract, implemented by {@code SubscriptionsStatusReaderAdapter} over {@code SubscriptionsStatusFacade}:
  * <ul>
  *   <li>{@code adminUserId} is the account of the {@code CLINIC_ADMIN}; the adapter resolves its clinic and the
  *   current subscription of that clinic.</li>
@@ -15,7 +15,7 @@ import java.util.UUID;
  *   <li>It must be fast (it runs on every administrative write) and may throw when Subscriptions is unavailable;
  *   the request is then allowed and the failure logged, so a fault there never stops the clinics.</li>
  * </ul>
- * Until an implementation is registered, administrative operations are not restricted by subscription.
+ * Without an implementation registered, administrative operations are not restricted by subscription.
  */
 public interface SubscriptionStatusReader {
   Standing standingOf(UUID adminUserId);

@@ -1,8 +1,6 @@
 package com.uitopic.rumbo.iam.interfaces;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -11,8 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uitopic.rumbo.TestcontainersConfiguration;
-import com.uitopic.rumbo.iam.application.ports.SubscriptionStatusReader;
-import com.uitopic.rumbo.iam.application.ports.SubscriptionStatusReader.Standing;
+import com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,14 +21,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 /**
- * TS-28 evidence (WI-TS28-02, and the expiry cases of WI-TS28-05): with the real security chain on PostgreSQL, an
- * administrator whose plan is not active cannot change its sites, but still reads them and can register its clinic.
- * Subscriptions is replaced by a stub of {@link SubscriptionStatusReader}, the port its adapter will implement.
+ * TS-28 evidence (WI-TS28-02, and the expiry cases of WI-TS28-05) with the real security chain, the real
+ * Subscriptions module and PostgreSQL. Creating sites, floors and beacons is decided by the quota guard of Planning
+ * (409); every other administrative write on a site is decided here (403). Both answer {@code SUBSCRIPTION_REQUIRED}.
  */
 @SpringBootTest
 @ActiveProfiles("postgres")
@@ -43,48 +39,60 @@ class SubscriptionAuthorizationIntegrationTest {
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper mapper;
   @Autowired JdbcTemplate jdbc;
-  @MockitoBean SubscriptionStatusReader subscriptions;
 
   private String admin;
+  private UUID owner;
 
   @BeforeEach
   void administrator() throws Exception {
     admin = tokenOf(register());
+    owner = SubscriptionTestSeeds.ownerOf(admin);
   }
 
   @Test
-  void anActivePlanLetsTheAdministratorCreateASite() throws Exception {
-    when(subscriptions.standingOf(any())).thenReturn(Standing.ACTIVE);
+  void anActivePlanLetsTheAdministratorCreateAndEditASite() throws Exception {
+    SubscriptionTestSeeds.subscription(jdbc, owner, "BASIC", false);
+    String site = createdSite("Sede Activa");
 
-    mvc.perform(as(createSite("Sede Activa"))).andExpect(status().isCreated());
+    mvc.perform(as(renameSite(site, "Sede Activa Renombrada"))).andExpect(status().isOk());
   }
 
   @Test
-  void anExpiredPlanBlocksWritesWithItsOwnCodeAndChangesNothing() throws Exception {
-    when(subscriptions.standingOf(any())).thenReturn(Standing.EXPIRED);
+  void anExpiredPlanBlocksEditsWithItsOwnCodeAndChangesNothing() throws Exception {
+    SubscriptionTestSeeds.subscription(jdbc, owner, "BASIC", false);
+    String site = createdSite("Sede Vencida");
+    SubscriptionTestSeeds.subscription(jdbc, owner, "BASIC", true);
 
-    mvc.perform(as(createSite("Sede Vencida")))
+    mvc.perform(as(renameSite(site, "Cambio no permitido")))
       .andExpect(status().isForbidden())
-      .andExpect(jsonPath("$.code").value("SUBSCRIPTION_INACTIVE"))
+      .andExpect(jsonPath("$.code").value("SUBSCRIPTION_REQUIRED"))
       .andExpect(jsonPath("$.standing").value("EXPIRED"));
 
-    assertThat(jdbc.queryForObject("SELECT count(*) FROM indoor_sites WHERE name = ?", Integer.class, "Sede Vencida"))
-      .as("the site was not created").isZero();
+    assertThat(jdbc.queryForObject("SELECT name FROM indoor_sites WHERE id = ?", String.class, UUID.fromString(site)))
+      .as("the site keeps its name").isEqualTo("Sede Vencida");
   }
 
   @Test
-  void aClinicThatNeverSubscribedIsAskedToChooseAPlan() throws Exception {
-    when(subscriptions.standingOf(any())).thenReturn(Standing.NONE);
+  void aCancelledPlanIsTreatedAsExpired() throws Exception {
+    SubscriptionTestSeeds.subscription(jdbc, owner, "BASIC", false);
+    String site = createdSite("Sede Cancelada");
+    jdbc.update("UPDATE subscriptions_subscriptions SET status = 'CANCELLED' WHERE owner_user_id = ?", owner);
 
-    mvc.perform(as(createSite("Sede Nueva")))
+    mvc.perform(as(renameSite(site, "Cambio no permitido")))
       .andExpect(status().isForbidden())
-      .andExpect(jsonPath("$.code").value("SUBSCRIPTION_INACTIVE"))
-      .andExpect(jsonPath("$.standing").value("NONE"));
+      .andExpect(jsonPath("$.code").value("SUBSCRIPTION_REQUIRED"));
+  }
+
+  @Test
+  void creationWithoutAPlanIsLeftToTheQuotaGuard() throws Exception {
+    mvc.perform(as(createSite("Sede Nueva")))
+      .andExpect(status().isConflict())
+      .andExpect(jsonPath("$.code").value("SUBSCRIPTION_REQUIRED"));
   }
 
   @Test
   void readsStayOpenAndTheClinicCanStillBeRegistered() throws Exception {
-    when(subscriptions.standingOf(any())).thenReturn(Standing.EXPIRED);
+    SubscriptionTestSeeds.subscription(jdbc, owner, "BASIC", true);
 
     mvc.perform(as(get("/api/v1/sites"))).andExpect(status().isOk());
     String code = "CC-" + UUID.randomUUID().toString().substring(0, 8);
@@ -98,6 +106,16 @@ class SubscriptionAuthorizationIntegrationTest {
     mvc.perform(createSite("Sede Anonima")).andExpect(status().isUnauthorized());
   }
 
+  private String createdSite(String name) throws Exception {
+    String body = mvc.perform(as(createSite(name))).andExpect(status().isCreated())
+      .andReturn().getResponse().getContentAsString();
+    return mapper.readTree(body).get("id").asText();
+  }
+
+  private MockHttpServletRequestBuilder renameSite(String site, String name) {
+    return put("/api/v1/sites/{siteId}", site).contentType(MediaType.APPLICATION_JSON)
+      .content("{\"name\":\"%s\"}".formatted(name));
+  }
   private MockHttpServletRequestBuilder createSite(String name) {
     return post("/api/v1/sites").contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"%s\"}".formatted(name));
   }

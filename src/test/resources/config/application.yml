@@ -1,0 +1,7 @@
+# Test-only overrides. The secret below protects nothing and must never be used outside the test suite.
+rumbo:
+  security:
+    jwt:
+      secret: test-only-signing-key-not-for-any-real-environment
+    bcrypt:
+      strength: 4

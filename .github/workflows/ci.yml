@@ -1,7 +1,7 @@
 name: API CI
 on:
   push:
-    branches: [main, develop, 'feat/**', 'release/**', 'hotfix/**']
+    branches: [main, develop, 'feat/**', 'feature/**', 'release/**', 'hotfix/**']
   pull_request:
     branches: [develop, main]
 jobs:
@@ -9,6 +9,24 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: rumbo_test
+          POSTGRES_USER: rumbo_test
+          POSTGRES_PASSWORD: rumbo_test_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rumbo_test -d rumbo_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      RUMBO_TEST_DB_URL: jdbc:postgresql://localhost:5432/rumbo_test
+      RUMBO_TEST_DB_USER: rumbo_test
+      RUMBO_TEST_DB_PASSWORD: rumbo_test_only
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -18,3 +36,31 @@ jobs:
           cache: maven
       - name: Tests and package
         run: mvn -B --no-transfer-progress clean verify
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            target/surefire-reports/
+            target/cucumber-reports/
+            target/site/jacoco/
+          if-no-files-found: ignore
+  structural-mapper:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: structural-mapper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: structural-mapper/requirements-geometry.txt
+      - name: Install dependencies
+        run: pip install -r requirements-geometry.txt
+      - name: Tests
+        run: STRUCTURAL_MAPPER_DISABLE_ML=1 pytest -q

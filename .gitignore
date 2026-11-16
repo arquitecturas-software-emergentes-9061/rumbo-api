@@ -8,3 +8,9 @@ target/
 !.env.example
 logs/
 *.log
+
+# structural-mapper (Python)
+__pycache__/
+.pytest_cache/
+.venv/
+structural-mapper/.models/

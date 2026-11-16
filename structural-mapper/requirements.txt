@@ -1,0 +1,4 @@
+# Default runtime: deterministic pipeline plus the semantic floor-plan parser on ONNX Runtime (no PyTorch).
+# The model itself (66 MB) is downloaded and verified on first start; see mapper/perception/model_store.py.
+-r requirements-geometry.txt
+onnxruntime>=1.20,<2

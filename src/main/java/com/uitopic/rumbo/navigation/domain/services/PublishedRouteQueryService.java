@@ -7,7 +7,11 @@ import java.util.UUID;
 
 /** Query contract for calculating a route from one published site model. */
 public interface PublishedRouteQueryService {
-  /** Returns no route when the model or path is unavailable, or when no path satisfies the constraints. */
+  /**
+   * Loads the current published model for each calculation. For stateless recalculation (TS-22), callers supply
+   * the updated origin together with their original destination and mobility constraints.
+   * Returns empty when the model, node or path is unavailable; incompatible restrictions raise a domain error.
+   */
   Optional<CalculatedRoute> calculate(UUID siteId, UUID fromNodeId, UUID toNodeId,
                                       RouteConstraints constraints);
 

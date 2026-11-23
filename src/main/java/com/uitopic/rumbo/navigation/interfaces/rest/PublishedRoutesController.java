@@ -42,12 +42,15 @@ public class PublishedRoutesController {
     this.routes = routes;
   }
 
-  /** Finds an ordered route between two nodes of the current published model. */
+  /** Calculates or recalculates a route without storing a navigation session (TS-22). */
   @Operation(summary = "Calculate an indoor route for a site",
       description = "Uses the current PUBLISHED model and identifies cross-floor traversals "
           + "in verticalSections. accessibleOnly excludes connections without confirmed "
           + "accessibility and stairs; avoidStairs excludes stairs; prioritizeElevators makes "
-          + "stairs and ramps cost more. A 404 means no route satisfies every restriction.")
+          + "stairs and ramps cost more. To recalculate, send the updated from node and keep "
+          + "the original to node and mobility parameters. Each request reads the current published "
+          + "version independently; no active route is stored. A 404 means a model, node or route "
+          + "is missing, or no route satisfies every restriction.")
   @ApiResponses({
       @ApiResponse(responseCode = "200", description = "Route found",
           content = @Content(schema = @Schema(implementation = PublishedRouteResponse.class),

@@ -222,6 +222,8 @@ Regenerating a graph is a separate future US-09/US-10 proposal workflow. This `P
 
 Request media type: `application/merge-patch+json`; body: `{"status":"PUBLISHED"}`. All three path IDs are required UUIDs. The endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.planning.publication.enabled` can disable it. A `CLINIC_ADMIN` JWT and site ownership are required.
 
+PR-242: the Web editor sends its saved draft ETag in `If-Match`. When supplied, the revision is checked under the map lock; a changed draft returns `412 STALE_DRAFT_GRAPH` without publishing. A malformed header returns 400. Header omission preserves existing API clients. Publication also checks every active inventory beacon against a unique floor-plan coordinate space of this map and its bounds. Invalid placement returns `422 INVALID_MAP_GRAPH`, with `INVALID_BEACON_PLACEMENT`, element type `BEACON`, and its ID. Inactive inventory is ignored; no minimum beacon count is imposed. A failed check leaves the draft and previous published version unchanged.
+
 - `200 OK`: `siteId`, `mapId`, `modelVersionId`, `status: "PUBLISHED"`. The previous published version, if any, becomes `ARCHIVED` in the same transaction.
 - `400 Bad Request`: malformed ID or JSON, or a status other than `PUBLISHED`.
 - `404 Not Found`: the site, map and version do not match an existing draft.

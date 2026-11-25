@@ -25,6 +25,9 @@ import com.uitopic.rumbo.planning.domain.model.commands.CreateDraftMapVersionCom
 import com.uitopic.rumbo.planning.domain.model.commands.ReplaceDraftGraphCommand;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PublishedMapSnapshot;
 import com.uitopic.rumbo.planning.domain.services.IndoorMapCommandService;
+import com.uitopic.rumbo.planning.domain.services.BeaconPublicationValidator;
+import com.uitopic.rumbo.planning.domain.repositories.BeaconRepository;
+import com.uitopic.rumbo.planning.domain.exceptions.MapPublicationRejectedException;
 import java.util.HashSet;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -41,17 +44,20 @@ public class IndoorMapCommandServiceImpl implements IndoorMapCommandService {
   private final FloorPlanVersionRepository planVersions;
   private final FloorPlanContentValidator planContent;
   private final ScaleReferenceRepository scaleReferences;
+  private final BeaconRepository beacons;
 
   public IndoorMapCommandServiceImpl(IndoorMapRepository repository,
                                      PublishedMapRepository published,
                                      FloorPlanVersionRepository planVersions,
                                      FloorPlanContentValidator planContent,
-                                     ScaleReferenceRepository scaleReferences) {
+                                     ScaleReferenceRepository scaleReferences,
+                                     BeaconRepository beacons) {
     this.repository = repository;
     this.published = published;
     this.planVersions = planVersions;
     this.planContent = planContent;
     this.scaleReferences = scaleReferences;
+    this.beacons = beacons;
   }
 
   @Override
@@ -134,6 +140,11 @@ public class IndoorMapCommandServiceImpl implements IndoorMapCommandService {
     IndoorMap map = repository.findDraftForUpdate(command.mapId(), command.modelVersionId())
         .orElseThrow(MapVersionNotFoundException::new);
     if (!map.siteId().equals(command.siteId())) throw new MapVersionNotFoundException();
+    if (command.expectedRevision() != null && map.editRevision() != command.expectedRevision()) {
+      throw new DraftGraphRevisionConflictException();
+    }
+    var beaconValidation = BeaconPublicationValidator.validate(map, beacons.findBySite(map.siteId(), null));
+    if (!beaconValidation.isValid()) throw new MapPublicationRejectedException(beaconValidation);
     map.publish();
     repository.publish(map);
     return map;

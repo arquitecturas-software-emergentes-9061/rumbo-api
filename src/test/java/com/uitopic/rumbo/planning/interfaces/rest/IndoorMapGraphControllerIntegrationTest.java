@@ -67,6 +67,39 @@ class IndoorMapGraphControllerIntegrationTest {
   }
 
   @Test
+  void stalePublicationDoesNotChangeTheDraft() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    mvc.perform(patch(publicationUrl(map)).header("If-Match", "\"rev-1\"")
+        .contentType("application/merge-patch+json").content("{\"status\":\"PUBLISHED\"}"))
+      .andExpect(status().isPreconditionFailed());
+    mvc.perform(get(url(map))).andExpect(status().isOk()).andExpect(header().string("ETag", "\"rev-0\""));
+  }
+
+  @Test
+  void activeBeaconOutsideDraftBlocksPublicationUntilItIsDeactivated() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    UUID beacon = UUID.randomUUID();
+    jdbc.update("INSERT INTO positioning_beacons (id, site_id, floor_id, identifier, x, y, active) VALUES (?, ?, ?, ?, 101, 1, true)",
+        beacon, map.siteId(), map.plans().getFirst().floorId(), "publication-" + beacon);
+    mvc.perform(patch(publicationUrl(map)).header("If-Match", "\"rev-0\"")
+        .contentType("application/merge-patch+json").content("{\"status\":\"PUBLISHED\"}"))
+      .andExpect(status().isUnprocessableEntity())
+      .andExpect(jsonPath("$.issues[0].code").value("INVALID_BEACON_PLACEMENT"))
+      .andExpect(jsonPath("$.issues[0].elementId").value(beacon.toString()));
+    mvc.perform(get(url(map))).andExpect(status().isOk()).andExpect(header().string("ETag", "\"rev-0\""));
+    jdbc.update("UPDATE positioning_beacons SET active = false WHERE id = ?", beacon);
+    mvc.perform(patch(publicationUrl(map)).header("If-Match", "\"rev-0\"")
+        .contentType("application/merge-patch+json").content("{\"status\":\"PUBLISHED\"}"))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PUBLISHED"));
+  }
+
+  private String publicationUrl(IndoorMap map) {
+    return "/api/v1/sites/" + map.siteId() + "/maps/" + map.id() + "/versions/" + map.modelVersionId();
+  }
+
+  @Test
   void rejectsWallOverlappingLinkWithoutChangingStoredDraftOrEtag() throws Exception {
     IndoorMap map = draft();
     store.saveDraft(map);

@@ -184,6 +184,8 @@ Both operations address an **existing DRAFT** version; they do not create a map,
 
 When a plan has editable walls, a `DOORWAY` connection must cross or end at a door opening on one of those walls. A recognized wall or door that cannot be associated safely stays visible in the editor for review; it is not silently removed from the interpretation preview. The editor blocks saving a graph with unresolved wall crossings.
 
+PR-243 also rejects a connection with a positive-length collinear overlap with a persisted wall, in either direction. Parallel disjoint links and endpoint-only contact remain permitted. The final wall/door geometry is checked again at publication, including walls added after connections. Rejections use the existing `422 INVALID_MAP_GRAPH` response and `CONNECTION_CROSSES_WALL` issue identifying the connection. A rejected graph replacement leaves its stored graph and ETag unchanged. These rules apply to modeled wall segments and associated door openings; the interpretation service's candidate polygons do not become persisted obstacles automatically.
+
 Example `PUT` body (`verticalPenalty`, `accessibility`, and each destination's `specialty` are optional):
 
 ```json

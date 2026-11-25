@@ -67,6 +67,26 @@ class IndoorMapGraphControllerIntegrationTest {
   }
 
   @Test
+  void rejectsWallOverlappingLinkWithoutChangingStoredDraftOrEtag() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    var plan = map.plans().getFirst();
+    UUID wall = UUID.randomUUID();
+    var update = new GraphUpdateResource(nodeInputs(map), connectionInputs(map), List.of(),
+        List.of(new GraphUpdateResource.WallInputResource(wall, plan.floorId(), plan.planVersionId(),
+            0.0, 1.0, 5.0, 1.0)), List.of());
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"")
+        .contentType("application/json").content(json.writeValueAsString(update)))
+      .andExpect(status().isUnprocessableEntity())
+      .andExpect(jsonPath("$.code").value("INVALID_MAP_GRAPH"))
+      .andExpect(jsonPath("$.issues[0].code").value("CONNECTION_CROSSES_WALL"));
+    mvc.perform(get(url(map))).andExpect(status().isOk())
+      .andExpect(header().string("ETag", "\"rev-0\""))
+      .andExpect(jsonPath("$.connections.length()").value(1))
+      .andExpect(jsonPath("$.walls.length()").value(0));
+  }
+
+  @Test
   void savesWallsAndDoorsUnderTheDraftEtagAndReadsThemBack() throws Exception {
     IndoorMap map = draft();
     store.saveDraft(map);

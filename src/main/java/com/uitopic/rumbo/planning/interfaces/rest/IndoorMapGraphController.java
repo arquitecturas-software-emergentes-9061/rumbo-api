@@ -94,7 +94,7 @@ public class IndoorMapGraphController {
     return "\"rev-" + revision + "\"";
   }
 
-  private static long expectedRevision(String ifMatch) {
+  static long expectedRevision(String ifMatch) {
     if (ifMatch == null) throw new GraphEditPreconditionException(true);
     if (!ifMatch.matches("\"rev-(0|[1-9][0-9]*)\"")) {
       throw new GraphEditPreconditionException(false);

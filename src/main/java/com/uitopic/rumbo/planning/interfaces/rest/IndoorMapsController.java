@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -87,12 +88,15 @@ public class IndoorMapsController {
   }
 
   /** Validates and publishes a draft version, returning its new state. */
-  @Operation(summary = "Publish an indoor map version")
+  @Operation(summary = "Publish an indoor map version", description = "Validates the graph and active beacon placement. "
+      + "Optional If-Match uses the draft ETag to reject a revision changed since review with 412.")
   @PatchMapping(value = "/{mapId}/versions/{versionId}", consumes = "application/merge-patch+json")
   public ResponseEntity<MapVersionResource> publish(
       @PathVariable UUID siteId, @PathVariable UUID mapId, @PathVariable UUID versionId,
+      @RequestHeader(value = "If-Match", required = false) String ifMatch,
       @Valid @RequestBody MapVersionStatusPatchResource patch) {
-    var map = commands.handle(new PublishMapVersionCommand(siteId, mapId, versionId));
+    var map = commands.handle(new PublishMapVersionCommand(siteId, mapId, versionId,
+        ifMatch == null ? null : IndoorMapGraphController.expectedRevision(ifMatch)));
     return ResponseEntity.ok(new MapVersionResource(map.siteId(), map.id(), map.modelVersionId(), map.status()));
   }
 }

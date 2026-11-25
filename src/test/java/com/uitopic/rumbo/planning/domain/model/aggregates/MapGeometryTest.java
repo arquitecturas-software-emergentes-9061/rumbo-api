@@ -4,6 +4,9 @@ import com.uitopic.rumbo.planning.domain.exceptions.InvalidMapGraphException;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.ConnectionType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapDoor;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.MapWall;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.MapScale;
+import com.uitopic.rumbo.planning.domain.model.valueobjects.GraphIssueCode;
+import com.uitopic.rumbo.planning.domain.exceptions.MapPublicationRejectedException;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.NodeType;
 import com.uitopic.rumbo.planning.domain.model.valueobjects.PlanCoordinateSpace;
 import java.util.UUID;
@@ -11,6 +14,64 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MapGeometryTest {
+  @Test
+  void rejectsCollinearOverlapInBothDirectionsButAllowsParallelAndDisjointLinks() {
+    double[][] segments = {{20, 50, 80, 50}, {80, 50, 20, 50}, {0, 50, 100, 50}};
+    for (double[] segment : segments) {
+      IndoorMap map = segmentMap(segment[0], segment[1], segment[2], segment[3]);
+      var plan = map.plans().getFirst();
+      map.addWall(new MapWall(UUID.randomUUID(), plan.floorId(), plan.planVersionId(), 30, 50, 70, 50));
+      var error = assertThrows(InvalidMapGraphException.class, () -> connect(map));
+      assertEquals(GraphIssueCode.CONNECTION_CROSSES_WALL, error.issue().code());
+      assertTrue(map.connections().isEmpty());
+    }
+    for (double[] segment : new double[][] {{20, 49, 80, 49}, {0, 50, 30, 50}, {71, 50, 90, 50}}) {
+      IndoorMap map = segmentMap(segment[0], segment[1], segment[2], segment[3]);
+      var plan = map.plans().getFirst();
+      map.addWall(new MapWall(UUID.randomUUID(), plan.floorId(), plan.planVersionId(), 30, 50, 70, 50));
+      assertDoesNotThrow(() -> connect(map));
+    }
+  }
+
+  @Test
+  void rejectsDiagonalAndVerticalCollinearOverlap() {
+    for (double[] segment : new double[][] {{20, 20, 80, 80}, {50, 20, 50, 80}}) {
+      IndoorMap map = segmentMap(segment[0], segment[1], segment[2], segment[3]);
+      var plan = map.plans().getFirst();
+      map.addWall(new MapWall(UUID.randomUUID(), plan.floorId(), plan.planVersionId(),
+          segment[0], segment[1], segment[2], segment[3]));
+      assertThrows(InvalidMapGraphException.class, () -> connect(map));
+    }
+  }
+
+  @Test
+  void publicationRechecksWallsAddedAfterConnections() {
+    IndoorMap map = segmentMap(20, 50, 80, 50);
+    var plan = map.plans().getFirst();
+    map.setScale(new MapScale(plan.floorId(), plan.planVersionId(), 1));
+    connect(map);
+    assertTrue(map.validateForPublication().isValid());
+    map.addWall(new MapWall(UUID.randomUUID(), plan.floorId(), plan.planVersionId(), 50, 0, 50, 100));
+    assertEquals(GraphIssueCode.CONNECTION_CROSSES_WALL,
+        map.validateForPublication().issues().getFirst().code());
+    assertThrows(MapPublicationRejectedException.class, map::publish);
+    assertEquals("DRAFT", map.status().name());
+  }
+
+  private IndoorMap segmentMap(double x1, double y1, double x2, double y2) {
+    IndoorMap map = new IndoorMap(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
+    UUID floor = UUID.randomUUID(), plan = UUID.randomUUID();
+    map.addPlan(new PlanCoordinateSpace(floor, plan, 100, 100));
+    map.addNode(UUID.randomUUID(), floor, plan, x1, y1, NodeType.ACCESS);
+    map.addNode(UUID.randomUUID(), floor, plan, x2, y2, NodeType.DESTINATION);
+    return map;
+  }
+
+  private void connect(IndoorMap map) {
+    map.addConnection(UUID.randomUUID(), map.nodes().get(0).id(), map.nodes().get(1).id(),
+        ConnectionType.CORRIDOR, 60, 60, true);
+  }
+
   @Test
   void onlyDoorwayMayCrossWallThroughItsOpening() {
     UUID floor = UUID.randomUUID(), plan = UUID.randomUUID();

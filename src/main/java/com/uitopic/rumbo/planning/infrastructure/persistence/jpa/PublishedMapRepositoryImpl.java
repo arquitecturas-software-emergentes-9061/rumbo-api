@@ -36,6 +36,21 @@ public class PublishedMapRepositoryImpl implements PublishedMapRepository {
 
   @Override
   @Transactional(readOnly = true)
+  public List<com.uitopic.rumbo.planning.domain.model.valueobjects.PublishedSite> findPublishedSites(UUID ownerUserId) {
+    var query = entityManager.createNativeQuery("SELECT s.id, s.name FROM indoor_sites s "
+        + "WHERE EXISTS (SELECT 1 FROM indoor_maps m JOIN map_versions v ON v.map_id = m.id "
+        + "WHERE m.site_id = s.id AND v.status = 'PUBLISHED') "
+        + (ownerUserId == null ? "" : "AND s.owner_user_id = :owner ") + "ORDER BY s.name, s.id");
+    if (ownerUserId != null) query.setParameter("owner", ownerUserId);
+    return query.getResultList().stream().map(value -> {
+      var row = (Object[]) value;
+      return new com.uitopic.rumbo.planning.domain.model.valueobjects.PublishedSite(
+          UUID.fromString(row[0].toString()), row[1].toString());
+    }).toList();
+  }
+
+  @Override
+  @Transactional(readOnly = true)
   public Optional<PublishedMapSnapshot> findBySite(UUID siteId) {
     try {
       return readPublishedSnapshot(siteId);

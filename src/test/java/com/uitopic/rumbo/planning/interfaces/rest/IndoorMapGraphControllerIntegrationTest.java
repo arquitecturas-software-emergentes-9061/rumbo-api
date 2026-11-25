@@ -67,6 +67,59 @@ class IndoorMapGraphControllerIntegrationTest {
   }
 
   @Test
+  void stalePublicationDoesNotChangeTheDraft() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    mvc.perform(patch(publicationUrl(map)).header("If-Match", "\"rev-1\"")
+        .contentType("application/merge-patch+json").content("{\"status\":\"PUBLISHED\"}"))
+      .andExpect(status().isPreconditionFailed());
+    mvc.perform(get(url(map))).andExpect(status().isOk()).andExpect(header().string("ETag", "\"rev-0\""));
+  }
+
+  @Test
+  void activeBeaconOutsideDraftBlocksPublicationUntilItIsDeactivated() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    UUID beacon = UUID.randomUUID();
+    jdbc.update("INSERT INTO positioning_beacons (id, site_id, floor_id, identifier, x, y, active) VALUES (?, ?, ?, ?, 101, 1, true)",
+        beacon, map.siteId(), map.plans().getFirst().floorId(), "publication-" + beacon);
+    mvc.perform(patch(publicationUrl(map)).header("If-Match", "\"rev-0\"")
+        .contentType("application/merge-patch+json").content("{\"status\":\"PUBLISHED\"}"))
+      .andExpect(status().isUnprocessableEntity())
+      .andExpect(jsonPath("$.issues[0].code").value("INVALID_BEACON_PLACEMENT"))
+      .andExpect(jsonPath("$.issues[0].elementId").value(beacon.toString()));
+    mvc.perform(get(url(map))).andExpect(status().isOk()).andExpect(header().string("ETag", "\"rev-0\""));
+    jdbc.update("UPDATE positioning_beacons SET active = false WHERE id = ?", beacon);
+    mvc.perform(patch(publicationUrl(map)).header("If-Match", "\"rev-0\"")
+        .contentType("application/merge-patch+json").content("{\"status\":\"PUBLISHED\"}"))
+      .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("PUBLISHED"));
+  }
+
+  private String publicationUrl(IndoorMap map) {
+    return "/api/v1/sites/" + map.siteId() + "/maps/" + map.id() + "/versions/" + map.modelVersionId();
+  }
+
+  @Test
+  void rejectsWallOverlappingLinkWithoutChangingStoredDraftOrEtag() throws Exception {
+    IndoorMap map = draft();
+    store.saveDraft(map);
+    var plan = map.plans().getFirst();
+    UUID wall = UUID.randomUUID();
+    var update = new GraphUpdateResource(nodeInputs(map), connectionInputs(map), List.of(),
+        List.of(new GraphUpdateResource.WallInputResource(wall, plan.floorId(), plan.planVersionId(),
+            0.0, 1.0, 5.0, 1.0)), List.of());
+    mvc.perform(put(url(map)).header("If-Match", "\"rev-0\"")
+        .contentType("application/json").content(json.writeValueAsString(update)))
+      .andExpect(status().isUnprocessableEntity())
+      .andExpect(jsonPath("$.code").value("INVALID_MAP_GRAPH"))
+      .andExpect(jsonPath("$.issues[0].code").value("CONNECTION_CROSSES_WALL"));
+    mvc.perform(get(url(map))).andExpect(status().isOk())
+      .andExpect(header().string("ETag", "\"rev-0\""))
+      .andExpect(jsonPath("$.connections.length()").value(1))
+      .andExpect(jsonPath("$.walls.length()").value(0));
+  }
+
+  @Test
   void savesWallsAndDoorsUnderTheDraftEtagAndReadsThemBack() throws Exception {
     IndoorMap map = draft();
     store.saveDraft(map);

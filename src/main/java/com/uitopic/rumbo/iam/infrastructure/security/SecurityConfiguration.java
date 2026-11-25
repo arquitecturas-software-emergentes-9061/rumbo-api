@@ -90,7 +90,7 @@ public class SecurityConfiguration {
     CorsConfiguration cors = new CorsConfiguration();
     cors.setAllowedOrigins(allowedOrigins);
     cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-    cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept-Language", "If-Match"));
+    cors.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept-Language", "If-Match", "If-None-Match"));
     cors.setExposedHeaders(List.of("Location", "Retry-After", "ETag", "X-Plan-Width", "X-Plan-Height"));
     cors.setMaxAge(Duration.ofHours(1));
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

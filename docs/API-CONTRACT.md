@@ -184,6 +184,8 @@ Both operations address an **existing DRAFT** version; they do not create a map,
 
 When a plan has editable walls, a `DOORWAY` connection must cross or end at a door opening on one of those walls. A recognized wall or door that cannot be associated safely stays visible in the editor for review; it is not silently removed from the interpretation preview. The editor blocks saving a graph with unresolved wall crossings.
 
+PR-243 also rejects a connection with a positive-length collinear overlap with a persisted wall, in either direction. Parallel disjoint links and endpoint-only contact remain permitted. The final wall/door geometry is checked again at publication, including walls added after connections. Rejections use the existing `422 INVALID_MAP_GRAPH` response and `CONNECTION_CROSSES_WALL` issue identifying the connection. A rejected graph replacement leaves its stored graph and ETag unchanged. These rules apply to modeled wall segments and associated door openings; the interpretation service's candidate polygons do not become persisted obstacles automatically.
+
 Example `PUT` body (`verticalPenalty`, `accessibility`, and each destination's `specialty` are optional):
 
 ```json
@@ -219,6 +221,8 @@ Regenerating a graph is a separate future US-09/US-10 proposal workflow. This `P
 `PATCH /api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}`
 
 Request media type: `application/merge-patch+json`; body: `{"status":"PUBLISHED"}`. All three path IDs are required UUIDs. The endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.planning.publication.enabled` can disable it. A `CLINIC_ADMIN` JWT and site ownership are required.
+
+PR-242: the Web editor sends its saved draft ETag in `If-Match`. When supplied, the revision is checked under the map lock; a changed draft returns `412 STALE_DRAFT_GRAPH` without publishing. A malformed header returns 400. Header omission preserves existing API clients. Publication also checks every active inventory beacon against a unique floor-plan coordinate space of this map and its bounds. Invalid placement returns `422 INVALID_MAP_GRAPH`, with `INVALID_BEACON_PLACEMENT`, element type `BEACON`, and its ID. Inactive inventory is ignored; no minimum beacon count is imposed. A failed check leaves the draft and previous published version unchanged.
 
 - `200 OK`: `siteId`, `mapId`, `modelVersionId`, `status: "PUBLISHED"`. The previous published version, if any, becomes `ARCHIVED` in the same transaction.
 - `400 Bad Request`: malformed ID or JSON, or a status other than `PUBLISHED`.
@@ -514,6 +518,35 @@ The plan catalog includes quota and the current subscription includes plan.quota
 Each limit is a total per clinic. Configure limits under
 rumbo.subscriptions.quotas.<PLAN>.sites, .floors and .beacons.
 An empty property and its JSON null represent an unlimited resource.
+
+## Published model synchronization (PR-244 / TS-23)
+
+`GET /api/v1/published-sites` returns `[{"id":"<site UUID>","name":"<site name>"}]`.
+Only sites with a current `PUBLISHED` indoor model are included. Authenticated
+`PATIENT` visitors can discover official sites; `CLINIC_ADMIN` accounts see only
+their own sites. Anonymous requests return 401. Catalog responses use `no-store`.
+
+`GET /api/v1/sites/{siteId}/published-map` returns the complete official model:
+`siteId`, `mapId`, `modelVersionId`, `status: PUBLISHED`, `plans`, `floors`, `nodes`,
+`connections`, `destinations`, `walls` and `doors`. Floors include `id`, `number`
+and `name`; plan coordinate spaces retain dimensions and confirmed meters per
+unit. Existing Planning persistence and the Navigation read adapter are reused.
+No original file, draft or archived graph is exported. No schema migration is added.
+
+The response includes `ETag: "map-<modelVersionId>"` and
+`Cache-Control: private, no-cache`. Send that ETag as `If-None-Match` to obtain a
+bodyless 304 when the official model is unchanged. A newly published version
+returns 200 and its complete graph, even when the client sends the previous ETag.
+Creating a new draft leaves the published response unchanged. Read graph and
+floor labels within one repeatable-read transaction. Floor labels are descriptive
+current metadata; the model version identifies the published graph revision.
+
+Patients may read an official model across organizations as visitors. Administrators
+must own the requested site (403 otherwise). No current publication returns 404
+with `PUBLISHED_MAP_NOT_FOUND`; unreadable persisted model data returns 422 with
+`INVALID_PUBLISHED_MODEL`. Consumers must revalidate on refresh/resume and avoid
+presenting a failed synchronization's previous graph as the current version.
+`If-None-Match` is allowed by CORS; the existing exposed ETag header is reused.
 
 ## Navigation heatmap
 

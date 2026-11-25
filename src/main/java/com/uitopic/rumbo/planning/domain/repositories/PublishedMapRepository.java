@@ -7,6 +7,8 @@ import java.util.UUID;
 
 /** Planning-owned read contract exposing only the current published graph of one site. */
 public interface PublishedMapRepository {
+  /** Visitor catalog, or only the given administrator's published sites. */
+  List<com.uitopic.rumbo.planning.domain.model.valueobjects.PublishedSite> findPublishedSites(UUID ownerUserId);
   /** Returns the current published snapshot, never a draft or archived version. */
   Optional<PublishedMapSnapshot> findBySite(UUID siteId);
 

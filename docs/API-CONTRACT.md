@@ -519,6 +519,35 @@ Each limit is a total per clinic. Configure limits under
 rumbo.subscriptions.quotas.<PLAN>.sites, .floors and .beacons.
 An empty property and its JSON null represent an unlimited resource.
 
+## Published model synchronization (PR-244 / TS-23)
+
+`GET /api/v1/published-sites` returns `[{"id":"<site UUID>","name":"<site name>"}]`.
+Only sites with a current `PUBLISHED` indoor model are included. Authenticated
+`PATIENT` visitors can discover official sites; `CLINIC_ADMIN` accounts see only
+their own sites. Anonymous requests return 401. Catalog responses use `no-store`.
+
+`GET /api/v1/sites/{siteId}/published-map` returns the complete official model:
+`siteId`, `mapId`, `modelVersionId`, `status: PUBLISHED`, `plans`, `floors`, `nodes`,
+`connections`, `destinations`, `walls` and `doors`. Floors include `id`, `number`
+and `name`; plan coordinate spaces retain dimensions and confirmed meters per
+unit. Existing Planning persistence and the Navigation read adapter are reused.
+No original file, draft or archived graph is exported. No schema migration is added.
+
+The response includes `ETag: "map-<modelVersionId>"` and
+`Cache-Control: private, no-cache`. Send that ETag as `If-None-Match` to obtain a
+bodyless 304 when the official model is unchanged. A newly published version
+returns 200 and its complete graph, even when the client sends the previous ETag.
+Creating a new draft leaves the published response unchanged. Read graph and
+floor labels within one repeatable-read transaction. Floor labels are descriptive
+current metadata; the model version identifies the published graph revision.
+
+Patients may read an official model across organizations as visitors. Administrators
+must own the requested site (403 otherwise). No current publication returns 404
+with `PUBLISHED_MAP_NOT_FOUND`; unreadable persisted model data returns 422 with
+`INVALID_PUBLISHED_MODEL`. Consumers must revalidate on refresh/resume and avoid
+presenting a failed synchronization's previous graph as the current version.
+`If-None-Match` is allowed by CORS; the existing exposed ETag header is reused.
+
 ## Navigation heatmap
 
 GET /api/v1/analytics/navigation-heatmap?siteId=<uuid>&from=<instant>&to=<instant>

@@ -13,6 +13,11 @@ public interface PlanningPublishedMapFacade {
   /** Finds medical entries in the current published version of one site. */
   List<DestinationData> searchCurrentDestinations(UUID siteId, String term);
 
+  List<VisitorDestination> visitorDirectory();
+
+  record VisitorDestination(UUID id, UUID siteId, String siteName, UUID nodeId,
+                            Integer floor, String kind, String name, String specialty) {}
+
   /** Reports whether an unavailable node belongs to another currently published site. */
   boolean existsCurrentNodeOutsideSite(UUID nodeId, UUID siteId);
 

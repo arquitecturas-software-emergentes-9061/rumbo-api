@@ -36,6 +36,13 @@ public class PlanningPublishedMapFacadeImpl implements PlanningPublishedMapFacad
   }
 
   @Override
+  public List<VisitorDestination> visitorDirectory() {
+    return repository.visitorDirectory().stream()
+        .map(d -> new VisitorDestination(d.id(), d.siteId(), d.siteName(), d.nodeId(),
+            d.floor(), d.kind(), d.name(), d.specialty())).toList();
+  }
+
+  @Override
   public boolean existsCurrentNodeOutsideSite(UUID nodeId, UUID siteId) {
     return repository.existsCurrentNodeOutsideSite(nodeId, siteId);
   }

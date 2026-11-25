@@ -20,7 +20,7 @@ The spatial core now also carries each connection's accessibility status: `UNKNO
 
 - Obstacles needed to validate traversable connections.
 
-Obstacles are **not yet persisted in the published spatial core**. A connection marked `ACCESSIBLE` records an explicit editor assertion, not independently validated obstacle clearance. Directory metadata does not establish that a route is accessible. The PostgreSQL navigation route endpoint has IAM owner authorization; obstacle validation and clinic membership remain pending. The existing `demo` route endpoint remains separate.
+Obstacles are **not yet persisted in the published spatial core**. A connection marked `ACCESSIBLE` records an explicit editor assertion, not independently validated obstacle clearance. Directory metadata does not establish that a route is accessible. PostgreSQL routing allows authenticated patients to navigate published maps and administrators to navigate their own sites. The existing `demo` route endpoint remains separate.
 
 ### Coordinate convention for Planning
 
@@ -281,7 +281,11 @@ Example `200` response:
 }
 ```
 
-The endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.navigation.routes.enabled` can disable it. A `CLINIC_ADMIN` JWT and site ownership are required (`401` without authentication, `403` without permission). Obstacle validation remains pending. The Sprint Backlog shows a global `/api/v1/routes?from&to`; the team accepted the site-scoped path in ADR 001. The TS-13 latency test uses a published synthetic grid of 300 nodes and 565 links, 10 warm-ups and 30 timed MockMvc requests through PostgreSQL 16. In the local `clean verify` run of 2026-11-04 before IAM integration, p95 was 16 ms and the maximum was 17 ms. That measurement is historical and does not establish latency after this merge. MockMvc omits network transit.
+The endpoint is enabled by default; `rumbo.navigation.routes.enabled` can disable it. A `PATIENT` JWT or a site-owning `CLINIC_ADMIN` JWT is required (`401` without authentication, `403` without permission). Obstacle validation remains pending. The Sprint Backlog shows a global `/api/v1/routes?from&to`; the team accepted the site-scoped path in ADR 001. The TS-13 latency test uses a published synthetic grid of 300 nodes and 565 links, 10 warm-ups and 30 timed MockMvc requests through PostgreSQL 16. In the local `clean verify` run of 2026-11-04 before IAM integration, p95 was 16 ms and the maximum was 17 ms. That measurement is historical and does not establish latency after this merge. MockMvc omits network transit.
+
+`GET /api/v1/navigation/destinations` returns the patient directory over current published maps, with site, destination node, name and floor number when known. The administrative site-specific directory keeps its ownership check.
+
+`GET /api/v1/navigation/sites/{siteId}/beacons` returns the iBeacon identities of the configured survey for the current published model. `POST /api/v1/navigation/sites/{siteId}/position` accepts `observations` with `uuid`, `major`, `minor`, `rssiDbm` and `timestampUtc`. Both require a patient or site-owning administrator. A matched reference returns its node, map and plan versions, coordinates, scale and observation timestamp. Absent, stale or ambiguous signals return `204`. The server loads surveyed fingerprints from the configured `rumbo.navigation.ble-survey` resource.
 
 ### Current provisional endpoint
 

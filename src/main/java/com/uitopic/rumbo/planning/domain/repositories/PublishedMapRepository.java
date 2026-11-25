@@ -7,6 +7,11 @@ import java.util.UUID;
 
 /** Planning-owned read contract exposing only the current published graph of one site. */
 public interface PublishedMapRepository {
+  List<VisitorDestination> visitorDirectory();
+
+  record VisitorDestination(UUID id, UUID siteId, String siteName, UUID nodeId,
+                            Integer floor, String kind, String name, String specialty) {}
+
   /** Returns the current published snapshot, never a draft or archived version. */
   Optional<PublishedMapSnapshot> findBySite(UUID siteId);
 

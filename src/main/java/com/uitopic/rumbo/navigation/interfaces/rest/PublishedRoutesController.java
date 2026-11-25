@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /** Controlled route API over the current published version of a site. */
 @RestController
-@PreAuthorize("hasRole('CLINIC_ADMIN') and @siteOwnerGuard.isOwner(authentication, #siteId)")
+@PreAuthorize("hasRole('PATIENT') or (hasRole('CLINIC_ADMIN') and @siteOwnerGuard.isOwner(authentication, #siteId))")
 @SecurityRequirement(name = OpenApiConfiguration.BEARER_AUTH)
 @Tag(name = "Published routes")
 @Profile("postgres")

@@ -115,6 +115,29 @@ public class PublishedMapRepositoryImpl implements PublishedMapRepository {
 
   @Override
   @Transactional(readOnly = true)
+  public List<VisitorDestination> visitorDirectory() {
+    String sql = """
+        SELECT d.id, m.site_id, s.name, d.node_id, f.floor_number, d.entry_type, d.name, d.specialty
+        FROM map_destinations d
+        JOIN map_nodes n ON n.id = d.node_id AND n.model_version_id = d.model_version_id
+        JOIN map_versions v ON v.id = d.model_version_id
+        JOIN indoor_maps m ON m.id = v.map_id
+        JOIN indoor_sites s ON s.id = m.site_id
+        LEFT JOIN planning_floors f ON f.id = n.floor_id AND f.site_id = m.site_id
+        WHERE v.status = 'PUBLISHED' AND n.node_type = 'DESTINATION'
+        ORDER BY s.name, d.name, d.id
+        """;
+    List<VisitorDestination> entries = new java.util.ArrayList<>();
+    for (Object result : entityManager.createNativeQuery(sql).getResultList()) {
+      Object[] row = (Object[]) result;
+      entries.add(new VisitorDestination((UUID) row[0], (UUID) row[1], (String) row[2],
+          (UUID) row[3], (Integer) row[4], (String) row[5], (String) row[6], (String) row[7]));
+    }
+    return List.copyOf(entries);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
   public List<PublishedMapSnapshot.Destination> searchDestinations(UUID siteId, String term) {
     String query = DirectorySearchIndex.prefixQuery(term);
     if (query.isBlank()) return List.of();

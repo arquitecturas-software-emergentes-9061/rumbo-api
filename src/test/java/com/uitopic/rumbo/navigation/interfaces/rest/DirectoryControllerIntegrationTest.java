@@ -98,6 +98,20 @@ class DirectoryControllerIntegrationTest {
   }
 
   @Test
+  @WithMockUser(roles = "PATIENT")
+  void patientDirectoryExposesOnlyPublishedDestinationsAndTheirRouteIds() throws Exception {
+    UUID siteId = UUID.randomUUID();
+    IndoorMap map = draft(siteId, UUID.randomUUID(), UUID.randomUUID(), "Consultorio AR", null);
+    maps.saveDraft(map);
+    String filter = "$[?(@.siteId == '" + siteId + "')]";
+    mvc.perform(get("/api/v1/navigation/destinations")).andExpect(status().isOk())
+        .andExpect(jsonPath(filter).isEmpty());
+    commands.handle(new PublishMapVersionCommand(siteId, map.id(), map.modelVersionId()));
+    mvc.perform(get("/api/v1/navigation/destinations")).andExpect(status().isOk())
+        .andExpect(jsonPath(filter + ".nodeId").value(hasItem(map.destinations().getFirst().nodeId().toString())));
+  }
+
+  @Test
   void excludesEntryWhosePublishedNodeIsNoLongerADestination() throws Exception {
     UUID siteId = UUID.randomUUID();
     IndoorMap map = draft(siteId, UUID.randomUUID(), UUID.randomUUID(), "Farmacia", null);

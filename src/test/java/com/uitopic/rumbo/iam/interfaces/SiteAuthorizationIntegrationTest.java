@@ -55,6 +55,8 @@ class SiteAuthorizationIntegrationTest {
     owner = tokenOf(register("CLINIC_ADMIN"));
     otherAdmin = tokenOf(register("CLINIC_ADMIN"));
     patient = tokenOf(register("PATIENT"));
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.activeEnterprise(jdbc,
+        com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.ownerOf(owner));
     siteId = UUID.fromString(mapper.readTree(mvc.perform(post("/api/v1/sites").header(HttpHeaders.AUTHORIZATION,
         bearer(owner)).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Sede Central\"}"))
       .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText());

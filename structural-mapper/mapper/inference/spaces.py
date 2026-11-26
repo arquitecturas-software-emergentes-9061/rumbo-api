@@ -264,6 +264,12 @@ class SpaceInference:
             if space.kind == "void" or VOID_WORDS.search(text):
                 space.kind = "void"
                 continue
+            # Raster wall outlines can leave a long, inaccessible sliver that passes
+            # the area threshold but is far too thin to be a room or corridor.
+            radius = space.narrowness * np.sqrt(space.area_px)
+            if not doors and not text and radius < self.scale.px(0.25):
+                space.kind = "void"
+                continue
             for kind, pattern in VERTICAL_WORDS.items():
                 if pattern.search(text):
                     space.kind = "vertical"

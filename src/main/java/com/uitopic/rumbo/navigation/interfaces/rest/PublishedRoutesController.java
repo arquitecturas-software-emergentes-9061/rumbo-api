@@ -2,6 +2,8 @@ package com.uitopic.rumbo.navigation.interfaces.rest;
 
 import com.uitopic.rumbo.shared.infrastructure.documentation.openapi.configuration.OpenApiConfiguration;
 import com.uitopic.rumbo.navigation.application.internal.exceptions.RouteNotFoundException;
+import com.uitopic.rumbo.iam.interfaces.security.AuthenticatedPrincipal;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.RouteConstraints;
 import com.uitopic.rumbo.navigation.domain.services.PublishedRouteQueryService;
 import com.uitopic.rumbo.navigation.interfaces.rest.resources.PublishedRouteResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -18,6 +20,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -43,7 +46,8 @@ public class PublishedRoutesController {
   @Operation(summary = "Calculate an indoor route for a site",
       description = "Uses the current PUBLISHED model and identifies cross-floor traversals "
           + "in verticalSections. accessibleOnly excludes connections without confirmed "
-          + "accessibility. Disabled until site authorization is available.")
+          + "accessibility and stairs; avoidStairs excludes stairs; prioritizeElevators makes "
+          + "stairs and ramps cost more. A 404 means no route satisfies every restriction.")
   @ApiResponses({
       @ApiResponse(responseCode = "200", description = "Route found",
           content = @Content(schema = @Schema(implementation = PublishedRouteResponse.class),
@@ -85,8 +89,15 @@ public class PublishedRoutesController {
       @Parameter(description = "Origin node ID") @RequestParam(name = "from") UUID fromNodeId,
       @Parameter(description = "Destination node ID") @RequestParam(name = "to") UUID toNodeId,
       @Parameter(description = "Require confirmed accessibility on every link")
-      @RequestParam(defaultValue = "false") boolean accessibleOnly) {
-    return ResponseEntity.ok(PublishedRouteResponse.from(routes.calculate(siteId,
-        fromNodeId, toNodeId, accessibleOnly).orElseThrow(RouteNotFoundException::new)));
+      @RequestParam(defaultValue = "false") boolean accessibleOnly,
+      @Parameter(description = "Never use stairs")
+      @RequestParam(defaultValue = "false") boolean avoidStairs,
+      @Parameter(description = "Prefer elevators over stairs and ramps")
+      @RequestParam(defaultValue = "false") boolean prioritizeElevators,
+      @Parameter(hidden = true) @AuthenticationPrincipal AuthenticatedPrincipal caller) {
+    RouteConstraints constraints = new RouteConstraints(avoidStairs, accessibleOnly, prioritizeElevators);
+    UUID visitorId = caller == null ? null : caller.userId();
+    return ResponseEntity.ok(PublishedRouteResponse.from(routes.calculateForVisitor(siteId,
+        fromNodeId, toNodeId, constraints, visitorId).orElseThrow(RouteNotFoundException::new)));
   }
 }

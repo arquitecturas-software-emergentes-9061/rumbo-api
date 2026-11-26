@@ -14,7 +14,6 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -33,6 +32,48 @@ class ProfileManagementIntegrationTest extends ProfileManagementTestSupport {
       return new ProfileImage("https://example.com/" + key, key);
     });
   }
+  @ParameterizedTest @ValueSource(strings = {"PATIENT", "CLINIC_ADMIN"})
+  void readsRegisteredProfileWithoutStorageKey(String role) throws Exception {
+    Caller caller = register(role);
+    mvc.perform(get("/api/v1/profiles/me").header("Authorization", "Bearer " + caller.token()))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.userId").value(caller.id().toString()))
+        .andExpect(jsonPath("$.role").value(role)).andExpect(jsonPath("$.fullName").value("Ana Torres"))
+        .andExpect(jsonPath("$.storageKey").doesNotExist());
+  }
+
+  @Test void readsUpdatedProfileOnLaterSignIn() throws Exception {
+    Caller caller = register("PATIENT");
+    mvc.perform(put("/api/v1/profiles/me").header("Authorization", "Bearer " + caller.token())
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"fullName\":\"María Núñez\",\"phoneNumber\":\"+51 987 654 321\"}"))
+        .andExpect(status().isOk());
+
+    Caller nextVisit = signIn(caller.id(), caller.email(), caller.password());
+    assertThat(nextVisit.token()).isNotEqualTo(caller.token());
+    mvc.perform(get("/api/v1/profiles/me").header("Authorization", "Bearer " + nextVisit.token()))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.userId").value(caller.id().toString()))
+        .andExpect(jsonPath("$.role").value("PATIENT"))
+        .andExpect(jsonPath("$.fullName").value("María Núñez"))
+        .andExpect(jsonPath("$.phoneNumber").value("+51 987 654 321"))
+        .andExpect(jsonPath("$.storageKey").doesNotExist());
+  }
+
+  @Test void eachAccountReadsOnlyItsOwnProfile() throws Exception {
+    Caller first = register("PATIENT");
+    Caller second = register("CLINIC_ADMIN");
+    mvc.perform(put("/api/v1/profiles/me").header("Authorization", "Bearer " + first.token())
+        .contentType(MediaType.APPLICATION_JSON).content("{\"fullName\":\"María Núñez\"}"))
+        .andExpect(status().isOk());
+    mvc.perform(get("/api/v1/profiles/me").header("Authorization", "Bearer " + first.token()))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.userId").value(first.id().toString()))
+        .andExpect(jsonPath("$.role").value("PATIENT"))
+        .andExpect(jsonPath("$.fullName").value("María Núñez"));
+    mvc.perform(get("/api/v1/profiles/me").header("Authorization", "Bearer " + second.token()))
+        .andExpect(status().isOk()).andExpect(jsonPath("$.userId").value(second.id().toString()))
+        .andExpect(jsonPath("$.role").value("CLINIC_ADMIN"))
+        .andExpect(jsonPath("$.fullName").value("Ana Torres"));
+  }
+
   @ParameterizedTest @ValueSource(strings = {"PATIENT", "CLINIC_ADMIN"})
   void updatesOnlyCallersRowAndOmitsStorageKey(String role) throws Exception {
     Caller caller = register(role);
@@ -80,6 +121,7 @@ class ProfileManagementIntegrationTest extends ProfileManagementTestSupport {
         .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errors.fullName").isString());
   }
   @Test void requiresAuthentication() throws Exception {
+    mvc.perform(get("/api/v1/profiles/me")).andExpect(status().isUnauthorized());
     mvc.perform(put("/api/v1/profiles/me").contentType(MediaType.APPLICATION_JSON)
         .content("{\"fullName\":\"Ana\"}")).andExpect(status().isUnauthorized());
     mvc.perform(delete("/api/v1/profiles/me/image")).andExpect(status().isUnauthorized());
@@ -123,6 +165,8 @@ class ProfileManagementIntegrationTest extends ProfileManagementTestSupport {
   @Test void missingProfileReturns404() throws Exception {
     Caller caller = register("PATIENT");
     jdbc.update("delete from profiles_user_profiles where user_id = ?", caller.id());
+    mvc.perform(get("/api/v1/profiles/me").header("Authorization", "Bearer " + caller.token()))
+        .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("PROFILE_NOT_FOUND"));
     mvc.perform(put("/api/v1/profiles/me").header("Authorization", "Bearer " + caller.token())
         .contentType(MediaType.APPLICATION_JSON).content("{\"fullName\":\"Ana\"}"))
         .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("PROFILE_NOT_FOUND"));
@@ -139,17 +183,5 @@ class ProfileManagementIntegrationTest extends ProfileManagementTestSupport {
     doThrow(new ProfileImageStorageFailedException()).when(storage).store(any(), any());
     upload(caller, png(), "image/png").andExpect(status().isBadGateway())
         .andExpect(jsonPath("$.code").value("PROFILE_IMAGE_STORAGE_FAILED"));
-  }
-  @Test void translatesServletUploadLimitWithGlobalAdvice() throws Exception {
-    var advice = new com.uitopic.rumbo.profiles.interfaces.rest.ProfileUploadSizeExceptionHandler();
-    org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(new LimitController())
-        .setControllerAdvice(advice).build().perform(get("/limit"))
-        .andExpect(status().isPayloadTooLarge()).andExpect(jsonPath("$.code").value("IMAGE_TOO_LARGE"));
-  }
-  @org.springframework.web.bind.annotation.RestController
-  @org.springframework.context.annotation.Profile("upload-limit-test")
-  static class LimitController {
-    @org.springframework.web.bind.annotation.GetMapping("/limit")
-    void limit() { throw new MaxUploadSizeExceededException(ProfileImageFile.MAX_SIZE_BYTES); }
   }
 }

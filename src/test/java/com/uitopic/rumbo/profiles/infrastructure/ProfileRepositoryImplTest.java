@@ -70,7 +70,7 @@ class ProfileRepositoryImplTest {
       order by ordinal_position
       """);
 
-    assertThat(columns).hasSize(9);
+    assertThat(columns).hasSize(13);
     assertColumn(columns, "id", "uuid", null, "NO");
     assertColumn(columns, "user_id", "uuid", null, "NO");
     assertColumn(columns, "full_name", "character varying", 255, "NO");
@@ -80,6 +80,10 @@ class ProfileRepositoryImplTest {
     assertColumn(columns, "image_storage_key", "character varying", 255, "YES");
     assertColumn(columns, "created_at", "timestamp with time zone", null, "NO");
     assertColumn(columns, "updated_at", "timestamp with time zone", null, "NO");
+    assertColumn(columns, "avoid_stairs", "boolean", null, "NO");
+    assertColumn(columns, "simpler_route", "boolean", null, "NO");
+    assertColumn(columns, "voice_guidance", "boolean", null, "NO");
+    assertColumn(columns, "preferences_updated_at", "timestamp with time zone", null, "YES");
   }
 
   @Test

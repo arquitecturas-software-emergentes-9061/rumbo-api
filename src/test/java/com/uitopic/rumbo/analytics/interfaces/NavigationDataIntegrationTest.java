@@ -64,6 +64,8 @@ class NavigationDataIntegrationTest {
         .content("{\"email\":\"%s\",\"password\":\"%s\"}".formatted(email, PASSWORD)))
       .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
     owner = mapper.readTree(body).get("accessToken").asText();
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.activeEnterprise(jdbc,
+        com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.ownerOf(owner)); // sites require an active plan (PR-93)
     siteId = UUID.fromString(mapper.readTree(mvc.perform(post("/api/v1/sites")
         .header(HttpHeaders.AUTHORIZATION, "Bearer " + owner).contentType(MediaType.APPLICATION_JSON)
         .content("{\"name\":\"Sede Central\"}"))
@@ -140,6 +142,22 @@ class NavigationDataIntegrationTest {
     assertThat(redis.keys(metricsKeys)).isEmpty();
     assertThat(redis.opsForValue().get(generationKey)).isNull();
     assertThat(storedForSite()).isZero();
+  }
+
+  @Test
+  void theOwnerCanReadTheHeatmapForItsSiteOnly() throws Exception {
+    mvc.perform(get("/api/v1/analytics/navigation-heatmap")
+        .header(HttpHeaders.AUTHORIZATION, "Bearer " + owner).param("siteId", siteId.toString())
+        .param("from", FROM.toString()).param("to", TO.toString()))
+      .andExpect(status().isOk())
+      .andExpect(jsonPath("$.cells").isEmpty())
+      .andExpect(jsonPath("$.discardedEvents").value(0));
+    verify(reader).heatmap(siteId, new DateRange(FROM, TO));
+
+    mvc.perform(get("/api/v1/analytics/navigation-heatmap")
+        .header(HttpHeaders.AUTHORIZATION, "Bearer " + owner).param("siteId", UUID.randomUUID().toString())
+        .param("from", FROM.toString()).param("to", TO.toString()))
+      .andExpect(status().isForbidden());
   }
 
   private ResultActions summary(Instant from, Instant to) throws Exception {

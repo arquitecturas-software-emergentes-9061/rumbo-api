@@ -184,6 +184,8 @@ Both operations address an **existing DRAFT** version; they do not create a map,
 
 When a plan has editable walls, a `DOORWAY` connection must cross or end at a door opening on one of those walls. A recognized wall or door that cannot be associated safely stays visible in the editor for review; it is not silently removed from the interpretation preview. The editor blocks saving a graph with unresolved wall crossings.
 
+PR-243 also rejects a connection with a positive-length collinear overlap with a persisted wall, in either direction. Parallel disjoint links and endpoint-only contact remain permitted. The final wall/door geometry is checked again at publication, including walls added after connections. Rejections use the existing `422 INVALID_MAP_GRAPH` response and `CONNECTION_CROSSES_WALL` issue identifying the connection. A rejected graph replacement leaves its stored graph and ETag unchanged. These rules apply to modeled wall segments and associated door openings; the interpretation service's candidate polygons do not become persisted obstacles automatically.
+
 Example `PUT` body (`verticalPenalty`, `accessibility`, and each destination's `specialty` are optional):
 
 ```json
@@ -219,6 +221,8 @@ Regenerating a graph is a separate future US-09/US-10 proposal workflow. This `P
 `PATCH /api/v1/sites/{siteId}/maps/{mapId}/versions/{versionId}`
 
 Request media type: `application/merge-patch+json`; body: `{"status":"PUBLISHED"}`. All three path IDs are required UUIDs. The endpoint is enabled by default for loopback-only local review; the feature flag `rumbo.planning.publication.enabled` can disable it. A `CLINIC_ADMIN` JWT and site ownership are required.
+
+PR-242: the Web editor sends its saved draft ETag in `If-Match`. When supplied, the revision is checked under the map lock; a changed draft returns `412 STALE_DRAFT_GRAPH` without publishing. A malformed header returns 400. Header omission preserves existing API clients. Publication also checks every active inventory beacon against a unique floor-plan coordinate space of this map and its bounds. Invalid placement returns `422 INVALID_MAP_GRAPH`, with `INVALID_BEACON_PLACEMENT`, element type `BEACON`, and its ID. Inactive inventory is ignored; no minimum beacon count is imposed. A failed check leaves the draft and previous published version unchanged.
 
 - `200 OK`: `siteId`, `mapId`, `modelVersionId`, `status: "PUBLISHED"`. The previous published version, if any, becomes `ARCHIVED` in the same transaction.
 - `400 Bad Request`: malformed ID or JSON, or a status other than `PUBLISHED`.
@@ -313,6 +317,177 @@ An address matching another site in the same account returns 409
 return 409 `FLOOR_NUMBER_EXISTS`. Invalid fields return 400, unauthenticated
 requests return 401, other roles return 403, and foreign or missing sites return 404.
 
+## Personal profile
+
+`GET /api/v1/profiles/me` reads the authenticated caller's stored profile. The user ID
+comes exclusively from the JWT. No request body or client-supplied user ID is required.
+
+- `200 OK`: the same `ProfileResponse` as `PUT /api/v1/profiles/me`, containing
+  `userId`, `fullName`, `role`, nullable `phoneNumber`, and nullable `imageUrl`.
+  The response never includes `storageKey`. Later sign-ins retrieve the latest saved data.
+- `401 Unauthorized`: no valid authentication token.
+- `404 Not Found`: the authenticated account has no profile; `code: "PROFILE_NOT_FOUND"`.
+
+## Notification center
+
+Communications stores one in-app notification per relevant platform event and exposes them to the account that
+receives them. Every endpoint requires a JWT, and the user ID comes only from it: no endpoint accepts a user ID, and a
+notification of another account answers `404 NOTIFICATION_NOT_FOUND`, the same as a missing one.
+
+Notifications are created after the originating transaction commits, from these events:
+
+| `type` | Event | `detail` |
+|---|---|---|
+| `WELCOME` | account registered | `null` |
+| `ACCOUNT_LOCKED` | failed sign-in threshold reached | ISO instant when the account unlocks |
+| `PASSWORD_CHANGED` | password recovered or changed | `null` |
+| `SUBSCRIPTION_ACTIVATED` | payment activated a plan | plan code |
+
+`detail` is a datum, never display text: clients localize the message from `type`. A failure creating a
+notification is logged and never affects the sign-up, lock, password change or payment that caused it.
+
+| Request | Response |
+|---|---|
+| `GET /api/v1/notifications?unread=false&page=0&size=20` | `200`: `items[]`, `page`, `size`, `total`, `unread`. Newest first; `size` is limited to 1–100 and out-of-range paging is clamped. `unread` counts every unread notification, ignoring the `unread` filter. |
+| `GET /api/v1/notifications/{id}` | `200`: `id`, `type`, `channel`, `detail`, `read`, `readAt`, `createdAt`. |
+| `GET /api/v1/notifications/{id}/delivery` | `200`: `notificationId`, `channel`, `status`, `finalState`, `attempts`, `lastAttemptAt`. |
+| `POST /api/v1/notifications/{id}/read` | `200`: the notification, read. Idempotent: the first read instant is kept. |
+| `POST /api/v1/notifications/read-all` | `200`: `{ "updated": n }`, only for the caller's unread notifications. |
+
+Delivery `status` is `PENDING` (no attempt yet), `SENT`, `RETRY_PENDING` (an attempt failed and another is scheduled)
+or `FAILED` (three attempts failed). `SENT` and `FAILED` are final. The only channel today is `IN_APP`, which is
+delivered when it is stored, so every notification currently reports `SENT` after one attempt; the other states exist
+in the model for the email and push channels, which are not implemented yet.
+
+Not covered yet: notifications addressed to a whole organization (map publication, beacon incidents, navigation
+problems), because those events do not exist in the other contexts, and email or push delivery.
+
+## Subscription checkout and payment orders (PR-79 v3)
+
+Both endpoints require a `CLINIC_ADMIN` JWT. The payer and contracting clinic are
+resolved from that JWT; clients cannot supply an owner or organization ID.
+
+`POST /api/v1/subscriptions/checkout-sessions`
+
+```json
+{
+  "planCode": "BASIC",
+  "billing": {
+    "legalName": "Clínica Ejemplo S.A.C.",
+    "ruc": "20491823901",
+    "fiscalAddress": "Av. Javier Prado Este 4200, Lima",
+    "billingEmail": "pagos@clinica.pe",
+    "purchaseOrder": "PO-2024-089"
+  }
+}
+```
+
+All billing strings are trimmed before validation and storage. `billing` is
+required. `legalName` requires 2–160 characters, `ruc` exactly 11 digits (no
+prefix or checksum validation), `fiscalAddress` 5–200 characters, and
+`billingEmail` a valid email address of at most 254 characters. `purchaseOrder`
+is optional, at most 40 characters; omission, null or whitespace becomes null.
+
+Invalid billing returns `400 VALIDATION_FAILED` in the existing Problem Details
+format, with `errors` keyed by `billing.legalName`, `billing.ruc`,
+`billing.fiscalAddress`, `billing.billingEmail`, or `billing.purchaseOrder`.
+A missing or null billing object uses `billing`. Validation happens before any
+order is saved or the payment gateway is called.
+
+```json
+{
+  "status": 400,
+  "code": "VALIDATION_FAILED",
+  "message": "Invalid request fields",
+  "errors": { "billing.ruc": "Must contain exactly 11 digits" }
+}
+```
+
+On success, `201 Created` includes a `Location` for the payment order:
+
+```json
+{
+  "orderId": "00000000-0000-4000-8000-000000000001",
+  "organization": { "id": "00000000-0000-4000-8000-000000000002", "name": "Clínica Ejemplo" },
+  "planCode": "BASIC",
+  "status": "PENDING",
+  "amount": 39.90,
+  "currency": "PEN",
+  "checkoutUrl": "https://checkout.stripe.com/...",
+  "billing": {
+    "legalName": "Clínica Ejemplo S.A.C.",
+    "ruc": "20491823901",
+    "fiscalAddress": "Av. Javier Prado Este 4200, Lima",
+    "billingEmail": "pagos@clinica.pe",
+    "purchaseOrder": "PO-2024-089"
+  }
+}
+```
+
+After request validation, an inactive or missing plan returns `404 PLAN_NOT_FOUND`,
+Enterprise returns `409 PLAN_REQUIRES_SALES_CONTACT`, and an administrator without
+a registered clinic returns `409 ORGANIZATION_REQUIRED`. Provider failures retain
+the existing `503 PAYMENTS_UNAVAILABLE` / `502 PAYMENT_PROVIDER_ERROR` behavior.
+
+`GET /api/v1/subscriptions/payment-orders/{orderId}` returns `200` only to the
+order's owner; foreign or missing orders return `404 PAYMENT_ORDER_NOT_FOUND`.
+Its response includes `orderId`, `organization`, `planCode`, `status`, `amount`,
+`currency`, `createdAt`, `billing` with the same five fields, and `paidAt`.
+It does not include `checkoutUrl`. `paidAt` is null until payment confirmation;
+the signed completed-payment webhook stores the confirmation instant and repeated
+events preserve it. For example, after payment:
+
+```json
+{
+  "orderId": "00000000-0000-4000-8000-000000000001",
+  "organization": { "id": "00000000-0000-4000-8000-000000000002", "name": "Clínica Ejemplo" },
+  "planCode": "BASIC",
+  "status": "PAID",
+  "amount": 39.90,
+  "currency": "PEN",
+  "createdAt": "2026-11-12T16:00:00Z",
+  "paidAt": "2026-11-12T16:05:00Z",
+  "billing": {
+    "legalName": "Clínica Ejemplo S.A.C.",
+    "ruc": "20491823901",
+    "fiscalAddress": "Av. Javier Prado Este 4200, Lima",
+    "billingEmail": "pagos@clinica.pe",
+    "purchaseOrder": null
+  }
+}
+```
+
+Billing is an immutable snapshot on the payment order. Historical orders may
+return `billing: null` and `paidAt: null`; the migration does not invent past data.
+This flow does not issue a fiscal receipt, assign fiscal numbering, or generate a PDF.
+
+## Visitor route preferences (PR-68)
+
+Both endpoints require a JWT; the user ID comes exclusively from that token.
+
+| Method and path | Request | Success |
+| --- | --- | --- |
+| GET `/api/v1/profiles/me/preferences` | No body | 200 with stored preferences |
+| PUT `/api/v1/profiles/me/preferences` | Required boolean fields `avoidStairs`, `simplerRoute`, `voiceGuidance` | 200 with saved preferences |
+
+Both responses contain the three booleans and `configured`. Defaults are provisionally
+all `false`: the design shows example states, not defaults. Initially `configured` is
+`false`; the first and every subsequent PUT records `preferences_updated_at`, so it
+becomes `true`, even when all submitted values are false. Values persist across sign-ins.
+`GET /api/v1/profiles/me` also includes `preferences` with the three booleans,
+alongside all existing profile fields.
+
+Missing or null fields return 400 `VALIDATION_FAILED` with `errors.<field>`.
+Invalid types such as `"avoidStairs":"yes"` return 400 `MALFORMED_REQUEST`.
+Invalid requests do not change the saved row. Both endpoints return 401 without
+a valid token and 404 `PROFILE_NOT_FOUND` if the caller has no profile.
+
+Only `avoidStairs` currently affects route calculation: the client sends
+`accessibleOnly=true` to `GET /api/v1/sites/{siteId}/routes`; no compatible route
+returns 404 `NO_COMPATIBLE_ROUTE` (PR-71). `simplerRoute` is stored but navigation
+does not apply it because no cost criterion exists. `voiceGuidance` controls client TTS.
+Navigation is unchanged.
+
 ## Shared rules
 
 - HTTP error bodies contain `code` and `message`; IAM, Planning beacon inventory and Analytics also
@@ -327,3 +502,95 @@ requests return 401, other roles return 403, and foreign or missing sites return
 - Cross-floor links must be explicit vertical connectors in the published graph.
 - Clients pass node identifiers, not destination display names, when requesting routes.
 - `demo` fixtures are not a production data source.
+
+### Internal payment receipt
+
+The payment order response includes a nullable receipt. A paid order with a recorded
+payment timestamp returns the receipt number (RA- followed by the order UUID) and
+issuedAt (the recorded payment timestamp). The order supplies billing, plan, amount
+and currency. The number is stable across repeat requests and webhook retries.
+Unpaid orders and historical orders without a payment timestamp return a null receipt.
+This receipt is an internal payment record and has no fiscal validity.
+
+## Plan quotas (PR-91)
+
+The plan catalog includes quota and the current subscription includes plan.quota.
+Each limit is a total per clinic. Configure limits under
+rumbo.subscriptions.quotas.<PLAN>.sites, .floors and .beacons.
+An empty property and its JSON null represent an unlimited resource.
+
+## Published model synchronization (PR-244 / TS-23)
+
+`GET /api/v1/published-sites` returns `[{"id":"<site UUID>","name":"<site name>"}]`.
+Only sites with a current `PUBLISHED` indoor model are included. Authenticated
+`PATIENT` visitors can discover official sites; `CLINIC_ADMIN` accounts see only
+their own sites. Anonymous requests return 401. Catalog responses use `no-store`.
+
+`GET /api/v1/sites/{siteId}/published-map` returns the complete official model:
+`siteId`, `mapId`, `modelVersionId`, `status: PUBLISHED`, `plans`, `floors`, `nodes`,
+`connections`, `destinations`, `walls` and `doors`. Floors include `id`, `number`
+and `name`; plan coordinate spaces retain dimensions and confirmed meters per
+unit. Existing Planning persistence and the Navigation read adapter are reused.
+No original file, draft or archived graph is exported. No schema migration is added.
+
+The response includes `ETag: "map-<modelVersionId>"` and
+`Cache-Control: private, no-cache`. Send that ETag as `If-None-Match` to obtain a
+bodyless 304 when the official model is unchanged. A newly published version
+returns 200 and its complete graph, even when the client sends the previous ETag.
+Creating a new draft leaves the published response unchanged. Read graph and
+floor labels within one repeatable-read transaction. Floor labels are descriptive
+current metadata; the model version identifies the published graph revision.
+
+Patients may read an official model across organizations as visitors. Administrators
+must own the requested site (403 otherwise). No current publication returns 404
+with `PUBLISHED_MAP_NOT_FOUND`; unreadable persisted model data returns 422 with
+`INVALID_PUBLISHED_MODEL`. Consumers must revalidate on refresh/resume and avoid
+presenting a failed synchronization's previous graph as the current version.
+`If-None-Match` is allowed by CORS; the existing exposed ETag header is reused.
+
+## Navigation heatmap
+
+GET /api/v1/analytics/navigation-heatmap?siteId=<uuid>&from=<instant>&to=<instant>
+requires the CLINIC_ADMIN who owns the site. It uses the same date validation and
+half-open interval as the navigation summary. Returns cells with floorId,
+nodeReference, deviations and recalculations as absolute counts, plus
+discardedEvents for relevant events without a floor or node.
+The provisional WA14/WA14B defaults require team confirmation: BASIC has 1 site,
+3 floors and 15 beacons; PROFESSIONAL has 3 sites, 10 floors and 50 beacons;
+ENTERPRISE has unlimited resources.
+
+## Subscription usage (PR-94)
+
+`GET /api/v1/subscriptions/me` includes `usage` for the authenticated owner,
+alongside `plan.quota`, the effective status and the current period:
+
+```json
+"usage": {
+  "sites": {"used": 1, "limit": 1},
+  "floors": {"used": 2, "limit": 3},
+  "beacons": {"used": 4, "limit": 15}
+}
+```
+
+Counters include all of that owner's sites, floors and beacons across sites;
+another owner's resources are excluded. An owner without a clinic has zero usage.
+Each `limit` comes from the subscription plan's configured quota; JSON `null`
+means unlimited, including all three limits for ENTERPRISE. Usage remains present
+when the effective status is `EXPIRED`, so clients can still display consumption
+in restricted mode. These are current stored counts, not a historical snapshot.
+`GET /api/v1/subscriptions/plans` continues to include `quota` for each plan.
+
+## Registration quotas (PR-93)
+
+Site, floor and beacon registrations count the authenticated owner's total usage
+across sites before inserting. Concurrent registrations for that owner are serialized.
+An absent, expired or cancelled subscription returns HTTP 409 with code
+`SUBSCRIPTION_REQUIRED` and message
+`An active subscription is required to register sites, floors or beacons`.
+Requiring a subscription even for the first registration is a provisional assumption
+consistent with WA14B restricted mode. The exact period end remains active,
+matching the current subscription query; instants after it are expired.
+An exhausted quota returns HTTP 409 with code `PLAN_QUOTA_EXCEEDED`, integer
+`limit` and message `Your plan allows at most N sites` (or `floors` / `beacons`).
+Rejected registrations insert no row. Reads, edits and deletions retain their behavior.
+An empty property and its JSON null represent an unlimited resource.

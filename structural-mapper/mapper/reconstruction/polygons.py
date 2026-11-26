@@ -11,7 +11,8 @@ from ..geometry import components_cropped, mask_to_polygons
 
 def reconstruct_walls(masks: StructuralMasks, scale: Scale) -> list[WallElement]:
     simplify = max(1.0, scale.px(0.04))
-    close_px = max(1, int(round(scale.px(0.05))))
+    # One-pixel breaks in the semantic wall mask depend on rasterization, not on plan calibration.
+    close_px = max(2 if masks.semantic_geometry else 1, int(round(scale.px(0.05))))
     kernel = np.ones((2 * close_px + 1, 2 * close_px + 1), np.uint8)
     wall = cv2.morphologyEx(masks.wall.astype(np.uint8), cv2.MORPH_CLOSE, kernel).astype(bool)
     if masks.semantic_geometry:

@@ -10,10 +10,19 @@ import com.uitopic.rumbo.planning.domain.model.valueobjects.ScaleReference;
 import com.uitopic.rumbo.planning.domain.repositories.ScaleReferenceRepository;
 import java.util.UUID;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class OriginalPlanInterpretationQueryService {
+  private static final Logger log = LoggerFactory.getLogger(OriginalPlanInterpretationQueryService.class);
+  private final Map<CacheKey, Result> cache = new LinkedHashMap<>(32, .75f, true) {
+    @Override protected boolean removeEldestEntry(Map.Entry<CacheKey, Result> entry) { return size() > 32; }
+  };
+  private record CacheKey(UUID owner, UUID site, UUID floor, UUID version, Double scale) {}
   private final FloorPlanVersionService files;
   private final ScaleReferenceRepository scales;
   private final SvgPlanPreviewPort previews;
@@ -34,10 +43,20 @@ public class OriginalPlanInterpretationQueryService {
                        ScaleStatus scaleStatus, Double metersPerUnit, SvgPlanPreview.Topology proposal) {}
 
   public Result inspect(UUID owner, UUID site, UUID floor, UUID version) {
+    long started = System.nanoTime();
     var original = files.original(owner, site, floor, version);
     var format = original.version().file().format();
     var scale = scales.find(site, version).filter(value -> value.floorId().equals(floor))
       .map(ScaleReference::metersPerUnit).orElse(null);
+    var key = new CacheKey(owner, site, floor, version, scale);
+    synchronized (cache) {
+      var cached = cache.get(key);
+      if (cached != null) {
+        log.debug("Plan interpretation cache hit version={} totalMs={}", version,
+          (System.nanoTime() - started) / 1_000_000);
+        return cached;
+      }
+    }
     var bounds = files.bounds(original);
     SvgPlanPreview.Topology proposal = null;
     InvalidSvgPlanException unsupportedSvg = null;
@@ -73,9 +92,12 @@ public class OriginalPlanInterpretationQueryService {
       }
     }
     if (proposal == null && unsupportedSvg != null) throw unsupportedSvg;
-    return new Result(version, floor, format.mediaType(),
+    var result = new Result(version, floor, format.mediaType(),
       proposal == null ? Processing.PREVIEW_ONLY : Processing.SVG_CANDIDATES,
       scale == null ? ScaleStatus.PROVISIONAL : ScaleStatus.CONFIRMED, scale, proposal);
+    if (proposal != null) synchronized (cache) { cache.put(key, result); }
+    log.debug("Plan interpretation version={} totalMs={}", version, (System.nanoTime() - started) / 1_000_000);
+    return result;
   }
 
   private static boolean hasReviewableGeometry(SvgPlanPreview.Topology proposal) {

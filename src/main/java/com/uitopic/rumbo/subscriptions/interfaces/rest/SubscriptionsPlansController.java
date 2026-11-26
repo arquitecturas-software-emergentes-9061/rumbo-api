@@ -22,7 +22,9 @@ import java.util.List;
 public class SubscriptionsPlansController {
   private final GetPlansQueryHandler getPlans;
 
-  public SubscriptionsPlansController(GetPlansQueryHandler getPlans) { this.getPlans = getPlans; }
+  public SubscriptionsPlansController(GetPlansQueryHandler getPlans) {
+    this.getPlans = getPlans;
+  }
 
   @GetMapping("/plans")
   @PreAuthorize("hasRole('CLINIC_ADMIN')")

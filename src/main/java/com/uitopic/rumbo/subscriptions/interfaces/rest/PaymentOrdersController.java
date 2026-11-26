@@ -26,7 +26,7 @@ public class PaymentOrdersController {
   @PostMapping("/checkout-sessions")
   public ResponseEntity<CheckoutSessionResponse> create(@AuthenticationPrincipal AuthenticatedPrincipal principal,
       @Valid @RequestBody CreateCheckoutSessionRequest request) {
-    var result = create.handle(new CreateCheckoutSessionCommand(principal.userId(), request.planCode()));
+    var result = create.handle(new CreateCheckoutSessionCommand(principal.userId(), request.planCode(), request.billing().toDomain()));
     return ResponseEntity.created(URI.create("/api/v1/subscriptions/payment-orders/" + result.order().id()))
       .body(PaymentOrderResourceAssembler.toResource(result));
   }

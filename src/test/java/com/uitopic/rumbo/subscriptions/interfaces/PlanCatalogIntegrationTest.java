@@ -45,7 +45,17 @@ class PlanCatalogIntegrationTest {
     String[] amounts = {"39.90", "49.99", "59.99"};
     for (int i = 0; i < 3; i++) {
       var plan = json.get(i);
-      assertThat(plan.size()).isEqualTo(5);
+      assertThat(plan.size()).isEqualTo(6);
+      var quota = plan.get("quota");
+      if (i == 2) {
+        assertThat(quota.get("sites").isNull()).isTrue();
+        assertThat(quota.get("floors").isNull()).isTrue();
+        assertThat(quota.get("beacons").isNull()).isTrue();
+      } else {
+        assertThat(quota.get("sites").asInt()).isEqualTo(i == 0 ? 1 : 3);
+        assertThat(quota.get("floors").asInt()).isEqualTo(i == 0 ? 3 : 10);
+        assertThat(quota.get("beacons").asInt()).isEqualTo(i == 0 ? 15 : 50);
+      }
       assertThat(plan.get("code").asText()).isEqualTo(codes[i]);
       assertThat(plan.get("name").asText()).isEqualTo(names[i]);
       assertThat(plan.get("price").size()).isEqualTo(2);

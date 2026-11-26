@@ -3,7 +3,7 @@ package com.uitopic.rumbo.planning.domain.services;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Geometry rules for routes inferred from an original plan; rejected routes remain review warnings. */
+/** Geometry rules for routes inferred from an original plan. */
 public final class CandidateRouteGeometry {
   private static final double EPS = 1e-6;
 
@@ -36,7 +36,14 @@ public final class CandidateRouteGeometry {
 
   /** An opening must lie along one recognized wall before a wall crossing is proposed. */
   public static boolean openingFitsWall(Segment opening, List<Segment> walls) {
+    return alignOpeningToWall(opening, walls) != null;
+  }
+
+  /** Projects a noisy opening onto the nearest wall that actually contains its full span. */
+  public static Segment alignOpeningToWall(Segment opening, List<Segment> walls) {
     double tolerance = Math.max(.25, Math.min(length(opening) * .05, 2));
+    Segment best = null;
+    double bestError = Double.POSITIVE_INFINITY;
     for (Segment wall : walls) {
       double dx = wall.to().x() - wall.from().x(), dy = wall.to().y() - wall.from().y();
       double squared = dx * dx + dy * dy;
@@ -47,11 +54,46 @@ public final class CandidateRouteGeometry {
         + (opening.to().y() - wall.from().y()) * dy) / squared;
       if (Math.min(first, second) < -EPS || Math.max(first, second) > 1 + EPS) continue;
       Point projectedFirst = pointAt(wall, first), projectedSecond = pointAt(wall, second);
-      if (Math.hypot(projectedFirst.x() - opening.from().x(), projectedFirst.y() - opening.from().y()) <= tolerance
-          && Math.hypot(projectedSecond.x() - opening.to().x(), projectedSecond.y() - opening.to().y()) <= tolerance)
-        return true;
+      double error = Math.max(distance(projectedFirst, opening.from()), distance(projectedSecond, opening.to()));
+      if (error <= tolerance && error < bestError && distance(projectedFirst, projectedSecond) > EPS) {
+        best = new Segment(projectedFirst, projectedSecond);
+        bestError = error;
+      }
     }
-    return false;
+    return best;
+  }
+
+  /** Removes a small skew only when the straightened axis still spans a verified free gap. */
+  public static Segment straightenGap(Segment opening, List<Segment> walls, List<Polygon> barriers,
+      double pixelSize) {
+    Point middle = pointAt(opening, .5);
+    double dx = (opening.to().x() - opening.from().x()) / 2;
+    double dy = (opening.to().y() - opening.from().y()) / 2;
+    if (Math.min(Math.abs(dx), Math.abs(dy)) > pixelSize * 1.5
+        || Math.min(Math.abs(dx), Math.abs(dy)) > length(opening) * .035) return opening;
+    Segment straight = Math.abs(dx) > Math.abs(dy)
+      ? new Segment(new Point(middle.x() - dx, middle.y()), new Point(middle.x() + dx, middle.y()))
+      : new Segment(new Point(middle.x(), middle.y() - dy), new Point(middle.x(), middle.y() + dy));
+    return openingBridgesWallGap(straight, walls, barriers) ? straight : opening;
+  }
+
+  public static Point projectOnSegment(Point point, Segment segment) {
+    double dx = segment.to().x() - segment.from().x(), dy = segment.to().y() - segment.from().y();
+    double t = ((point.x() - segment.from().x()) * dx + (point.y() - segment.from().y()) * dy) / (dx * dx + dy * dy);
+    return pointAt(segment, Math.clamp(t, 0, 1));
+  }
+
+  public static boolean touches(Segment first, Segment second) {
+    return intersection(first, second) != null || collinearOverlap(first, second);
+  }
+
+  public List<Segment> crossedOpenings(Point from, Point to) {
+    var route = new Segment(from, to);
+    return openings.stream().filter(opening -> intersection(route, opening) != null).toList();
+  }
+
+  private static double distance(Point a, Point b) {
+    return Math.hypot(a.x() - b.x(), a.y() - b.y());
   }
 
   /** A real doorway may be a gap between wall ends rather than an opening on one continuous wall segment. */
@@ -63,6 +105,36 @@ public final class CandidateRouteGeometry {
       for (int second = 0; second < walls.size(); second++) {
         if (first != second && alignedWallEnd(opening.to(), opening, walls.get(second), tolerance)) return true;
       }
+    }
+    return false;
+  }
+
+  /** A learned opening may span a real gap whose polygon corners are not parallel to its axis. */
+  public static boolean openingBridgesWallGap(Segment opening, List<Segment> walls, List<Polygon> barriers) {
+    if (length(opening) <= EPS || walls.size() < 2) return false;
+    double tolerance = Math.max(.5, Math.min(length(opening) * .2, 6));
+    if (barriers.stream().anyMatch(barrier -> insideBeyondEndCaps(opening, barrier, tolerance))) return false;
+    for (int first = 0; first < walls.size(); first++) {
+      if (!nearEnd(opening.from(), walls.get(first), tolerance)) continue;
+      for (int second = 0; second < walls.size(); second++) {
+        if (first != second && nearEnd(opening.to(), walls.get(second), tolerance)) return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean nearEnd(Point point, Segment wall, double tolerance) {
+    return Math.hypot(point.x() - wall.from().x(), point.y() - wall.from().y()) <= tolerance
+      || Math.hypot(point.x() - wall.to().x(), point.y() - wall.to().y()) <= tolerance;
+  }
+
+  private static boolean insideBeyondEndCaps(Segment opening, Polygon barrier, double capLength) {
+    List<Double> boundaries = cuts(opening, List.of(barrier));
+    double cap = Math.min(capLength / length(opening), .25);
+    for (int i = 1; i < boundaries.size(); i++) {
+      double from = Math.max(boundaries.get(i - 1), cap);
+      double to = Math.min(boundaries.get(i), 1 - cap);
+      if (to - from > EPS && contains(barrier, pointAt(opening, (from + to) / 2))) return true;
     }
     return false;
   }
@@ -98,9 +170,7 @@ public final class CandidateRouteGeometry {
       if (!atOpening) return reject("la conexión atraviesa un muro fuera de una puerta reconocida");
       throughOpening = true;
     }
-    if ("DOORWAY".equalsIgnoreCase(proposedKind) && !throughOpening)
-      return reject("la conexión marcada como puerta no coincide con una abertura reconocida");
-    return new Decision(throughOpening ? "DOORWAY" : proposedKind, null);
+    return new Decision(throughOpening ? "DOORWAY" : "CORRIDOR", null);
   }
 
   private static Decision reject(String reason) { return new Decision(null, reason); }

@@ -3,15 +3,20 @@ package com.uitopic.rumbo.navigation.application.internal.queryservices;
 import com.uitopic.rumbo.navigation.domain.services.AStarRouteCalculationDomainService;
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.CalculatedRoute;
 import com.uitopic.rumbo.navigation.domain.repositories.PublishedSpatialGraphRepository;
+import com.uitopic.rumbo.navigation.domain.repositories.VisitorRoutePreferencesRepository;
 import com.uitopic.rumbo.navigation.domain.services.PublishedRouteQueryService;
 import com.uitopic.rumbo.navigation.domain.exceptions.InvalidPublishedGraphException;
 import com.uitopic.rumbo.navigation.domain.exceptions.NoCompatibleRouteException;
 import com.uitopic.rumbo.navigation.domain.exceptions.RouteNodeOutsideSiteException;
 import com.uitopic.rumbo.navigation.domain.model.valueobjects.PublishedSpatialGraph;
+import com.uitopic.rumbo.navigation.domain.model.valueobjects.RouteConstraints;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,19 +25,44 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Profile("postgres")
 public class PublishedRouteQueryServiceImpl implements PublishedRouteQueryService {
+  private static final Logger log = LoggerFactory.getLogger(PublishedRouteQueryServiceImpl.class);
   private final PublishedSpatialGraphRepository graphs;
   private final AStarRouteCalculationDomainService calculator;
+  private final ObjectProvider<VisitorRoutePreferencesRepository> preferences;
 
   public PublishedRouteQueryServiceImpl(PublishedSpatialGraphRepository graphs,
-                                        AStarRouteCalculationDomainService calculator) {
+                                        AStarRouteCalculationDomainService calculator,
+                                        ObjectProvider<VisitorRoutePreferencesRepository> preferences) {
     this.graphs = graphs;
     this.calculator = calculator;
+    this.preferences = preferences;
+  }
+
+  /**
+   * Adds the visitor's saved restrictions to the requested ones. The preferences port is looked up lazily, so routes
+   * keep working before Profiles and Preferences exists, and a failure there never blocks a route.
+   */
+  @Override
+  @Transactional(readOnly = true)
+  public Optional<CalculatedRoute> calculateForVisitor(UUID siteId, UUID fromNodeId, UUID toNodeId,
+                                                       RouteConstraints requested, UUID visitorId) {
+    RouteConstraints effective = requested;
+    VisitorRoutePreferencesRepository saved = visitorId == null ? null : preferences.getIfAvailable();
+    if (saved != null) {
+      try {
+        effective = saved.findByVisitorId(visitorId).map(requested::and).orElse(requested);
+      } catch (RuntimeException unavailable) {
+        log.warn("Saved route preferences of visitor {} unavailable; using the requested ones", visitorId,
+            unavailable);
+      }
+    }
+    return calculate(siteId, fromNodeId, toNodeId, effective);
   }
 
   @Override
   @Transactional(readOnly = true)
   public Optional<CalculatedRoute> calculate(UUID siteId, UUID fromNodeId, UUID toNodeId,
-                                             boolean accessibleOnly) {
+                                             RouteConstraints constraints) {
     PublishedSpatialGraph graph;
     try {
       graph = graphs.findCurrentBySite(siteId).orElse(null);
@@ -56,10 +86,10 @@ public class PublishedRouteQueryServiceImpl implements PublishedRouteQueryServic
       return Optional.empty();
     }
     try {
-      Optional<CalculatedRoute> route =
-          calculator.calculate(graph, fromNodeId, toNodeId, accessibleOnly);
-      if (accessibleOnly && route.isEmpty()
-          && calculator.calculate(graph, fromNodeId, toNodeId, false).isPresent()) {
+      Optional<CalculatedRoute> route = calculator.calculate(graph, fromNodeId, toNodeId, constraints);
+      // A route exists but none satisfies the restrictions: the visitor must know it is the preference that blocks it.
+      if (route.isEmpty() && !RouteConstraints.NONE.equals(constraints)
+          && calculator.calculate(graph, fromNodeId, toNodeId, RouteConstraints.NONE).isPresent()) {
         throw new NoCompatibleRouteException();
       }
       return route;

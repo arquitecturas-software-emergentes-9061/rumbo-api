@@ -1,10 +1,10 @@
-# Demo deployment from the deploy branch. No real credentials are stored in Git.
+# Demo deployment from the main branch. No real credentials are stored in Git.
 services:
   - type: web
     name: rumbo-api-demo
     runtime: docker
     plan: free
-    branch: deploy
+    branch: main
     dockerfilePath: ./Dockerfile
     healthCheckPath: /actuator/health
     envVars:
@@ -44,6 +44,31 @@ services:
           property: port
       - key: JWT_SECRET
         generateValue: true
+      # The structural mapper (plan interpretation with the CubiCasa5k model) runs as its own service below.
+      # USE_ML asks it for the model; the free instances sleep when idle, so the API waits up to a minute.
+      - key: STRUCTURAL_MAPPER_URL
+        value: https://rumbo-structural-mapper.onrender.com
+      - key: STRUCTURAL_MAPPER_USE_ML
+        value: "true"
+      - key: RUMBO_PLANNING_STRUCTURAL_MAPPER_CONNECT_TIMEOUT_MS
+        value: "60000"
+      - key: RUMBO_PLANNING_STRUCTURAL_MAPPER_READ_TIMEOUT_MS
+        value: "120000"
+      # Origins allowed to call the API from a browser: no trailing slash, no path, comma separated.
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://rumbo-web-rho.vercel.app,https://arquitecturas-software-emergentes-9061.github.io,http://localhost:4200
+  - type: web
+    name: rumbo-structural-mapper
+    runtime: docker
+    plan: free
+    branch: main
+    dockerfilePath: ./structural-mapper/Dockerfile
+    dockerContext: ./structural-mapper
+    healthCheckPath: /health
+    envVars:
+      # The Dockerfile starts uvicorn on a fixed port; Render must route to it.
+      - key: PORT
+        value: "8010"
   - type: keyvalue
     name: rumbo-demo-redis
     plan: free

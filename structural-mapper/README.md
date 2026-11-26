@@ -35,6 +35,29 @@ Variables del servicio: `STRUCTURAL_MAPPER_DISABLE_ML=1` desactiva cualquier mod
 copia del archivo (si falta o está dañada, el arranque falla en vez de servir resultados clásicos en silencio);
 `CUBICASA_MODEL_CACHE` cambia la carpeta de descarga; `MAPPER_INFERENCE_THREADS` (4) limita los hilos de inferencia.
 
+### Nombres de ambientes (PR-157 / US-10)
+
+El parser v5 añade OCR con Tesseract `spa+eng` para PNG, JPEG y PDF escaneados sin texto incorporado.
+Las imágenes Docker incluyen el motor y ambos idiomas. En una instalación local, instalar también
+`tesseract-ocr`, `tesseract-ocr-spa` y `tesseract-ocr-eng`; Python por sí solo no instala el motor.
+`MAPPER_OCR_DISABLED=1` permite desactivarlo explícitamente. `/health` informa `ocr_backend`.
+
+Las cajas de texto conservan las coordenadas del raster decodificado y alimentan la asignación y
+clasificación de espacios que ya existían. PDF/SVG con texto incorporado reutilizan ese texto directamente.
+No se cambia la geometría ni se guardan automáticamente destinos. La reconciliación de destinos permanece
+en el editor Web, con los controles de coincidencia única y revisión integrados por el equipo.
+
+El modo de [texto disperso y TSV de Tesseract](https://tesseract-ocr.github.io/tessdoc/Command-Line-Usage.html)
+agrupa palabras próximas por línea. Se descartan líneas con confianza de alguna palabra menor de 70/100,
+medidas sin nombre y textos excesivos. El proceso tiene un límite de seis segundos y un hilo de OCR.
+`diagnostics.ocr_status`, `ocr_labels` y `t_ocr` distinguen extracción, texto incorporado, ausencia de texto,
+motor deshabilitado/no disponible, fallo y tiempo agotado. Los fallos conservan la geometría y generan una
+advertencia visible para que el administrador nombre los ambientes manualmente.
+
+Las pruebas reales generan planos legibles PNG/JPEG/PDF; no acreditan una tasa universal de exactitud.
+Manuscritos, texto pequeño/rotado, fotos inclinadas o documentos mixtos parcialmente etiquetados pueden
+requerir revisión. Solo se procesa la primera página, como antes; nunca se inventa un nombre no leído.
+
 La alternativa anterior con BuildingCV (`Dockerfile.ml`, PyTorch, varios GB) sigue disponible con
 `docker compose --profile mapper-ml up -d structural-mapper-ml`, pero ya no es necesaria.
 

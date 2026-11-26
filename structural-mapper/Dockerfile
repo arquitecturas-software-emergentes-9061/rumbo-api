@@ -12,6 +12,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MAPPER_INFERENCE_THREADS=4
 
 RUN apt-get update && apt-get install -y --no-install-recommends libglib2.0-0 curl \
+    tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home mapper
 

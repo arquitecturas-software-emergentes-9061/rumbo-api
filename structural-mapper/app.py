@@ -1,4 +1,4 @@
-"""Rumbo Structural Mapper service (v4).
+"""Rumbo Structural Mapper service (v5).
 
 Thin HTTP layer over `mapper.pipeline`. Perception uses the CubiCasa5k ONNX parser by
 default (downloaded once and verified, see `mapper.perception.model_store`), an explicitly
@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 from mapper.ingest.decode import DecodeError
+from mapper.ingest.ocr import available as ocr_available
 from mapper.pipeline import PARSER_VERSION, MapperOptions, Pipeline, scene_to_payload
 
 MAX_BYTES = 32 * 1024 * 1024
@@ -54,7 +55,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Rumbo Structural Mapper", version="4.0", lifespan=lifespan)
+app = FastAPI(title="Rumbo Structural Mapper", version="5.0", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -64,6 +65,7 @@ def health() -> dict:
         "parser": "rumbo-structural-mapper",
         "parser_version": PARSER_VERSION,
         "ml_backend": app.state.ml_backend,
+        "ocr_backend": "tesseract-spa-eng" if ocr_available() else None,
         "backends": [b for b in ("vector-strokes", "classical-morphology", app.state.ml_backend) if b],
     }
 

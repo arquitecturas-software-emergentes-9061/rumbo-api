@@ -20,6 +20,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-venv libglib2.0-0 ca-certificates \
+       tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home rumbo
 

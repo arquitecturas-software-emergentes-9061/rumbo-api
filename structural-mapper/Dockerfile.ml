@@ -14,7 +14,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     BUILDINGCV_RUN_DIR=/opt/buildingcv/weights
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl libglib2.0-0 libgl1 \
+    git curl libglib2.0-0 libgl1 tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
 RUN git clone https://github.com/Yytsi/floorplan-to-3d.git /opt/buildingcv \

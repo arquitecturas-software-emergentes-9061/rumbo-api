@@ -3,14 +3,15 @@ from __future__ import annotations
 
 import time
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
-from .contracts import RasterInput, Scale, Scene
+from .contracts import RasterInput, Scale, Scene, ValidationIssue
 from .graph.build import GraphBuilder
 from .inference.spaces import SpaceInference
 from .ingest.decode import decode
+from .ingest.ocr import extract_labels
 from .perception.base import Perceiver
 from .perception.classical import ClassicalPerceiver, dark_mask, estimate_stroke_thickness
 from .perception.fusion import fuse
@@ -24,7 +25,7 @@ from .walkable.free_space import walkable_by_space, walkable_union
 ASSUMED_WALL_M = 0.2
 TYPICAL_DOOR_M = 0.9
 MIN_DOORS_FOR_SCALE = 3
-PARSER_VERSION = "4"
+PARSER_VERSION = "5"
 
 
 @dataclass(slots=True)
@@ -54,6 +55,12 @@ class Pipeline:
 
     def run(self, source: RasterInput, options: MapperOptions) -> Scene:
         timings: dict[str, float] = {}
+        t0 = time.perf_counter()
+        total_start = t0
+        ocr = extract_labels(source)
+        if ocr.labels:
+            source = replace(source, labels=ocr.labels)
+        timings["ocr"] = time.perf_counter() - t0
         t0 = time.perf_counter()
         scale = self._scale(source, options)
         shape = (source.height, source.width)
@@ -100,6 +107,13 @@ class Pipeline:
         )
         stage = time.perf_counter()
         scene.validation = validate(scene)
+        if ocr.status not in ("embedded-text", "extracted"):
+            scene.validation.add(ValidationIssue(
+                "ocr-" + ocr.status, "warning",
+                "No se confirmaron nombres mediante OCR; conserva los ambientes sin nombre y revísalos manualmente."
+                if ocr.status == "no-text" else
+                "No se pudo completar el OCR de nombres; revisa y nombra los ambientes manualmente.",
+            ))
         timings["validation"] = time.perf_counter() - stage
         scene.diagnostics = {
             "backend": masks.backend,
@@ -119,8 +133,10 @@ class Pipeline:
             "edges_dropped_crossing": builder.dropped_crossing,
             "components_bridged": builder.bridged_components,
             "labels": len(source.labels),
+            "ocr_status": ocr.status,
+            "ocr_labels": len(ocr.labels),
             **{f"t_{k}": round(v, 4) for k, v in timings.items()},
-            "t_total": round(time.perf_counter() - t0, 4),
+            "t_total": round(time.perf_counter() - total_start, 4),
         }
         return scene
 

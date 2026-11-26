@@ -357,10 +357,20 @@ notification is logged and never affects the sign-up, lock, password change or p
 Delivery `status` is `PENDING` (no attempt yet), `SENT`, `RETRY_PENDING` (an attempt failed and another is scheduled)
 or `FAILED` (three attempts failed). `SENT` and `FAILED` are final. The only channel today is `IN_APP`, which is
 delivered when it is stored, so every notification currently reports `SENT` after one attempt; the other states exist
-in the model for the email and push channels, which are not implemented yet.
+in the model for general email and push notifications, which are not implemented yet.
+Password recovery has a separate SMTP delivery path (PR-40); its secret link never appears in this history.
 
 Not covered yet: notifications addressed to a whole organization (map publication, beacon incidents, navigation
-problems), because those events do not exist in the other contexts, and email or push delivery.
+problems), because those events do not exist in the other contexts, and general email or push notifications.
+
+### Password recovery delivery (PR-40 / US-28)
+
+The existing public `POST /api/v1/password-recovery/requests` returns an empty 202 for known and unknown
+addresses. Communications delivers instructions over SMTP after the IAM transaction commits when
+`RECOVERY_MAIL_ENABLED=true`. A transport failure keeps that neutral response; 202 never confirms delivery.
+`POST /api/v1/password-recovery/confirmations` accepts `resetToken` and `newPassword`, returns 204 on success
+or 400 for an invalid/expired/used token, and revokes existing sessions. Neither response exposes the token.
+Delivery setup, local Mailpit usage, tests and operational limits are documented in `docs/PR-40.md`.
 
 ## Subscription checkout and payment orders (PR-79 v3)
 

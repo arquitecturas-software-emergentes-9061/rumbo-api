@@ -167,6 +167,7 @@ class DirectoryControllerIntegrationTest {
   private IndoorMap draft(UUID siteId, UUID mapId, UUID versionId,
                           String name, String specialty) {
     IndoorMap map = new IndoorMap(mapId, siteId, versionId);
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.enterpriseSite(jdbc, map.siteId());
     UUID floorId = UUID.randomUUID();
     UUID planVersionId = UUID.randomUUID();
     map.addPlan(new PlanCoordinateSpace(floorId, planVersionId, 100, 100));

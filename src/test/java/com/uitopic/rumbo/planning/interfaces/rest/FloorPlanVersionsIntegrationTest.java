@@ -322,6 +322,8 @@ class FloorPlanVersionsIntegrationTest {
   }
 
   private UUID site(String token) throws Exception {
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.activeEnterprise(jdbc,
+        com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.ownerOf(token));
     var result = mvc.perform(post("/api/v1/sites").header(HttpHeaders.AUTHORIZATION, bearer(token))
         .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Plan Test Site\"}"))
       .andExpect(status().isCreated()).andReturn();

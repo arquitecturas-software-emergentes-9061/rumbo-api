@@ -10,9 +10,20 @@ from mapper.ingest.decode import decode
 from mapper.geometry import rasterize
 from mapper.graph.build import GraphBuilder
 from mapper.graph.skeleton import collapse_degree_two, skeleton_graph
+from mapper.inference.spaces import SpaceInference
 from mapper.pipeline import MapperOptions, Pipeline, scene_to_payload
 from mapper.validation.rules import validate
 from mapper.walkable.free_space import walkable_by_space, walkable_union
+
+
+def test_unlabeled_inaccessible_wall_sliver_is_not_proposed_as_a_room():
+    sliver = Space("sliver", box(0, 0, 170, 10), area_px=1700,
+                   narrowness=5 / np.sqrt(1700), elongation=17)
+    room = Space("room", box(0, 0, 80, 80), area_px=6400,
+                 narrowness=40 / np.sqrt(6400))
+    SpaceInference(Scale(40, "estimated"), (100, 180))._classify([sliver, room], [])
+    assert sliver.kind == "void"
+    assert room.kind == "room"
 
 
 def test_routes_in_an_l_shaped_hall_do_not_cut_across_the_unmapped_exterior():

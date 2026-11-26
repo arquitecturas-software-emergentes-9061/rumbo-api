@@ -319,8 +319,21 @@ public final class IndoorMap extends AbstractDomainAggregateRoot<UUID> {
       double dx = bx - ax, dy = by - ay;
       double wx = wall.x2() - wall.x1(), wy = wall.y2() - wall.y1();
       double determinant = dx * wy - dy * wx;
-      if (Math.abs(determinant) < 1e-8) continue;
       double rx = wall.x1() - ax, ry = wall.y1() - ay;
+      if (Math.abs(determinant) < 1e-8) {
+        // Parallel segments may still overlap: travelling along a wall is not a passage.
+        double lengthSquared = dx * dx + dy * dy;
+        if (lengthSquared > 1e-12 && Math.abs(rx * dy - ry * dx) < 1e-8) {
+          double first = (rx * dx + ry * dy) / lengthSquared;
+          double last = first + (wx * dx + wy * dy) / lengthSquared;
+          double overlap = Math.min(1, Math.max(first, last)) - Math.max(0, Math.min(first, last));
+          if (overlap > 1e-6) {
+            reject(GraphIssueCode.CONNECTION_CROSSES_WALL, GraphElementType.CONNECTION,
+                connection.id(), "Connection overlaps a wall segment");
+          }
+        }
+        continue;
+      }
       double alongConnection = (rx * wy - ry * wx) / determinant;
       double alongWall = (rx * dy - ry * dx) / determinant;
       boolean throughDoor = doors.values().stream().anyMatch(door -> door.wallId().equals(wall.id())
@@ -377,6 +390,18 @@ public final class IndoorMap extends AbstractDomainAggregateRoot<UUID> {
   /** Validates the current draft against the rules required before publication. */
   public GraphValidationResult validateForPublication() {
     List<GraphIssue> issues = new ArrayList<>();
+    // Walls can be edited after links were created. Recheck the final geometry at publication.
+    for (MapConnection connection : connections.values()) {
+      MapNode source = nodes.get(connection.sourceNodeId());
+      MapNode target = nodes.get(connection.targetNodeId());
+      if (source.position().floorId().equals(target.position().floorId())) {
+        try {
+          validateWallCrossings(connection, source, target);
+        } catch (InvalidMapGraphException error) {
+          issues.add(error.issue());
+        }
+      }
+    }
     for (PlanCoordinateSpace space : plans.values()) {
       if (!scales.containsKey(space.planVersionId())) {
         issues.add(issue(GraphIssueCode.MISSING_SCALE, GraphElementType.PLAN,

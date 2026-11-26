@@ -21,11 +21,15 @@ public class IamSteps {
   @Autowired ScenarioContext context;
   @Autowired ObjectMapper mapper;
   @Autowired RecoveryMailbox mailbox;
+  @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
 
   @Given("a clinic administrator registered as {string} with password {string}")
   public void registeredAdmin(String email, String password) {
     signUp(email, password);
     assertThat(context.status()).as(context.body()).isEqualTo(201);
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.activeEnterprise(jdbc,
+        UUID.fromString(jdbc.queryForObject("SELECT id::text FROM identity_users WHERE email = ?",
+            String.class, unique(email))));
   }
 
   @Given("a patient registered as {string} with password {string}")

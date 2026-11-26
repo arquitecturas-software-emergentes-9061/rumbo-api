@@ -51,6 +51,7 @@ class NavigationSummaryIntegrationTest {
 
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper mapper;
+  @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
   @MockitoBean NavigationMetricsReader reader;
 
   private String owner;
@@ -59,6 +60,10 @@ class NavigationSummaryIntegrationTest {
   @BeforeEach
   void ownerWithASite() throws Exception {
     owner = tokenOf(register("CLINIC_ADMIN"));
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.activeEnterprise(jdbc,
+        com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.ownerOf(owner)); // sites require an active plan (PR-93)
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.activeEnterprise(jdbc,
+        com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.ownerOf(owner));
     siteId = UUID.fromString(mapper.readTree(mvc.perform(post("/api/v1/sites").header(HttpHeaders.AUTHORIZATION,
         bearer(owner)).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Sede Central\"}"))
       .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString()).get("id").asText());

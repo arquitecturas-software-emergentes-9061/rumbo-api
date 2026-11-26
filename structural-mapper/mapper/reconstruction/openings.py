@@ -25,6 +25,9 @@ from ..geometry import components, components_cropped, line_kernel, oriented_box
 
 MIN_DOOR_M = 0.55
 MAX_DOOR_M = 3.0
+# Learned openings can also be double doors or wide entrances. Their sides are
+# verified later by space inference, and traversability still uses the calibrated clearance.
+MAX_SEMANTIC_OPENING_M = 6.0
 MAX_WALL_M = 0.9
 
 
@@ -54,18 +57,29 @@ def detect_openings(masks: StructuralMasks, walls: list[WallElement], scale: Sca
 
     # Icon masks can be narrow strokes; their ink area is not physical doorway area.
     for component, origin, _ in components_cropped(masks.door, min_area=max(4.0, scale.px(0.03) * scale.px(0.2))):
-        candidate = _opening_from_component(component, blocked, scale, 0.45, 3.2, ids, ("ml",), 0.6, check_contacts=False, origin=origin)
+        candidate = _opening_from_component(component, blocked, scale, 0.45, MAX_SEMANTIC_OPENING_M,
+                                            ids, ("ml",), 0.6, check_contacts=False, origin=origin)
         if candidate is None:
             continue
-        matched = False
-        for existing in openings:
-            if existing.polygon.intersects(candidate.polygon):
-                existing.sources = tuple(sorted(set(existing.sources) | {"ml"}))
-                existing.confidence = 0.95
-                matched = True
-        if not matched:
-            openings.append(candidate)
+        overlaps = [existing for existing in openings if "ml" not in existing.sources
+                    and existing.polygon.intersects(candidate.polygon)]
+        matches = [existing for existing in overlaps if _same_opening(existing, candidate)]
+        if matches:
+            candidate.sources = tuple(sorted({source for opening in matches for source in opening.sources} | {"ml"}))
+            candidate.confidence = 0.95
+        # In a jointly recognized plan a broad geometric fill can overlap a
+        # doorway at a corner. It must not partition the adjacent corridor.
+        for existing in overlaps if masks.semantic_geometry else matches:
+            openings.remove(existing)
+        openings.append(candidate)
     return openings
+
+
+def _same_opening(first: Opening, second: Opening) -> bool:
+    # An intersection at a corner can be a different wall or an adjacent doorway.
+    alignment = abs(float(np.dot(first.normal, second.normal)))
+    shared = first.polygon.intersection(second.polygon).area
+    return alignment >= 0.9 and shared >= 0.5 * min(first.polygon.area, second.polygon.area)
 
 
 def _gap_components(blocked: np.ndarray, scale: Scale, kernel_m: float, orientations: int = 12):

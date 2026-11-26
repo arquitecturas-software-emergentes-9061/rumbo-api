@@ -3,6 +3,7 @@ package com.uitopic.rumbo.planning.interfaces.rest;
 import com.uitopic.rumbo.planning.application.internal.exceptions.DuplicateBeaconIdentifierException;
 import com.uitopic.rumbo.planning.application.internal.exceptions.InvalidBeaconAnchorException;
 import com.uitopic.rumbo.planning.application.internal.exceptions.PlanningSiteNotFoundException;
+import com.uitopic.rumbo.planning.domain.exceptions.ClinicStructureConflictException;
 import com.uitopic.rumbo.shared.interfaces.rest.ProblemDetails;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -16,6 +17,13 @@ public class BeaconExceptionHandler {
   @ExceptionHandler(PlanningSiteNotFoundException.class)
   ProblemDetail notFound(Exception ignored) {
     return ProblemDetails.of(HttpStatus.NOT_FOUND, "POSITIONING_RESOURCE_NOT_FOUND", "Site or beacon not found");
+  }
+
+  @ExceptionHandler(ClinicStructureConflictException.class)
+  ProblemDetail quotaConflict(ClinicStructureConflictException error) {
+    var problem = ProblemDetails.of(HttpStatus.CONFLICT, error.code(), error.getMessage());
+    if (error.limit() != null) problem.setProperty("limit", error.limit());
+    return problem;
   }
 
   @ExceptionHandler(DuplicateBeaconIdentifierException.class)

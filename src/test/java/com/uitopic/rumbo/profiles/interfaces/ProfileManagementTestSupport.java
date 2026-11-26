@@ -18,7 +18,7 @@ abstract class ProfileManagementTestSupport {
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper mapper;
   @Autowired JdbcTemplate jdbc;
-  record Caller(UUID id, String token) {}
+  record Caller(UUID id, String token, String email, String password) {}
 
   Caller register(String role) throws Exception {
     String email = "profiles-update-" + UUID.randomUUID() + "@example.com";
@@ -28,11 +28,13 @@ abstract class ProfileManagementTestSupport {
         .content(mapper.writeValueAsString(Map.of("email", email, "password", password, "role", role,
             "fullName", "Ana Torres", "clinicName", "Test clinic", "acceptedTerms", true))))
         .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+    return signIn(UUID.fromString(mapper.readTree(signup).get("id").asText()), email, password);
+  }
+  Caller signIn(UUID id, String email, String password) throws Exception {
     String signin = mvc.perform(post("/api/v1/auth/sign-in").contentType(MediaType.APPLICATION_JSON)
         .content(mapper.writeValueAsString(Map.of("email", email, "password", password))))
         .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-    return new Caller(UUID.fromString(mapper.readTree(signup).get("id").asText()),
-        mapper.readTree(signin).get("accessToken").asText());
+    return new Caller(id, mapper.readTree(signin).get("accessToken").asText(), email, password);
   }
   ResultActions upload(Caller caller, byte[] bytes, String type) throws Exception {
     return mvc.perform(multipart(org.springframework.http.HttpMethod.PUT, "/api/v1/profiles/me/image")

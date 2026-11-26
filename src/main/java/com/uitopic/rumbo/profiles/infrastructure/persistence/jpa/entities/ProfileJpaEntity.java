@@ -38,6 +38,24 @@ public class ProfileJpaEntity extends AuditableJpaEntity {
   @Column(name = "image_storage_key", length = 255)
   private String imageStorageKey;
 
+  @Column(name = "avoid_stairs", nullable = false)
+  private boolean avoidStairs;
+  @Column(name = "simpler_route", nullable = false)
+  private boolean simplerRoute;
+  @Column(name = "voice_guidance", nullable = false)
+  private boolean voiceGuidance;
+  @Column(name = "preferences_updated_at")
+  private Instant preferencesUpdatedAt;
+
+  public boolean isAvoidStairs() { return avoidStairs; }
+  public void setAvoidStairs(boolean value) { avoidStairs = value; }
+  public boolean isSimplerRoute() { return simplerRoute; }
+  public void setSimplerRoute(boolean value) { simplerRoute = value; }
+  public boolean isVoiceGuidance() { return voiceGuidance; }
+  public void setVoiceGuidance(boolean value) { voiceGuidance = value; }
+  public Instant getPreferencesUpdatedAt() { return preferencesUpdatedAt; }
+  public void setPreferencesUpdatedAt(Instant value) { preferencesUpdatedAt = value; }
+
   public UUID getId() { return id; }
 
   public void setId(UUID id) { this.id = id; }

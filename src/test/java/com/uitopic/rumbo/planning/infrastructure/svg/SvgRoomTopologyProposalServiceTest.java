@@ -68,7 +68,8 @@ class SvgRoomTopologyProposalServiceTest {
     assertEquals(1, proposal.wallCandidates().size());
     assertEquals(1, proposal.doors().size());
     assertTrue(proposal.connections().isEmpty());
-    assertTrue(proposal.warnings().stream().anyMatch(text -> text.contains("sin un muro compatible")));
+    assertTrue(proposal.warnings().stream().anyMatch(text -> text.contains("sin un muro compatible")),
+      proposal.warnings().toString());
   }
 
   @Test void rejectsAmbiguousDoorTouchingThreeZones() {

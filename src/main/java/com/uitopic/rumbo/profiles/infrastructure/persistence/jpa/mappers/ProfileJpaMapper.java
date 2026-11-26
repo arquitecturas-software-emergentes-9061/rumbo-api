@@ -4,6 +4,7 @@ import com.uitopic.rumbo.profiles.domain.model.aggregates.Profile;
 import com.uitopic.rumbo.profiles.domain.model.valueobjects.FullName;
 import com.uitopic.rumbo.profiles.domain.model.valueobjects.PhoneNumber;
 import com.uitopic.rumbo.profiles.domain.model.valueobjects.ProfileImage;
+import com.uitopic.rumbo.profiles.domain.model.valueobjects.RoutePreferences;
 import com.uitopic.rumbo.profiles.infrastructure.persistence.jpa.entities.ProfileJpaEntity;
 
 /** Converts between the {@link Profile} aggregate and its persistence entity. Absent values map to SQL {@code NULL}. */
@@ -20,6 +21,10 @@ public final class ProfileJpaMapper {
     entity.setImageUrl(profile.image() == null ? null : profile.image().url());
     entity.setImageStorageKey(profile.image() == null ? null : profile.image().storageKey());
     entity.setCreatedAt(profile.createdAt());
+    entity.setAvoidStairs(profile.preferences().avoidStairs());
+    entity.setSimplerRoute(profile.preferences().simplerRoute());
+    entity.setVoiceGuidance(profile.preferences().voiceGuidance());
+    entity.setPreferencesUpdatedAt(profile.preferencesUpdatedAt());
     return entity;
   }
 
@@ -29,6 +34,8 @@ public final class ProfileJpaMapper {
       ? null
       : new ProfileImage(entity.getImageUrl(), entity.getImageStorageKey());
     return new Profile(entity.getId(), entity.getUserId(), new FullName(entity.getFullName()), entity.getRole(),
-      phone, image, entity.getCreatedAt(), entity.getUpdatedAt());
+      phone, image, entity.getCreatedAt(), entity.getUpdatedAt(),
+      new RoutePreferences(entity.isAvoidStairs(), entity.isSimplerRoute(), entity.isVoiceGuidance()),
+      entity.getPreferencesUpdatedAt());
   }
 }

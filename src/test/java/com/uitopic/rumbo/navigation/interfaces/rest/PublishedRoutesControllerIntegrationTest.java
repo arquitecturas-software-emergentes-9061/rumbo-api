@@ -151,7 +151,9 @@ class PublishedRoutesControllerIntegrationTest {
     mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
         .andExpect(jsonPath("$.paths['/api/v1/sites/{siteId}/routes'].get").exists())
         .andExpect(jsonPath("$.paths['/api/v1/sites/{siteId}/routes'].get.parameters.length()")
-            .value(4))
+            .value(6))
+        .andExpect(jsonPath("$.paths['/api/v1/sites/{siteId}/routes'].get.parameters[*].name")
+            .value(org.hamcrest.Matchers.hasItems("avoidStairs", "prioritizeElevators")))
         .andExpect(jsonPath("$.components.schemas.PublishedRouteResponse.properties.verticalSections")
             .exists());
   }
@@ -187,6 +189,7 @@ class PublishedRoutesControllerIntegrationTest {
                         boolean oneWay) {
     UUID siteId = UUID.randomUUID();
     IndoorMap map = new IndoorMap(UUID.randomUUID(), siteId, UUID.randomUUID());
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.enterpriseSite(jdbc, map.siteId());
     UUID floor = UUID.randomUUID();
     UUID plan = UUID.randomUUID();
     map.addPlan(new PlanCoordinateSpace(floor, plan, 100, 100));
@@ -211,6 +214,7 @@ class PublishedRoutesControllerIntegrationTest {
   private Fixture gridDraft(int columns, int rows) {
     UUID siteId = UUID.randomUUID();
     IndoorMap map = new IndoorMap(UUID.randomUUID(), siteId, UUID.randomUUID());
+    com.uitopic.rumbo.subscriptions.SubscriptionTestSeeds.enterpriseSite(jdbc, map.siteId());
     UUID floorId = UUID.randomUUID();
     UUID planVersionId = UUID.randomUUID();
     map.addPlan(new PlanCoordinateSpace(floorId, planVersionId, columns, rows));

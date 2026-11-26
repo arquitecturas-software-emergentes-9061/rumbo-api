@@ -33,4 +33,15 @@ class SubscriptionTest {
     assertThat(s.updatedAt()).isEqualTo(now);
     assertThat(s.providerSubscriptionId()).isNull();
   }
+  @Test void renewingTheSamePlanRestartsAtPaymentTime() {
+    var originalStart = Instant.parse("2026-01-31T10:00:00Z");
+    var paymentTime = Instant.parse("2026-02-10T10:00:00Z");
+    var subscription = Subscription.activate(UUID.randomUUID(), PlanCode.BASIC, null, originalStart);
+
+    subscription.changePlan(PlanCode.BASIC, null, paymentTime);
+
+    assertThat(subscription.planCode()).isEqualTo(PlanCode.BASIC);
+    assertThat(subscription.currentPeriodStart()).isEqualTo(paymentTime);
+    assertThat(subscription.currentPeriodEnd()).isEqualTo(Instant.parse("2026-03-10T10:00:00Z"));
+  }
 }

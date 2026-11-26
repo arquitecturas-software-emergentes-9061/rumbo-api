@@ -7,6 +7,7 @@ import org.w3c.dom.NodeList;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -90,11 +91,15 @@ public final class SvgRoomTopologyProposalService {
       new CandidateRouteGeometry.Point(line.x1(), line.y1()),
       new CandidateRouteGeometry.Point(line.x2(), line.y2()))).toList();
     var openings = new ArrayList<CandidateRouteGeometry.Segment>();
+    var routableDoors = new HashSet<String>();
     for (Door door : doors) {
       var opening = new CandidateRouteGeometry.Segment(
         new CandidateRouteGeometry.Point(door.x1(), door.y1()),
         new CandidateRouteGeometry.Point(door.x2(), door.y2()));
-      if (walls.isEmpty() || CandidateRouteGeometry.openingFitsWall(opening, walls)) openings.add(opening);
+      if (walls.isEmpty() || CandidateRouteGeometry.openingFitsWall(opening, walls)) {
+        openings.add(opening);
+        routableDoors.add(door.id());
+      }
       else warnings.add("Puerta " + door.id() + " sin un muro compatible: se conserva para revisión, sin proponer rutas por ella");
     }
     var traversable = zones.stream().map(zone -> new CandidateRouteGeometry.Polygon(List.of(
@@ -111,6 +116,7 @@ public final class SvgRoomTopologyProposalService {
         zone.x() + zone.width() / 2, zone.y() + zone.height() / 2));
     }
     for (Door door : doors) {
+      if (!routableDoors.contains(door.id())) continue;
       double x = (door.x1() + door.x2()) / 2;
       double y = (door.y1() + door.y2()) / 2;
       var touching = zones.stream().filter(zone -> touchesBoundary(zone, door)).toList();

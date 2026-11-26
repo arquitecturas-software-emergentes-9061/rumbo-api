@@ -20,7 +20,7 @@ class ConfirmPaymentCommandHandlerTest {
   final ApplicationEventPublisher publisher = mock(ApplicationEventPublisher.class);
   final Instant now = Instant.parse("2026-01-31T12:00:00Z");
   final ConfirmPaymentCommandHandler handler = new ConfirmPaymentCommandHandler(orders, subscriptions, events, publisher, Clock.fixed(now, ZoneOffset.UTC));
-  final PaymentOrder order = PaymentOrder.create(UUID.randomUUID(), PlanCode.BASIC, new Money(BigDecimal.ONE, "PEN"));
+  final PaymentOrder order = PaymentOrder.create(UUID.randomUUID(), new com.uitopic.rumbo.subscriptions.domain.model.valueobjects.OrganizationRef(UUID.randomUUID(), "Clinic"), com.uitopic.rumbo.subscriptions.support.BillingFixture.billing(), PlanCode.BASIC, new Money(BigDecimal.ONE, "PEN"));
   PaymentEvent event(String type, boolean paid) { return new PaymentEvent("evt_test", type, order.id(), "sub_test", paid); }
   @BeforeEach void setup() {
     when(events.claim(anyString(), anyString(), eq(now))).thenReturn(true);

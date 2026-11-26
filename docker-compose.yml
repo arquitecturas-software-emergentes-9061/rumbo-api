@@ -27,6 +27,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  # Receives development emails locally; never relays to external recipients.
+  mailpit:
+    image: axllent/mailpit:v1.27.4
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+    labels:
+      org.springframework.boot.ignore: true
   # Reads PDF, PNG and JPEG plans for the interpretation endpoint, recognizing walls, doors and rooms with the
   # CubiCasa5k model (downloaded at build time, no PyTorch). Always on: `mvn spring-boot:run` starts it with the rest.
   # The first start builds the image (a few minutes); later starts reuse it.

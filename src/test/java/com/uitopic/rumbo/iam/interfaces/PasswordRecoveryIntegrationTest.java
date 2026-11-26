@@ -44,6 +44,12 @@ class PasswordRecoveryIntegrationTest {
   @Autowired ApplicationEvents events;
 
   @Test
+  void disabledEmailDeliveryDoesNotRequireAnSmtpServerForHealth() throws Exception {
+    mvc.perform(get("/actuator/health")).andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("UP"));
+  }
+
+  @Test
   void anUnknownEmailGetsTheSameAnswerAndNoLink() throws Exception {
     requestReset("nadie-" + UUID.randomUUID() + "@clinica.pe").andExpect(status().isAccepted());
     requestReset("not-an-email").andExpect(status().isAccepted());

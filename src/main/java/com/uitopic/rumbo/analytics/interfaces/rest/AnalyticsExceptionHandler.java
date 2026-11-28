@@ -2,6 +2,7 @@ package com.uitopic.rumbo.analytics.interfaces.rest;
 
 import com.uitopic.rumbo.analytics.domain.exceptions.InvalidDateRangeException;
 import com.uitopic.rumbo.analytics.domain.exceptions.MetricsUnavailableException;
+import com.uitopic.rumbo.analytics.domain.exceptions.SessionFeedbackNotFoundException;
 import com.uitopic.rumbo.shared.interfaces.rest.ProblemDetails;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -30,6 +31,11 @@ public class AnalyticsExceptionHandler {
   @ExceptionHandler(MetricsUnavailableException.class)
   ProblemDetail metricsUnavailable(MetricsUnavailableException exception) {
     return ProblemDetails.of(HttpStatus.SERVICE_UNAVAILABLE, MetricsUnavailableException.CODE, exception.getMessage());
+  }
+
+  @ExceptionHandler(SessionFeedbackNotFoundException.class)
+  ProblemDetail sessionFeedbackNotFound(SessionFeedbackNotFoundException exception) {
+    return ProblemDetails.of(HttpStatus.NOT_FOUND, SessionFeedbackNotFoundException.CODE, exception.getMessage());
   }
 
   @ExceptionHandler(MethodArgumentNotValidException.class)

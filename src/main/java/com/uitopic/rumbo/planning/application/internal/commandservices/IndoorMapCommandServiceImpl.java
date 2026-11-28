@@ -28,8 +28,11 @@ import com.uitopic.rumbo.planning.domain.services.IndoorMapCommandService;
 import com.uitopic.rumbo.planning.domain.services.BeaconPublicationValidator;
 import com.uitopic.rumbo.planning.domain.repositories.BeaconRepository;
 import com.uitopic.rumbo.planning.domain.exceptions.MapPublicationRejectedException;
+import com.uitopic.rumbo.planning.domain.model.events.MapVersionPublishedEvent;
+import java.time.Clock;
 import java.util.HashSet;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -45,19 +48,25 @@ public class IndoorMapCommandServiceImpl implements IndoorMapCommandService {
   private final FloorPlanContentValidator planContent;
   private final ScaleReferenceRepository scaleReferences;
   private final BeaconRepository beacons;
+  private final ApplicationEventPublisher events;
+  private final Clock clock;
 
   public IndoorMapCommandServiceImpl(IndoorMapRepository repository,
                                      PublishedMapRepository published,
                                      FloorPlanVersionRepository planVersions,
                                      FloorPlanContentValidator planContent,
                                      ScaleReferenceRepository scaleReferences,
-                                     BeaconRepository beacons) {
+                                     BeaconRepository beacons,
+                                     ApplicationEventPublisher events,
+                                     Clock clock) {
     this.repository = repository;
     this.published = published;
     this.planVersions = planVersions;
     this.planContent = planContent;
     this.scaleReferences = scaleReferences;
     this.beacons = beacons;
+    this.events = events;
+    this.clock = clock;
   }
 
   @Override
@@ -147,6 +156,7 @@ public class IndoorMapCommandServiceImpl implements IndoorMapCommandService {
     if (!beaconValidation.isValid()) throw new MapPublicationRejectedException(beaconValidation);
     map.publish();
     repository.publish(map);
+    events.publishEvent(new MapVersionPublishedEvent(map.siteId(), map.id(), map.modelVersionId(), clock.instant()));
     return map;
   }
 

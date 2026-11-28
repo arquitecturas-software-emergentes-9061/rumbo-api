@@ -5,6 +5,7 @@ import com.uitopic.rumbo.planning.interfaces.acl.PlanningSiteOwnershipFacade;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Exposes site ownership without sharing Planning's persistence model. */
@@ -18,6 +19,12 @@ public class PlanningSiteOwnershipFacadeImpl implements PlanningSiteOwnershipFac
   @Override
   public boolean isOwnedBy(UUID siteId, UUID userId) {
     return sites.isOwnedBy(siteId, userId);
+  }
+
+  @Override
+  public Optional<UUID> ownerOf(UUID siteId) {
+    if (siteId == null) return Optional.empty();
+    return sites.findOwnerOf(siteId);
   }
 
   @Override

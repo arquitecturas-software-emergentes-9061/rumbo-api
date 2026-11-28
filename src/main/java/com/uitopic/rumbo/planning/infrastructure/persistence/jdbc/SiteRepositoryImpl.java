@@ -6,6 +6,7 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -50,5 +51,11 @@ public class SiteRepositoryImpl implements SiteRepository {
         "SELECT count(*) FROM indoor_sites WHERE id = ? AND owner_user_id = ?",
         Integer.class, siteId, ownerUserId);
     return count != null && count == 1;
+  }
+
+  @Override
+  public Optional<UUID> findOwnerOf(UUID siteId) {
+    return jdbc.query("SELECT owner_user_id FROM indoor_sites WHERE id = ?",
+        (rs, index) -> rs.getObject("owner_user_id", UUID.class), siteId).stream().findFirst();
   }
 }

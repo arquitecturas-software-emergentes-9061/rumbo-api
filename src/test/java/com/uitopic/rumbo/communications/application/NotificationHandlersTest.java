@@ -13,6 +13,7 @@ import com.uitopic.rumbo.communications.domain.model.commands.MarkNotificationRe
 import com.uitopic.rumbo.communications.domain.model.queries.GetMyNotificationQuery;
 import com.uitopic.rumbo.communications.domain.model.queries.ListMyNotificationsQuery;
 import com.uitopic.rumbo.communications.domain.model.valueobjects.DeliveryStatus;
+import com.uitopic.rumbo.communications.domain.model.valueobjects.NotificationFilter;
 import com.uitopic.rumbo.communications.domain.model.valueobjects.NotificationListing;
 import com.uitopic.rumbo.communications.domain.model.valueobjects.NotificationSlice;
 import com.uitopic.rumbo.communications.domain.model.valueobjects.NotificationType;
@@ -58,7 +59,7 @@ class NotificationHandlersTest {
   @Test
   void listsOnlyTheCallersNotificationsWithTheUnreadCounter() {
     Notification one = Notification.inApp(user, NotificationType.WELCOME, null, NOW);
-    when(notifications.findPage(user, true, 2, 10)).thenReturn(new NotificationSlice(List.of(one), 21));
+    when(notifications.findPage(NotificationFilter.of(user, true), 2, 10)).thenReturn(new NotificationSlice(List.of(one), 21));
     when(notifications.countUnread(user)).thenReturn(7L);
 
     NotificationListing listing = new ListMyNotificationsQueryHandler(notifications)

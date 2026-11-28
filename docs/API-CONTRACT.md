@@ -555,6 +555,29 @@ requires the CLINIC_ADMIN who owns the site. It uses the same date validation an
 half-open interval as the navigation summary. Returns cells with floorId,
 nodeReference, deviations and recalculations as absolute counts, plus
 discardedEvents for relevant events without a floor or node.
+
+## Navigation feedback and reports (TS-31 / US-25)
+
+The registration of a rating or an incident report publishes, after its commit,
+`NavigationRatedEvent` or `NavigationIncidentReportedEvent`
+(`analytics.domain.model.events`). Analytics stores one anonymized fact per rating
+or report, identified by its `ratingId` or `reportId`: a repeated event, or a
+second rating of the same session, changes nothing. The comment of the visitor is
+not part of the event. A report may come without session, node or position; a
+position needs `x`, `y` and its `floorId`. Categories: `BLOCKED_PATH`,
+`WRONG_DIRECTIONS`, `MAP_MISMATCH`, `SIGNAL_LOST`, `ACCESSIBILITY_BARRIER`, `OTHER`.
+
+Every read below requires the CLINIC_ADMIN who owns `siteId` (401 without token,
+403 otherwise) and uses the half-open period `[from, to)` of the summary.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /api/v1/analytics/feedback-summary?siteId&from&to` | ratings, averageScore (null without ratings), scoreDistribution 1–5, incidents, incidentsWithoutPosition, incidentsByCategory |
+| `GET /api/v1/analytics/incident-reports?siteId&from&to[&category][&page=0][&size=20]` | page of reports, newest first; size 1–100 |
+| `GET /api/v1/analytics/navigation-sessions/{sessionId}/feedback?siteId` | rating and reports of the session; 404 `SESSION_FEEDBACK_NOT_FOUND` if it has none on that site |
+| `GET /api/v1/analytics/navigation-trends?siteId&from&to[&granularity=DAY\|WEEK][&zone=America/Lima]` | one point per day or week (weeks start on Monday), zeros included; at most 92 days by day or 52 weeks by week, else 400 `INVALID_DATE_RANGE` |
+| `GET /api/v1/analytics/incident-zones?siteId&from&to[&floorId][&cellSize=2]` | zones by floor and node (deviations, recalculations, incidents, topCategory), hotspots of positioned reports grouped in cells of `cellSize` plan units (0–100], and incidentsWithoutLocation |
+| `GET /api/v1/analytics/sites-overview?from&to` | CLINIC_ADMIN only: every site of the caller, ordered by name, with sessions, completionRate, incidents, ratings and averageScore |
 The provisional WA14/WA14B defaults require team confirmation: BASIC has 1 site,
 3 floors and 15 beacons; PROFESSIONAL has 3 sites, 10 floors and 50 beacons;
 ENTERPRISE has unlimited resources.

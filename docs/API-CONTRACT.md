@@ -330,37 +330,57 @@ comes exclusively from the JWT. No request body or client-supplied user ID is re
 
 ## Notification center
 
-Communications stores one in-app notification per relevant platform event and exposes them to the account that
-receives them. Every endpoint requires a JWT, and the user ID comes only from it: no endpoint accepts a user ID, and a
+Communications stores one notification per relevant platform event and exposes them to the account that receives
+them. Every endpoint requires a JWT, and the user ID comes only from it: no endpoint accepts a user ID, and a
 notification of another account answers `404 NOTIFICATION_NOT_FOUND`, the same as a missing one.
 
 Notifications are created after the originating transaction commits, from these events:
 
-| `type` | Event | `detail` |
-|---|---|---|
-| `WELCOME` | account registered | `null` |
-| `ACCOUNT_LOCKED` | failed sign-in threshold reached | ISO instant when the account unlocks |
-| `PASSWORD_CHANGED` | password recovered or changed | `null` |
-| `SUBSCRIPTION_ACTIVATED` | payment activated a plan | plan code |
+| `type` | Event | Recipient | `priority` | `detail` |
+|---|---|---|---|---|
+| `WELCOME` | account registered | the account | `NORMAL` | `null` |
+| `ACCOUNT_LOCKED` | failed sign-in threshold reached | the account | `NORMAL` | ISO instant when the account unlocks |
+| `PASSWORD_CHANGED` | password recovered or changed | the account | `NORMAL` | `null` |
+| `SUBSCRIPTION_ACTIVATED` | payment activated a plan | the account | `NORMAL` | plan code |
+| `INCIDENT_REPORTED` | a visitor reported a problem on a route (`NavigationIncidentReportedEvent`, Analytics) | administrators of the site | `HIGH` | incident category |
+| `MAP_PUBLISHED` | a map version was published (`MapVersionPublishedEvent`, Planning) | administrators of the site | `NORMAL` | published `modelVersionId` |
 
-`detail` is a datum, never display text: clients localize the message from `type`. A failure creating a
-notification is logged and never affects the sign-up, lock, password change or payment that caused it.
+- **Recipients of a site (US-32).** Until clinics share a membership, the administrator of a site is its owner: an
+  enabled `CLINIC_ADMIN` account, checked again against the site when the event arrives. An event of a site that
+  does not exist, or whose owner is disabled, notifies nobody, and an event never reaches another organization. This
+  needs the `postgres` profile; on `demo` the site events notify nobody.
+- **Once per event.** Site notifications carry `siteId` and the id of their source event (report id or version id).
+  The same event delivered twice creates one notification per administrator (unique index on source and recipient).
+- **Text.** `detail` is a datum, never display text. The API also returns `title` and `message`, rendered in Spanish,
+  or in English when the first language of `Accept-Language` is English. Clients may use them or localize from
+  `type`. A failure creating a notification is logged and never affects the event that caused it.
 
 | Request | Response |
 |---|---|
-| `GET /api/v1/notifications?unread=false&page=0&size=20` | `200`: `items[]`, `page`, `size`, `total`, `unread`. Newest first; `size` is limited to 1–100 and out-of-range paging is clamped. `unread` counts every unread notification, ignoring the `unread` filter. |
-| `GET /api/v1/notifications/{id}` | `200`: `id`, `type`, `channel`, `detail`, `read`, `readAt`, `createdAt`. |
-| `GET /api/v1/notifications/{id}/delivery` | `200`: `notificationId`, `channel`, `status`, `finalState`, `attempts`, `lastAttemptAt`. |
+| `GET /api/v1/notifications?unread=false&siteId=&type=&priority=&page=0&size=20` | `200`: `items[]`, `page`, `size`, `total`, `unread`. Newest first; `size` is limited to 1–100 and out-of-range paging is clamped. `siteId`, `type` and `priority` are optional filters over the caller's own notifications; an unknown `type` or `priority` answers `400`. `unread` counts every unread notification of the caller, ignoring the filters. |
+| `GET /api/v1/notifications/{id}` | `200`: `id`, `type`, `channel`, `priority`, `siteId`, `title`, `message`, `detail`, `read`, `readAt`, `createdAt`. |
+| `GET /api/v1/notifications/{id}/delivery` | `200`: `notificationId`, `channel`, `status`, `finalState`, `attempts`, `lastAttemptAt`, `nextAttemptAt`. |
 | `POST /api/v1/notifications/{id}/read` | `200`: the notification, read. Idempotent: the first read instant is kept. |
 | `POST /api/v1/notifications/read-all` | `200`: `{ "updated": n }`, only for the caller's unread notifications. |
 
-Delivery `status` is `PENDING` (no attempt yet), `SENT`, `RETRY_PENDING` (an attempt failed and another is scheduled)
-or `FAILED` (three attempts failed). `SENT` and `FAILED` are final. The only channel today is `IN_APP`, which is
-delivered when it is stored, so every notification currently reports `SENT` after one attempt; the other states exist
-in the model for the email and push channels, which are not implemented yet.
+### Delivery (TS-35 / TS-36)
 
-Not covered yet: notifications addressed to a whole organization (map publication, beacon incidents, navigation
-problems), because those events do not exist in the other contexts, and email or push delivery.
+Delivery `status` is `PENDING` (no attempt yet), `SENT`, `RETRY_PENDING` (an attempt failed and another is scheduled
+at `nextAttemptAt`) or `FAILED`. `SENT` and `FAILED` are final, and then `nextAttemptAt` is `null`.
+
+- `IN_APP` is delivered when it is stored, so it reports `SENT` after one attempt.
+- `EMAIL` is used for site notifications when email delivery is enabled and the administrator has an address; the
+  notification is still listed in the center. A job runs every `rumbo.communications.delivery.interval` (default
+  `PT30S`), locks the due notifications with `FOR UPDATE SKIP LOCKED` (so two instances never send one twice) and
+  records each attempt:
+  - accepted by the mail server: `SENT`;
+  - server down or not configured: retry after 1 minute, then after 5 minutes; the third failed attempt is `FAILED`;
+  - recipient missing, disabled or rejected for good (bad address, authentication): `FAILED` at once.
+- Configuration: `NOTIFICATION_MAIL_ENABLED=true`, `NOTIFICATION_MAIL_FROM` and the usual `spring.mail.*` SMTP
+  properties. Without them no email sender exists and every site notification is `IN_APP`. The job can be turned off
+  with `rumbo.communications.delivery.scheduler.enabled=false`.
+
+Not covered yet: push delivery, and notices about beacons, which need an event from Planning.
 
 ## Subscription checkout and payment orders (PR-79 v3)
 

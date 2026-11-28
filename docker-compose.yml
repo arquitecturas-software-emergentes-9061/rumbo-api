@@ -36,6 +36,16 @@ services:
       - "127.0.0.1:8010:8010"
   # Legacy alternative with BuildingCV neural perception (several GB, PyTorch). It uses the same port: stop
   # structural-mapper first, then `docker compose --profile mapper-ml up -d structural-mapper-ml`.
+  # Live demo: publishes the local structural mapper on a temporary public HTTPS address (Cloudflare quick tunnel,
+  # no account needed) so the API deployed on Render can use the model running on this computer.
+  # Start it with scripts/live-mapper.sh, which also prints the address to set as STRUCTURAL_MAPPER_URL.
+  mapper-tunnel:
+    profiles: ["live-demo"]
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate --url http://structural-mapper:8010
+    depends_on:
+      structural-mapper:
+        condition: service_healthy
   structural-mapper-ml:
     profiles: ["mapper-ml"]
     build:
